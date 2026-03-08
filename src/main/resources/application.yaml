@@ -1,0 +1,39 @@
+spring:
+  application:
+    name: paperless_meeting
+  datasource:
+    url: jdbc:mysql://localhost:3306/paperless_meeting?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+    username: root
+    password: root
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update   # none | validate | update | create | create-drop
+      naming:
+        physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
+    show-sql: true
+    defer-datasource-initialization: true
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.MySQLDialect
+
+  sql:
+    init:
+      mode: never
+
+    # giữ nguyên tên bảng và cột theo entity
+    # nếu ko có mục này Hibernate sẽ tự đổi tên (vd: userName -> user_name)
+  output:
+    ansi:
+      enabled: always
+logging:
+  level:
+    org.flywaydb: INFO
+
+server:
+  port: 8080
+  servlet:
+      context-path: /PaperlessMeeting
+jwt:
+  signerKey: "1TjXchw5FloESb63Kc+DFhTARvpWL4jUGCwfGWxuG5SIf/1y/LgJxHnMqaF6A/ij"
