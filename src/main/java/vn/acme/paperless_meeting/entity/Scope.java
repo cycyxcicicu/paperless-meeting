@@ -4,7 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -44,6 +44,7 @@ public class Scope {
         private UUID id;
 
         @Enumerated(EnumType.STRING)
+        @Column(name = "scope_type", nullable = false)
         private ScopeType scopeType;
 
         @ManyToOne(fetch = FetchType.LAZY)

@@ -1,6 +1,7 @@
 package vn.acme.paperless_meeting.dto.base;
 
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
@@ -30,6 +31,7 @@ import lombok.NoArgsConstructor;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
+@Builder
 public class ApiResponse<T> {
     private boolean success;
     private int code;     

@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.SQLDelete;
 import org.hibernate.annotations.SQLRestriction;
 
@@ -49,6 +50,7 @@ public class User extends SoftDeletable {
         private UUID id;
 
         private String username;
+        private String fullName;
         private String passwordHash;
         private String email;
         private String phone;
@@ -56,7 +58,11 @@ public class User extends SoftDeletable {
         @Enumerated(EnumType.STRING)
         @Column(name = "status")
         private UserStatus status;
+
         private String avatar;
+
+        @Column(name = "created_at")
+        @CreationTimestamp
         private LocalDateTime createdAt;
 
         @OneToMany(mappedBy = "createdBy")
