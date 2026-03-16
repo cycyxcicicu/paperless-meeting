@@ -2,7 +2,6 @@ package vn.acme.paperless_meeting.config.security;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
@@ -15,6 +14,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.csrf.CsrfTokenRepository;
+import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 
 import lombok.RequiredArgsConstructor;
 import vn.acme.paperless_meeting.enums.PublicEndpoint;
@@ -40,45 +41,52 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-        http 
-            .cors(Customizer.withDefaults()) // bật cros canaf khì fontend chạy domain khác backend 
+        http
+                .cors(Customizer.withDefaults()) // bật cros canaf khì fontend chạy domain khác backend
 
-            .csrf(csrf -> csrf
-                .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse()) /*Spring tạo CSRF token lưu token này trong cookie XSRF-TOKEN frontend đọc cookie đó gửi lại vào header X-XSRF-TOKEN */
-                .ignoringRequestMatchers(PublicEndpoint.allPaths()) /* bỏ qua CSRF cho các public endpoint */
-            )
-            //đừng tạo và đừng dùng session server-side để lưu trạng thái đăng nhập. JWT đã lưu trạng thái trong token rồi, server không cần lưu nữa, mỗi request đều phải gửi token lên để xác thực
-            .sessionManagement(session ->
-                session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
-            )
-            // cái này để khi auth fail sẽ trả về 401, 
-            //chứ không redirect sang trang login
-            .exceptionHandling(ex -> ex
-                .authenticationEntryPoint(securityExceptionHandlers.authenticationEntryPoint())
-                .accessDeniedHandler(securityExceptionHandlers.accessDeniedHandler())
-            )
+                .csrf(csrf -> csrf
+                        .csrfTokenRepository(csrfTokenRepository())
+                        /*
+                         * Dùng CsrfTokenRequestAttributeHandler (không XOR) để giá trị trong cookie
+                         * XSRF-TOKEN == giá trị cần gửi lên header X-XSRF-TOKEN.
+                         * Spring Security 6+ mặc định dùng XorCsrfTokenRequestAttributeHandler khiến
+                         * hai giá trị này khác nhau → POST/PUT/DELETE bị từ chối.
+                         */
+                        .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
+                        .ignoringRequestMatchers(PublicEndpoint.allPaths()) /* bỏ qua CSRF cho các public endpoint */
+                )
+                // đừng tạo và đừng dùng session server-side để lưu trạng thái đăng nhập. JWT đã
+                // lưu trạng thái trong token rồi, server không cần lưu nữa, mỗi request đều
+                // phải gửi token lên để xác thực
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                // cái này để khi auth fail sẽ trả về 401,
+                // chứ không redirect sang trang login
+                .exceptionHandling(ex -> ex
+                        .authenticationEntryPoint(securityExceptionHandlers.authenticationEntryPoint())
+                        .accessDeniedHandler(securityExceptionHandlers.accessDeniedHandler()))
 
-            .authorizeHttpRequests(auth -> {
-                   for (PublicEndpoint endpoint : PublicEndpoint.all()) {
-                            auth.requestMatchers(endpoint.getMethod(), endpoint.getPath()).permitAll();
-                        }
-                        auth.requestMatchers(HttpMethod.POST, "/auth/logout").authenticated();
-                        auth.anyRequest().authenticated();
-            })
+                .authorizeHttpRequests(auth -> {
+                    for (PublicEndpoint endpoint : PublicEndpoint.all()) {
+                        auth.requestMatchers(endpoint.getMethod(), endpoint.getPath()).permitAll();
+                    }
+                    // auth.requestMatchers(HttpMethod.POST, "/auth/logout").authenticated();
+                    auth.anyRequest().authenticated();
+                })
 
-            .headers(headers -> headers
-            /*trang web chỉ được phép nhúng trong iframe từ cùng origin giúp giảm clickjacking */
-                .frameOptions(HeadersConfigurer.FrameOptionsConfig::sameOrigin)
-                .contentSecurityPolicy(csp -> csp.policyDirectives(
-                    "default-src 'self'; " +
-                    "script-src 'self'; " +
-                    "style-src 'self' 'unsafe-inline'; " +
-                    "img-src 'self' data:; " +
-                    "font-src 'self' data:;"
-                ))
-            )
+                .headers(headers -> headers
+                        /*
+                         * trang web chỉ được phép nhúng trong iframe từ cùng origin giúp giảm
+                         * clickjacking
+                         */
+                        .frameOptions(HeadersConfigurer.FrameOptionsConfig::sameOrigin)
+                        .contentSecurityPolicy(csp -> csp.policyDirectives(
+                                "default-src 'self'; " +
+                                        "script-src 'self'; " +
+                                        "style-src 'self' 'unsafe-inline'; " +
+                                        "img-src 'self' data:; " +
+                                        "font-src 'self' data:;")))
 
-            .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
@@ -91,5 +99,10 @@ public class SecurityConfig {
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration configuration) throws Exception {
         return configuration.getAuthenticationManager();
+    }
+
+    @Bean
+    public CsrfTokenRepository csrfTokenRepository() {
+        return CookieCsrfTokenRepository.withHttpOnlyFalse();
     }
 }

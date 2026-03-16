@@ -1,4 +1,4 @@
-package vn.acme.paperless_meeting.controller;
+package vn.acme.paperless_meeting.controller.user;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -12,20 +12,20 @@ import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import vn.acme.paperless_meeting.dto.base.ApiResponse;
-import vn.acme.paperless_meeting.dto.request.RegisterRequest;
+import vn.acme.paperless_meeting.dto.request.user.UserCreateRequest;
 import vn.acme.paperless_meeting.entity.User;
-import vn.acme.paperless_meeting.service.auth.RegisterService;
+import vn.acme.paperless_meeting.service.User.UserService;
 
 @RestController
-@RequestMapping("/auth")
+@RequestMapping("/user")
 @RequiredArgsConstructor
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
-public class AuthenticationController {
-    RegisterService registerService;
+public class UserController {
+    UserService userService;
 
     @PostMapping("/register")
-    public ResponseEntity<?> register(@Valid @RequestBody RegisterRequest req) throws Exception {
-        registerService.register(req);
+    public ResponseEntity<?> register(@Valid @RequestBody UserCreateRequest req) throws Exception {
+        userService.register(req);
         return ResponseEntity.ok().body(ApiResponse.success("REGISTER SUCCESS!"));
     }
 
@@ -34,8 +34,7 @@ public class AuthenticationController {
         return ApiResponse.<User>builder()
                 .success(true)
                 .message("Lấy thông tin người dùng thành công")
-                .data(registerService.getUserByUsername())
+                .data(userService.getUserByUsername())
                 .build();
     }
-
 }

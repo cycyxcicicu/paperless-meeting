@@ -1,4 +1,7 @@
 spring:
+  devtools:
+    restart:
+      enabled: false
   application:
     name: paperless_meeting
   datasource:
@@ -27,16 +30,12 @@ spring:
   output:
     ansi:
       enabled: always
-logging:
-  level:
-    org.flywaydb: INFO
 
 server:
   port: 8080
   servlet:
       context-path: /PaperlessMeeting
-jwt:
-  signerKey: "1TjXchw5FloESb63Kc+DFhTARvpWL4jUGCwfGWxuG5SIf/1y/LgJxHnMqaF6A/ij"
+
 # cấu hình CORS để cho phép frontend (chạy trên localhost:3000) truy cập vào backend
 app:
   security:
@@ -49,6 +48,15 @@ app:
     refresh-token-expiration-seconds: 604800
     issuer: "paperless-meeting"
     jwt-secret-base64: "UhuZZ8UuCDy0eWTUwUP+D9hhnQ7WEDe2chpZWNHiPwkfqnCl+ivjEBdctFkcRVCI9vX4zqYn2v08/2R0TEY7dg=="
+
+springdoc:
+  swagger-ui:
+    csrf:
+      enabled: true
+      cookie-name: XSRF-TOKEN
+      header-name: X-XSRF-TOKEN
+    try-it-out-enabled: true
+    persist-authorization: true
 # cấu hình cả Spring Boot Actuator để chọn những endpoint nào được phép truy cập qua HTTP
 management:
   endpoints:

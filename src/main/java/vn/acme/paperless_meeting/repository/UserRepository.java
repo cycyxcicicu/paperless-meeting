@@ -12,9 +12,16 @@ import vn.acme.paperless_meeting.entity.enums.UserStatus;
 public interface UserRepository extends JpaRepository<User, UUID> {
     boolean existsByUsername(String username);
 
+    boolean existsByUsernameAndIdNot(String username, UUID id);
+
     boolean existsByEmail(String email);
 
+    // câu sql của cái này là SELECT COUNT(*) > 0 FROM user WHERE email = ? AND id != ?
+    boolean existsByEmailAndIdNot(String email, UUID id);
+
     boolean existsByPhone(String phone);
+
+    boolean existsByPhoneAndIdNot(String phone, UUID id);
 
     Optional<User> findByUsernameAndStatus(String username, UserStatus status);
 

@@ -1,4 +1,4 @@
-package vn.acme.paperless_meeting.controller;
+package vn.acme.paperless_meeting.controller.auth;
 
 import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.web.bind.annotation.GetMapping;

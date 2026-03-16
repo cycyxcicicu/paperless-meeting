@@ -7,6 +7,7 @@ import org.springframework.http.HttpMethod;
 public enum PublicEndpoint {
     LOGIN(HttpMethod.POST, "/auth/login"),
     REFRESH(HttpMethod.POST, "/auth/refresh"),
+    LOGOUT(HttpMethod.POST, "/auth/logout"),
     CSRF(HttpMethod.GET, "/csrf"),
     HEALTH(HttpMethod.GET, "/actuator/health"),
     SWAGGER(HttpMethod.GET, "/swagger-ui/**"),

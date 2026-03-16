@@ -7,7 +7,7 @@ import org.springframework.stereotype.Service;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
-import vn.acme.paperless_meeting.dto.request.LoginRequest;
+import vn.acme.paperless_meeting.dto.request.auth.LoginRequest;
 import vn.acme.paperless_meeting.entity.RefreshToken;
 import vn.acme.paperless_meeting.exceptions.AppException;
 import vn.acme.paperless_meeting.exceptions.ErrorCode;

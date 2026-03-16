@@ -6,4 +6,7 @@ import vn.acme.paperless_meeting.entity.Role;
 import java.util.UUID;
 
 public interface RoleRepository extends JpaRepository<Role, UUID> {
+	boolean existsByRoleName(String roleName);
+
+	boolean existsByRoleNameAndIdNot(String roleName, UUID id);
 }

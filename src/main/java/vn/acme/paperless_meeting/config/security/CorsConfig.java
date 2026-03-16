@@ -22,7 +22,7 @@ public class CorsConfig {
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*")); // Allow tất cả headers (hoặc chi tiết: Content-Type, Authorization,
                                                 // X-XSRF-TOKEN, Accept)
-        config.setExposedHeaders(List.of("Authorization")); // Cho phép frontend đọc Set-Cookie header
+        config.setExposedHeaders(List.of("Authorization", "X-XSRF-TOKEN"));
         config.setAllowCredentials(true);
         config.setMaxAge(3600L);
 
