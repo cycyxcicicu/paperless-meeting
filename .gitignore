@@ -1,10 +1,16 @@
-HELP.md
+# Only ignore a top-level helper file, not backend docs.
+/HELP.md
 target/
 build/
 out/
 .mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
+
+# Frontend build and dependency output.
+fontend/dist/
+fontend/node_modules/
+fontend/.vite/
 
 ### STS ###
 .apt_generated

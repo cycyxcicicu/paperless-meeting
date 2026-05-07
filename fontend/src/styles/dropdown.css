@@ -1,0 +1,118 @@
+/* Custom dropdown styling for modern, rounded appearance */
+
+/* Enhanced select styling - force rounded corners */
+select {
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  appearance: none !important;
+  border-radius: 0.5rem !important;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  padding-right: 2.5rem !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%236B7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 0.75rem center !important;
+  background-size: 1.125rem !important;
+}
+
+/* Try to force dropdown menu border-radius (limited browser support) */
+select::-webkit-dropdown-menu {
+  border-radius: 0.5rem !important;
+}
+
+select::-moz-dropdown-menu {
+  border-radius: 0.5rem !important;
+}
+
+/* Firefox specific - dropdown panel */
+select:-moz-focusring {
+  outline: none;
+}
+
+/* Hover state */
+select:hover {
+  border-color: #6B7280;
+}
+
+/* Enhanced focus state with shadow */
+select:focus {
+  outline: none !important;
+  border-color: #C8102E !important;
+  box-shadow: 0 0 0 3px rgba(200, 16, 46, 0.1), 0 1px 3px 0 rgba(0, 0, 0, 0.1) !important;
+}
+
+/* Webkit browsers (Chrome, Safari, Edge) - style the scrollbar in dropdown */
+select::-webkit-scrollbar {
+  width: 8px;
+}
+
+select::-webkit-scrollbar-track {
+  background: #F3F4F6;
+  border-radius: 4px;
+}
+
+select::-webkit-scrollbar-thumb {
+  background: #D1D5DB;
+  border-radius: 4px;
+}
+
+select::-webkit-scrollbar-thumb:hover {
+  background: #9CA3AF;
+}
+
+/* Option items styling - rounded and padded */
+select option {
+  padding: 0.625rem 0.75rem;
+  border-radius: 0.5rem;
+  transition: background-color 0.15s ease;
+  cursor: pointer;
+}
+
+/* First option - top rounded corners */
+select option:first-child {
+  border-top-left-radius: 0.625rem;
+  border-top-right-radius: 0.625rem;
+}
+
+/* Last option - bottom rounded corners */
+select option:last-child {
+  border-bottom-left-radius: 0.625rem;
+  border-bottom-right-radius: 0.625rem;
+}
+
+/* Hover state for options */
+select option:hover {
+  background-color: #F9FAFB;
+}
+
+/* Selected/checked state with red tint */
+select option:checked {
+  background: linear-gradient(to right, #FEE2E2, #FEF2F2);
+  color: #C8102E;
+  font-weight: 500;
+}
+
+/* Disabled select */
+select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background-color: #F3F4F6;
+}
+
+/* Multiple select (if used) */
+select[multiple] {
+  padding: 0.5rem !important;
+  border-radius: 0.75rem !important;
+}
+
+select[multiple] option {
+  padding: 0.5rem 0.75rem;
+  margin: 0.125rem;
+  border-radius: 0.5rem;
+}
+
+select[multiple] option:checked {
+  background-color: #FEE2E2;
+  color: #C8102E;
+  font-weight: 500;
+}

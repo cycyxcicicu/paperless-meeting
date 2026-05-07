@@ -1,0 +1,69 @@
+spring:
+    devtools:
+        restart:
+            enabled: false
+    application:
+        name: paperless_meeting
+    datasource:
+        url: jdbc:mysql://localhost:4406/paperless_meeting?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+        username: root
+        password: root
+        driver-class-name: com.mysql.cj.jdbc.Driver
+    jpa:
+        hibernate:
+            ddl-auto: update # none | validate | update | create | create-drop
+            naming:
+                physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
+        show-sql: true
+        defer-datasource-initialization: true
+        properties:
+            hibernate:
+                format_sql: true
+                dialect: org.hibernate.dialect.MySQLDialect
+                type:
+                    preferred_uuid_jdbc_type: CHAR
+
+    sql:
+        init:
+            mode: never
+
+        # giữ nguyên tên bảng và cột theo entity
+        # nếu ko có mục này Hibernate sẽ tự đổi tên (vd: userName -> user_name)
+    output:
+        ansi:
+            enabled: always
+
+server:
+    port: 8081
+    servlet:
+        context-path: /PaperlessMeeting
+
+# cấu hình CORS để cho phép frontend (chạy trên localhost:3000) truy cập vào backend
+app:
+    seed:
+        enabled: false
+    security:
+        frontend-origin: "http://localhost:3000"
+        cookie-domain: ""
+        secure-cookies: false
+        access-token-cookie-name: "ACCESS_TOKEN"
+        refresh-token-cookie-name: "REFRESH_TOKEN"
+        access-token-expiration-seconds: 90000
+        refresh-token-expiration-seconds: 604800
+        issuer: "paperless-meeting"
+        jwt-secret-base64: "UhuZZ8UuCDy0eWTUwUP+D9hhnQ7WEDe2chpZWNHiPwkfqnCl+ivjEBdctFkcRVCI9vX4zqYn2v08/2R0TEY7dg=="
+
+springdoc:
+    swagger-ui:
+        try-it-out-enabled: true
+        persist-authorization: true
+# cấu hình cả Spring Boot Actuator để chọn những endpoint nào được phép truy cập qua HTTP
+management:
+    endpoints:
+        web:
+            exposure:
+                include: health,info
+logging:
+    level:
+        org.springframework.security: DEBUG
+        vn.acme.paperless_meeting.service.auth: DEBUG
