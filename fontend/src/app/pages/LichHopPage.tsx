@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { LICH_HOP_SIDEBAR_ITEMS } from '../constants/sidebar';
 import { Sidebar, SidebarItem } from '../components/layout/Sidebar';
 import { Calendar as CalendarIcon, MapPin, FileText, Vote, BarChart3, Settings, Home } from 'lucide-react';
 import { CalendarControls } from '../components/calendar/CalendarControls';
@@ -7,13 +8,7 @@ import { MonthCalendarView, MonthDay } from '../components/calendar/MonthCalenda
 import { CalendarEvent } from '../components/calendar/CalendarEventCard';
 import { mergeEventsWithPreviousDay } from '../utils/calendarHelpers';
 
-const sidebarItems: SidebarItem[] = [
-  { name: 'Lịch họp', path: '/phong-hop', icon: CalendarIcon },
-  { name: 'Phòng họp', path: '/phong-hop/dia-diem', icon: MapPin },
-  { name: 'Tài liệu', path: '/tai-lieu', icon: FileText },
-  { name: 'Biểu quyết', path: '/bieu-quyet', icon: Vote },
-  { name: 'Cấu hình', path: '/cau-hinh', icon: Settings },
-];
+
 
 const LichHopPage = () => {
   const [viewMode, setViewMode] = useState<'week' | 'month'>('month');
@@ -475,10 +470,8 @@ const LichHopPage = () => {
   };
 
   return (
-    <div className="flex bg-[#F8FAFC] min-h-screen">
-      <Sidebar items={sidebarItems} />
+    <>
 
-      <main className="flex-1 ml-60 transition-all duration-300">
         {/* Page Header */}
         <div className="bg-white border-b border-gray-200/60 px-8 py-6 mb-8">
           <div className="flex items-center gap-2 text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">
@@ -525,8 +518,7 @@ const LichHopPage = () => {
             />
           )}
         </div>
-      </main>
-    </div>
+    </>
   );
 };
 

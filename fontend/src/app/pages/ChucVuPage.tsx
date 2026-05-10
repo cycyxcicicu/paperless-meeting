@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { QUAN_TRI_SIDEBAR_ITEMS } from '../constants/sidebar';
 import { Sidebar, SidebarItem } from '../components/layout/Sidebar';
 import { AppPagination } from '../components/common/AppPagination';
 import { PositionFormModal } from '../components/positions/PositionFormModal';
@@ -30,14 +31,7 @@ function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-const sidebarItems: SidebarItem[] = [
-  { name: 'Quản lý người dùng', path: '/nguoi-dung', icon: Users },
-  { name: 'Vai trò và phân quyền', path: '/nguoi-dung/vai-tro', icon: Shield },
-  { name: 'Đơn vị', path: '/nguoi-dung/don-vi', icon: Building2 },
-  { name: 'Chức vụ', path: '/nguoi-dung/chuc-vu', icon: Briefcase },
-  { name: 'Lịch sử thao tác', path: '/nguoi-dung/lich-su', icon: History },
-  { name: 'Cấu hình', path: '/nguoi-dung/cau-hinh', icon: Settings },
-];
+
 
 interface Position {
   id: string;
@@ -178,10 +172,8 @@ const ChucVuPage = () => {
   };
 
   return (
-    <div className="flex bg-[#F8FAFC] min-h-screen">
-      <Sidebar items={sidebarItems} />
+    <>
 
-      <main className="flex-1 ml-60 transition-all duration-300">
         {/* Page Header */}
         <div className="bg-white border-b border-gray-200/60 px-8 py-8 shadow-sm relative z-30">
           <div className="flex items-center justify-between mb-2">
@@ -308,7 +300,6 @@ const ChucVuPage = () => {
             </AnimatePresence>
           </motion.div>
         </div>
-      </main>
 
       {/* Modals */}
       <PositionFormModal
@@ -325,7 +316,7 @@ const ChucVuPage = () => {
         onConfirm={handleConfirmDelete}
         position={deleteModal.position}
       />
-    </div>
+    </>
   );
 };
 

@@ -1,18 +1,13 @@
 import React, { useState } from 'react';
-import { Sidebar, SidebarItem } from '../components/layout/Sidebar';
-import { ModernPageHeader } from '../components/modern/ModernPageHeader';
-import { ModernCard } from '../components/modern/ModernCard';
-import { ModernButton } from '../components/modern/ModernButton';
-import { ModernSearchBar } from '../components/modern/ModernSearchBar';
-import { ModernTable, ModernColumn } from '../components/modern/ModernTable';
-import { ModernBadge } from '../components/modern/ModernBadge';
-import { ModernPagination } from '../components/modern/ModernPagination';
-import { ModernTabs } from '../components/modern/ModernTabs';
+import { ModernPageHeader } from '../modern/ModernPageHeader';
+import { ModernCard } from '../modern/ModernCard';
+import { ModernButton } from '../modern/ModernButton';
+import { ModernSearchBar } from '../modern/ModernSearchBar';
+import { ModernTable, ModernColumn } from '../modern/ModernTable';
+import { ModernBadge } from '../modern/ModernBadge';
+import { ModernPagination } from '../modern/ModernPagination';
+import { ModernTabs } from '../modern/ModernTabs';
 import { Filter, RefreshCw, Upload, Eye, Home } from 'lucide-react';
-
-const sidebarItems: SidebarItem[] = [
-  { name: 'Quản lý phiếu lấy ý kiến', path: '/bieu-quyet' },
-];
 
 type TabType = 'unanswered' | 'answered' | 'expired';
 
@@ -24,7 +19,7 @@ interface Vote {
   status: string;
 }
 
-const BieuQuyetPage = () => {
+export const PollManagement = () => {
   const [activeTab, setActiveTab] = useState<TabType>('unanswered');
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -103,15 +98,13 @@ const BieuQuyetPage = () => {
   ];
 
   return (
-    <div className="flex">
-      <Sidebar items={sidebarItems} />
-
-      <main className="flex-1 ml-60 p-8 bg-gray-50/30">
+    <div className="p-8 bg-gray-50/30 w-full min-h-screen">
         <ModernPageHeader
           title="Quản lý phiếu lấy ý kiến"
           description="Quản lý và theo dõi các phiếu lấy ý kiến"
           breadcrumbs={[
-            { label: 'Trang chủ', href: '/', icon: Home },
+            { label: 'Trang chủ', href: '/' },
+            { label: 'Quản lý họp', href: '/phien-hop' },
             { label: 'Quản lý phiếu lấy ý kiến' }
           ]}
         />
@@ -171,9 +164,6 @@ const BieuQuyetPage = () => {
             />
           )}
         </ModernCard>
-      </main>
     </div>
   );
 };
-
-export default BieuQuyetPage;

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { QUAN_TRI_SIDEBAR_ITEMS } from '../constants/sidebar';
 import { Sidebar, SidebarItem } from '../components/layout/Sidebar';
 import { AppPagination } from '../components/common/AppPagination';
 import { UserFormModal } from '../components/user/UserFormModal';
@@ -31,14 +32,7 @@ import {
   Check
 } from 'lucide-react';
 
-const sidebarItems: SidebarItem[] = [
-  { name: 'Quản lý người dùng', path: '/nguoi-dung', icon: Users },
-  { name: 'Vai trò và phân quyền', path: '/nguoi-dung/vai-tro', icon: Shield },
-  { name: 'Đơn vị', path: '/nguoi-dung/don-vi', icon: Building2 },
-  { name: 'Chức vụ', path: '/nguoi-dung/chuc-vu', icon: Briefcase },
-  { name: 'Lịch sử thao tác', path: '/nguoi-dung/lich-su', icon: History },
-  { name: 'Cấu hình', path: '/nguoi-dung/cau-hinh', icon: Settings },
-];
+
 
 interface User {
   id: number;
@@ -294,10 +288,8 @@ const NguoiDungPage = () => {
   };
 
   return (
-    <div className="flex">
-      <Sidebar items={sidebarItems} />
-
-      <main className="flex-1 ml-60 bg-gray-50/50">
+    <>
+      <div className="bg-gray-50/50">
         {/* Page Header */}
         <div className="bg-white border-b border-gray-200/60 px-8 py-6">
           <div className="flex items-start justify-between">
@@ -707,7 +699,6 @@ const NguoiDungPage = () => {
             />
           </div>
         </div>
-      </main>
 
       {/* Modals */}
       <UserFormModal
@@ -725,6 +716,7 @@ const NguoiDungPage = () => {
         user={deleteModal.user}
       />
     </div>
+  </>
   );
 };
 
