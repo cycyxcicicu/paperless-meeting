@@ -18,6 +18,7 @@ import { useLocation } from "react-router";
 import { twMerge } from "tailwind-merge";
 import { PageHeader } from "../components/layout/PageHeader";
 import { Sidebar } from "../components/layout/Sidebar";
+import { Pagination } from "@/app/components/common/ui/Pagination";
 
 function cn(...inputs: ClassValue[]) {
     return twMerge(clsx(inputs));
@@ -145,6 +146,8 @@ const PhongHopTaiLieuPage = () => {
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
     const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
+    const [currentPage, setCurrentPage] = useState(1);
+    const [pageSize, setPageSize] = useState(10);
 
     let docTypeKey = "nghi-quyet";
     let title = "Tài liệu";
@@ -174,6 +177,12 @@ const PhongHopTaiLieuPage = () => {
         );
     }, [currentData, searchQuery]);
 
+    const totalPages = Math.ceil(filteredData.length / pageSize);
+    const currentDataPage = filteredData.slice(
+        (currentPage - 1) * pageSize,
+        currentPage * pageSize,
+    );
+
     const isPhienHopContext = location.pathname.startsWith("/phien-hop");
 
     return (
@@ -193,7 +202,7 @@ const PhongHopTaiLieuPage = () => {
                     />
 
                     {/* Toolbar */}
-                    <div className="mt-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
                         <div className="relative flex-1 w-full">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                             <input
@@ -243,14 +252,14 @@ const PhongHopTaiLieuPage = () => {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-100">
-                                    {filteredData.length > 0 ? (
-                                        filteredData.map((doc, index) => (
+                                    {currentDataPage.length > 0 ? (
+                                        currentDataPage.map((doc, index) => (
                                             <tr
                                                 key={doc.id}
                                                 className="hover:bg-gray-50/50 transition-colors group cursor-pointer"
                                             >
                                                 <td className="px-6 py-4 text-sm text-gray-500 font-medium">
-                                                    {(index + 1)
+                                                    {((currentPage - 1) * pageSize + index + 1)
                                                         .toString()
                                                         .padStart(2, "0")}
                                                 </td>
@@ -339,22 +348,15 @@ const PhongHopTaiLieuPage = () => {
 
                         {/* Pagination Footer */}
                         {filteredData.length > 0 && (
-                            <div className="px-6 py-4 border-t border-gray-100 bg-gray-50/50 flex items-center justify-between">
-                                <span className="text-sm text-gray-500 font-medium">
-                                    Hiển thị {filteredData.length} kết quả
-                                </span>
-                                <div className="flex items-center gap-1">
-                                    <button className="px-3 py-1.5 text-sm font-medium text-gray-500 hover:text-gray-900 transition-colors">
-                                        Trước
-                                    </button>
-                                    <button className="w-8 h-8 flex items-center justify-center rounded-lg bg-[#C8102E] text-white text-sm font-bold shadow-sm shadow-red-500/20">
-                                        1
-                                    </button>
-                                    <button className="px-3 py-1.5 text-sm font-medium text-gray-500 hover:text-gray-900 transition-colors">
-                                        Sau
-                                    </button>
-                                </div>
-                            </div>
+                            <Pagination
+                                currentPage={currentPage}
+                                totalPages={totalPages}
+                                pageSize={pageSize}
+                                totalItems={filteredData.length}
+                                onPageChange={setCurrentPage}
+                                onPageSizeChange={setPageSize}
+                                itemLabel="tài liệu"
+                            />
                         )}
                     </div>
                 </div>

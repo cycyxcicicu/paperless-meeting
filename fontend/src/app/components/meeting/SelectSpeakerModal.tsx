@@ -1,8 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { X, Search } from 'lucide-react';
-import { Button } from '../ui/hp-button';
+import { Button } from '@/app/components/common/ui/Button';
 import { Input } from '../ui/input';
-import { Badge } from '../ui/hp-badge';
+import { Badge } from '@/app/components/ui/badge';
 
 interface Participant {
   id: string;

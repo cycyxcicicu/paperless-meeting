@@ -26,7 +26,7 @@ export const LocationToolbar: React.FC<LocationToolbarProps> = ({
     <div className="bg-white border-b border-gray-100 px-6 py-4">
       <div className="flex items-center gap-3">
         {/* Search Input */}
-        <div className="flex-1 relative max-w-md">
+        <div className="flex-1 relative w-full">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4.5 w-4.5 text-gray-400 pointer-events-none" />
           <input
             type="text"

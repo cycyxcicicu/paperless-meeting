@@ -1,13 +1,11 @@
 import React, { useState } from 'react';
-import { ModernPageHeader } from '../modern/ModernPageHeader';
-import { ModernCard } from '../modern/ModernCard';
-import { ModernButton } from '../modern/ModernButton';
-import { ModernSearchBar } from '../modern/ModernSearchBar';
-import { ModernTable, ModernColumn } from '../modern/ModernTable';
-import { ModernBadge } from '../modern/ModernBadge';
-import { ModernPagination } from '../modern/ModernPagination';
-import { ModernTabs } from '../modern/ModernTabs';
-import { Filter, RefreshCw, Upload, Eye, Home } from 'lucide-react';
+import { Filter, RefreshCw, Upload, Eye, Home, Search, ChevronRight } from 'lucide-react';
+import { Button } from '../common/ui/Button';
+import { Card, CardContent } from '../ui/card';
+import { Badge } from '../ui/badge';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../common/ui/Table';
+import { Pagination } from '../common/ui/Pagination';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '../ui/tabs';
 
 type TabType = 'unanswered' | 'answered' | 'expired';
 
@@ -20,7 +18,7 @@ interface Vote {
 }
 
 export const PollManagement = () => {
-  const [activeTab, setActiveTab] = useState<TabType>('unanswered');
+  const [activeTab, setActiveTab] = useState<string>('unanswered');
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -43,12 +41,6 @@ export const PollManagement = () => {
     },
   ];
 
-  const tabs = [
-    { key: 'unanswered' as TabType, label: 'Phiếu chưa trả lời' },
-    { key: 'answered' as TabType, label: 'Phiếu đã trả lời' },
-    { key: 'expired' as TabType, label: 'Phiếu đã hết hạn' },
-  ];
-
   const getCurrentData = () => {
     if (activeTab === 'expired') return expiredVotes;
     return [];
@@ -56,114 +48,145 @@ export const PollManagement = () => {
 
   const currentData = getCurrentData();
   const totalItems = currentData.length;
-  const totalPages = Math.ceil(totalItems / pageSize);
-
-  const tableColumns: ModernColumn<Vote>[] = [
-    {
-      key: 'stt',
-      header: 'STT',
-      width: '80px',
-      render: (_, __, index) => (currentPage - 1) * pageSize + index + 1
-    },
-    {
-      key: 'name',
-      header: 'Tên phiếu'
-    },
-    {
-      key: 'assignee',
-      header: 'Chuyên viên phụ trách'
-    },
-    {
-      key: 'deadline',
-      header: 'Hạn trả lời'
-    },
-    {
-      key: 'status',
-      header: 'Trạng thái phiếu',
-      render: (value) => <ModernBadge variant="danger">{value}</ModernBadge>
-    },
-    {
-      key: 'actions',
-      header: 'Hành động',
-      align: 'center' as const,
-      width: '120px',
-      render: () => (
-        <div className="flex items-center justify-center">
-          <button className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors">
-            <Eye className="h-4 w-4" />
-          </button>
-        </div>
-      )
-    }
-  ];
+  const totalPages = Math.ceil(totalItems / pageSize) || 1;
 
   return (
     <div className="p-8 bg-gray-50/30 w-full min-h-screen">
-        <ModernPageHeader
-          title="Quản lý phiếu lấy ý kiến"
-          description="Quản lý và theo dõi các phiếu lấy ý kiến"
-          breadcrumbs={[
-            { label: 'Trang chủ', href: '/' },
-            { label: 'Quản lý họp', href: '/phien-hop' },
-            { label: 'Quản lý phiếu lấy ý kiến' }
-          ]}
-        />
+        {/* Page Header */}
+        <div className="mb-6">
+          <div className="flex items-center gap-2 text-sm text-gray-500 mb-2">
+            <Home className="h-4 w-4" />
+            <ChevronRight className="h-4 w-4" />
+            <span>Quản lý họp</span>
+            <ChevronRight className="h-4 w-4" />
+            <span className="text-gray-900 font-medium">Quản lý phiếu lấy ý kiến</span>
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900">Quản lý phiếu lấy ý kiến</h1>
+          <p className="text-sm text-gray-500 mt-1">Quản lý và theo dõi các phiếu lấy ý kiến</p>
+        </div>
 
-        <ModernCard padding="none">
-          <ModernTabs
-            tabs={tabs.map(tab => ({
-              key: tab.key,
-              label: tab.label,
-              count: tab.key === 'expired' ? expiredVotes.length : 0
-            }))}
-            activeTab={activeTab}
-            onChange={(key) => {
-              setActiveTab(key as TabType);
-              setCurrentPage(1);
-            }}
-          />
+        <Card className="shadow-sm border-gray-200">
+          <Tabs value={activeTab} onValueChange={(val) => { setActiveTab(val); setCurrentPage(1); }} className="w-full">
+            <div className="px-6 pt-4 border-b border-gray-200">
+              <TabsList className="bg-transparent border-b-0 space-x-4">
+                <TabsTrigger 
+                  value="unanswered" 
+                  className="data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary rounded-none px-4 py-2"
+                >
+                  Phiếu chưa trả lời
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="answered" 
+                  className="data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary rounded-none px-4 py-2"
+                >
+                  Phiếu đã trả lời
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="expired" 
+                  className="data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary rounded-none px-4 py-2"
+                >
+                  Phiếu đã hết hạn
+                  <Badge variant="secondary" className="ml-2 bg-gray-100 text-gray-600">{expiredVotes.length}</Badge>
+                </TabsTrigger>
+              </TabsList>
+            </div>
 
-          <div className="p-6 border-b border-gray-200">
-            <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-gray-900">Danh sách phiếu lấy ý kiến</h3>
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-gray-900">Danh sách phiếu lấy ý kiến</h3>
 
-              <div className="flex items-center gap-2">
-                <ModernSearchBar
-                  placeholder="Tìm kiếm theo tên phiếu"
-                  value={searchQuery}
-                  onChange={setSearchQuery}
-                  className="w-80"
-                />
+                <div className="flex items-center gap-2">
+                  <div className="relative w-80">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <Search className="h-4 w-4 text-gray-400" />
+                    </div>
+                    <input
+                      type="text"
+                      className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-primary focus:border-primary"
+                      placeholder="Tìm kiếm theo tên phiếu"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                  </div>
 
-                <ModernButton variant="ghost" size="sm" icon={RefreshCw} />
-                <ModernButton variant="ghost" size="sm" icon={Upload} />
-                <ModernButton variant="secondary" size="sm" icon={Filter}>
-                  Bộ lọc
-                </ModernButton>
+                  <Button variant="ghost" size="icon" className="h-9 w-9">
+                    <RefreshCw className="h-4 w-4" />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="h-9 w-9">
+                    <Upload className="h-4 w-4" />
+                  </Button>
+                  <Button variant="secondary" size="sm" className="h-9">
+                    <Filter className="h-4 w-4 mr-2" />
+                    Bộ lọc
+                  </Button>
+                </div>
               </div>
             </div>
-          </div>
 
-          <ModernTable
-            columns={tableColumns}
-            data={currentData}
-            keyField="id"
-          />
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[80px] text-center">STT</TableHead>
+                    <TableHead>Tên phiếu</TableHead>
+                    <TableHead>Chuyên viên phụ trách</TableHead>
+                    <TableHead>Hạn trả lời</TableHead>
+                    <TableHead>Trạng thái phiếu</TableHead>
+                    <TableHead className="w-[120px] text-center">Hành động</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {currentData.length > 0 ? (
+                    currentData.map((vote, index) => (
+                      <TableRow key={vote.id}>
+                        <TableCell className="text-center">
+                          {(currentPage - 1) * pageSize + index + 1}
+                        </TableCell>
+                        <TableCell className="font-medium">{vote.name}</TableCell>
+                        <TableCell>{vote.assignee}</TableCell>
+                        <TableCell>{vote.deadline}</TableCell>
+                        <TableCell>
+                          <Badge variant="destructive" className="bg-red-50 text-red-700 border-red-200">
+                            {vote.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center justify-center">
+                            <button className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors">
+                              <Eye className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={6} className="h-32 text-center text-gray-500">
+                        Không có dữ liệu
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
 
-          {currentData.length > 0 && (
-            <ModernPagination
-              currentPage={currentPage}
-              totalPages={totalPages}
-              onPageChange={setCurrentPage}
-              pageSize={pageSize}
-              totalItems={totalItems}
-              onPageSizeChange={(size) => {
-                setPageSize(size);
-                setCurrentPage(1);
-              }}
-            />
-          )}
-        </ModernCard>
+            {currentData.length > 0 && (
+              <div className="px-6 border-t border-gray-200">
+                <Pagination
+                  currentPage={currentPage}
+                  totalPages={totalPages}
+                  onPageChange={setCurrentPage}
+                  pageSize={pageSize}
+                  totalItems={totalItems}
+                  onPageSizeChange={(size) => {
+                    setPageSize(size);
+                    setCurrentPage(1);
+                  }}
+                />
+              </div>
+            )}
+          </Tabs>
+        </Card>
     </div>
   );
 };

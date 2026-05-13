@@ -13,6 +13,8 @@ import {
     MeetingLocation,
 } from "../components/meeting-rooms/LocationTable";
 import { LocationToolbar } from "../components/meeting-rooms/LocationToolbar";
+import { PageHeader } from "../components/layout/PageHeader";
+import { Pagination } from "@/app/components/common/ui/Pagination";
 
 function cn(...inputs: ClassValue[]) {
     return twMerge(clsx(inputs));
@@ -228,38 +230,24 @@ const PhongHopPage = () => {
 
     return (
         <>
+        <div className="p-8">
             {/* Page Header */}
-            <div className="bg-white border-b border-gray-200/60 px-8 py-6">
-                <div className="flex items-center gap-2 text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">
-                    <Home className="h-3.5 w-3.5" />
-                    <span>Trang chủ</span>
-                    <span>/</span>
-                    <span>Phòng họp</span>
-                    <span>/</span>
-                    <span className="text-[#C8102E]">Địa điểm họp</span>
-                </div>
-
-                <div className="flex items-end justify-between">
-                    <div>
-                        <h1 className="text-3xl font-black text-gray-900 mb-1 tracking-tight">
-                            Quản lý địa điểm họp
-                        </h1>
-                        <p className="text-sm text-gray-500">
-                            Danh sách phòng họp và cơ sở vật chất phục vụ cuộc
-                            họp
-                        </p>
-                    </div>
-
+            <PageHeader
+                breadcrumbs={[
+                    { name: "Trang chủ", path: "/" },
+                    { name: "Phòng họp", path: "/phong-hop" },
+                    { name: "Địa điểm họp" },
+                ]}
+                actions={
                     <div className="flex items-center gap-2 text-xs text-gray-500">
                         <MapPin className="h-4 w-4 text-[#C8102E]" />
                         <span className="font-medium text-gray-700">
                             Cập nhật: 17/04/2026
                         </span>
                     </div>
-                </div>
-            </div>
+                }
+            />
 
-            <div className="p-8">
                 {/* Summary Strip */}
                 <LocationSummary
                     totalLocations={mockLocations.length}
@@ -303,90 +291,15 @@ const PhongHopPage = () => {
                                 />
 
                                 {/* Pagination */}
-                                <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between bg-gray-50/30">
-                                    <p className="text-sm text-gray-500 font-medium">
-                                        Hiển thị{" "}
-                                        <span className="text-gray-900 font-semibold">
-                                            {(currentPage - 1) * pageSize + 1}
-                                        </span>{" "}
-                                        -{" "}
-                                        <span className="text-gray-900 font-semibold">
-                                            {Math.min(
-                                                currentPage * pageSize,
-                                                filteredLocations.length,
-                                            )}
-                                        </span>{" "}
-                                        trong tổng số{" "}
-                                        <span className="text-gray-900 font-bold">
-                                            {filteredLocations.length}
-                                        </span>{" "}
-                                        địa điểm
-                                    </p>
-
-                                    <div className="flex items-center gap-2">
-                                        <button
-                                            disabled={currentPage === 1}
-                                            onClick={() =>
-                                                setCurrentPage((p) =>
-                                                    Math.max(1, p - 1),
-                                                )
-                                            }
-                                            className="w-9 h-9 flex items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-400 hover:text-gray-900 hover:border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                                        >
-                                            <ChevronLeft className="h-4.5 w-4.5" />
-                                        </button>
-
-                                        {[...Array(totalPages)].map((_, i) => (
-                                            <button
-                                                key={i}
-                                                onClick={() =>
-                                                    setCurrentPage(i + 1)
-                                                }
-                                                className={cn(
-                                                    "w-9 h-9 flex items-center justify-center rounded-lg font-bold text-sm transition-all",
-                                                    currentPage === i + 1
-                                                        ? "bg-[#C8102E] text-white shadow-md"
-                                                        : "bg-white border border-gray-200 text-gray-500 hover:border-gray-300 hover:text-gray-900",
-                                                )}
-                                            >
-                                                {i + 1}
-                                            </button>
-                                        ))}
-
-                                        <button
-                                            disabled={
-                                                currentPage === totalPages
-                                            }
-                                            onClick={() =>
-                                                setCurrentPage((p) =>
-                                                    Math.min(totalPages, p + 1),
-                                                )
-                                            }
-                                            className="w-9 h-9 flex items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-400 hover:text-gray-900 hover:border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                                        >
-                                            <ChevronRight className="h-4.5 w-4.5" />
-                                        </button>
-                                    </div>
-
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-sm text-gray-500">
-                                            Hiển thị
-                                        </span>
-                                        <select
-                                            value={pageSize}
-                                            onChange={(e) =>
-                                                setPageSize(
-                                                    Number(e.target.value),
-                                                )
-                                            }
-                                            className="h-9 pl-3 pr-8 text-sm font-semibold bg-white border border-gray-200 rounded-xl focus:outline-none focus:border-[#C8102E] transition-all cursor-pointer"
-                                        >
-                                            <option value={10}>10</option>
-                                            <option value={20}>20</option>
-                                            <option value={50}>50</option>
-                                        </select>
-                                    </div>
-                                </div>
+                                <Pagination
+                                    currentPage={currentPage}
+                                    totalPages={totalPages}
+                                    pageSize={pageSize}
+                                    totalItems={filteredLocations.length}
+                                    onPageChange={setCurrentPage}
+                                    onPageSizeChange={setPageSize}
+                                    itemLabel="địa điểm"
+                                />
                             </motion.div>
                         ) : (
                             <motion.div

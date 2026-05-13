@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { QUAN_TRI_SIDEBAR_ITEMS } from '../constants/sidebar';
 import { Sidebar, SidebarItem } from '../components/layout/Sidebar';
-import { AppPagination } from '../components/common/AppPagination';
+import { PageHeader } from '../components/layout/PageHeader';
+import { Pagination as AppPagination } from '@/app/components/common/ui/Pagination';
+import { CustomDropdown } from '@/app/components/common/ui/CustomDropdown';
 import { RoleFormModal } from '../components/role/RoleFormModal';
 import { DeleteRoleModal } from '../components/role/DeleteRoleModal';
 import { toast } from '../../lib/toast';
@@ -299,31 +301,25 @@ const VaiTroPage = () => {
     <>
       <div className="bg-gray-50/50">
 
-        {/* Page Header */}
-        <div className="bg-white border-b border-gray-200/60 px-8 py-6">
-          <div className="flex items-start justify-between">
-            <div>
-              <div className="flex items-center gap-2 text-sm text-gray-500 mb-2">
-                <Home className="h-4 w-4" />
-                <span>/</span>
-                <span>Quản lý người dùng</span>
-                <span>/</span>
-                <span>Vai trò và phân quyền</span>
-              </div>
-              <h1 className="text-2xl font-bold text-gray-900 mb-1">Quản lý vai trò</h1>
-              <p className="text-sm text-gray-600">Quản lý vai trò và phân quyền trong hệ thống</p>
-            </div>
-            <button
-              onClick={handleOpenCreateModal}
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[#C8102E] to-[#A90F14] text-white text-sm font-semibold rounded-xl hover:shadow-lg transition-all"
-            >
-              <Plus className="h-4 w-4" />
-              Thêm vai trò mới
-            </button>
-          </div>
-        </div>
-
         <div className="p-8">
+          {/* Page Header */}
+          <PageHeader
+            breadcrumbs={[
+              { name: "Trang chủ", path: "/" },
+              { name: "Quản lý người dùng", path: "/nguoi-dung" },
+              { name: "Vai trò và phân quyền" },
+            ]}
+            actions={
+              <button
+                onClick={handleOpenCreateModal}
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[#C8102E] to-[#A90F14] text-white text-sm font-semibold rounded-xl hover:shadow-lg transition-all"
+              >
+                <Plus className="h-4 w-4" />
+                Thêm vai trò mới
+              </button>
+            }
+          />
+
           {/* Summary Stats */}
           <div className="grid grid-cols-3 gap-4 mb-6">
             <div className="bg-white rounded-2xl border border-gray-200/60 p-5 shadow-sm hover:shadow-md transition-shadow">
@@ -448,21 +444,19 @@ const VaiTroPage = () => {
                   {/* Filter Controls */}
                   <div className="grid grid-cols-1 gap-4">
                     {/* Status Filter */}
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-700 mb-2">Trạng thái</label>
-                      <div className="relative">
-                        <select
-                          value={filterStatus}
-                          onChange={(e) => setFilterStatus(e.target.value)}
-                          className="w-full h-10 pl-4 pr-10 text-sm border border-gray-300 rounded-xl bg-white text-gray-900 font-medium focus:outline-none focus:border-[#C8102E] focus:ring-2 focus:ring-[#C8102E]/20 cursor-pointer transition-all appearance-none"
-                        >
-                          <option value="all">Tất cả</option>
-                          <option value="active">Hoạt động</option>
-                          <option value="inactive">Ngừng hoạt động</option>
-                        </select>
-                        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
-                      </div>
-                    </div>
+                    <CustomDropdown
+                      label="Trạng thái"
+                      options={[
+                        { value: 'all', label: 'Tất cả' },
+                        { value: 'active', label: 'Hoạt động' },
+                        { value: 'inactive', label: 'Ngừng hoạt động' }
+                      ]}
+                      value={filterStatus}
+                      onChange={(val) => {
+                        setFilterStatus(val);
+                        setCurrentPage(1);
+                      }}
+                    />
                   </div>
 
                   {/* Filter Actions */}
@@ -526,7 +520,6 @@ const VaiTroPage = () => {
                     <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Tên vai trò</th>
                     <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Mã vai trò</th>
                     <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Mô tả</th>
-                    <th className="px-6 py-4 text-center text-xs font-bold text-gray-700 uppercase tracking-wider">Trạng thái</th>
                     <th className="px-6 py-4 text-center text-xs font-bold text-gray-700 uppercase tracking-wider">Thao tác</th>
                   </tr>
                 </thead>
@@ -569,22 +562,7 @@ const VaiTroPage = () => {
                       <td className="px-6 py-4 text-sm text-gray-600 max-w-md">
                         {role.description || <span className="text-gray-400">-</span>}
                       </td>
-                      <td className="px-6 py-4 text-center">
-                        <button
-                          onClick={() => toggleRoleStatus(role.id)}
-                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                            role.isActive
-                              ? 'bg-gradient-to-r from-emerald-500 to-emerald-600'
-                              : 'bg-gray-300'
-                          }`}
-                        >
-                          <span
-                            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform shadow-md ${
-                              role.isActive ? 'translate-x-6' : 'translate-x-1'
-                            }`}
-                          />
-                        </button>
-                      </td>
+
                       <td className="px-6 py-4">
                         <div className="flex items-center justify-center gap-1">
                           <button
@@ -632,7 +610,6 @@ const VaiTroPage = () => {
           </div>
         </div>
       </div>
-
       {/* Modals */}
       <RoleFormModal
         isOpen={roleFormModal.isOpen}

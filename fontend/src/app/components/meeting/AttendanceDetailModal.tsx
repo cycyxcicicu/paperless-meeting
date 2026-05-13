@@ -1,7 +1,7 @@
 import React from 'react';
 import { X, User } from 'lucide-react';
-import { Button } from '../ui/hp-button';
-import { Badge } from '../ui/hp-badge';
+import { Button } from '@/app/components/common/ui/Button';
+import { Badge } from '@/app/components/ui/badge';
 
 interface AttendanceDetailRecord {
   id: number;

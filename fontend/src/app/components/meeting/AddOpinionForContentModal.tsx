@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { X, Upload } from 'lucide-react';
-import { Button } from '../ui/hp-button';
+import { Button } from '@/app/components/common/ui/Button';
 import { Label } from '../ui/label';
 import { Textarea } from '../ui/textarea';
 import { CustomSelect } from '../ui/CustomSelect';

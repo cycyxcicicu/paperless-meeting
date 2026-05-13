@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Button } from '../components/ui/hp-button';
+import { Button } from '@/app/components/common/ui/Button';
 import { Input } from '../components/ui/input';
 import { Checkbox } from '../components/ui/checkbox';
 import { ImageWithFallback } from '../components/figma/ImageWithFallback';

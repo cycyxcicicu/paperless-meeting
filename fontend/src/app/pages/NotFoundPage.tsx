@@ -1,6 +1,6 @@
 import React from 'react';
 import { PageHeader } from '../components/layout/PageHeader';
-import { Button } from '../components/ui/hp-button';
+import { Button } from '@/app/components/common/ui/Button';
 import { Home } from 'lucide-react';
 import { useNavigate } from 'react-router';
 

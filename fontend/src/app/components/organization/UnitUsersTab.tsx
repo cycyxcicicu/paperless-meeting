@@ -8,13 +8,12 @@ import {
   Shield,
   UserCheck,
   MoreHorizontal,
-  ChevronLeft,
-  ChevronRight,
   Eye,
   Edit,
   Trash2
 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
+import { Pagination } from '../common/ui/Pagination';
 
 interface UnitUser {
   id: number;
@@ -43,7 +42,7 @@ export const UnitUsersTab: React.FC<UnitUsersTabProps> = ({
   onDelete
 }) => {
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(5);
+  const [pageSize, setPageSize] = useState(10);
   const [searchQuery, setSearchQuery] = useState('');
   const [openMenuId, setOpenMenuId] = useState<number | null>(null);
 
@@ -51,6 +50,11 @@ export const UnitUsersTab: React.FC<UnitUsersTabProps> = ({
   useEffect(() => {
     setCurrentPage(1);
   }, [users]);
+
+  // Reset to first page when search or pageSize changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, pageSize]);
 
   // Filter users by name, email, or phone
   const filteredUsers = useMemo(() => {
@@ -63,7 +67,8 @@ export const UnitUsersTab: React.FC<UnitUsersTabProps> = ({
     );
   }, [users, searchQuery]);
 
-  const totalPages = Math.ceil(filteredUsers.length / pageSize);
+  const totalItems = filteredUsers.length;
+  const totalPages = Math.ceil(totalItems / pageSize) || 1;
   const currentData = filteredUsers.slice(
     (currentPage - 1) * pageSize,
     currentPage * pageSize
@@ -93,11 +98,11 @@ export const UnitUsersTab: React.FC<UnitUsersTabProps> = ({
         </button>
       </div>
 
-      {/* User Table - Fixed Height Card */}
+      {/* User Table */}
       <div className="px-8 py-6 flex-1 overflow-hidden">
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm h-[450px] flex flex-col">
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col">
           {filteredUsers.length === 0 ? (
-            <div className="flex-1 flex flex-col items-center justify-center">
+            <div className="flex-1 flex flex-col items-center justify-center py-16">
               <div className="w-20 h-20 rounded-3xl bg-gray-50 flex items-center justify-center text-gray-200 mb-6">
                 <Users className="h-10 w-10" />
               </div>
@@ -177,7 +182,7 @@ export const UnitUsersTab: React.FC<UnitUsersTabProps> = ({
                               : "bg-red-50 text-red-600 ring-red-100"
                           )}>
                             <span className={cn("w-1.5 h-1.5 rounded-full", user.isActive ? "bg-emerald-500" : "bg-red-500")} />
-                            {user.isActive ? 'Đang hoạt động' : 'Đã khóa'}
+                            {user.isActive ? 'Hoạt động' : 'Đã khóa'}
                           </span>
                         </td>
                         <td className="px-6 py-5 relative">
@@ -236,69 +241,20 @@ export const UnitUsersTab: React.FC<UnitUsersTabProps> = ({
                 </table>
               </div>
 
-              {/* Sticky Pagination */}
-              <div className="px-6 py-4 bg-gray-50/50 border-t border-gray-100 flex items-center justify-between text-sm font-medium text-gray-500 shrink-0">
-                <div>
-                  Hiển thị{' '}
-                  <span className="text-gray-900 font-semibold">
-                    {(currentPage - 1) * pageSize + 1}
-                  </span>{' '}
-                  -{' '}
-                  <span className="text-gray-900 font-semibold">
-                    {Math.min(currentPage * pageSize, filteredUsers.length)}
-                  </span>{' '}
-                  trong tổng số{' '}
-                  <span className="text-gray-900 font-bold">{filteredUsers.length}</span> nhân sự
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    disabled={currentPage === 1}
-                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                    className="w-9 h-9 flex items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-400 hover:text-gray-900 hover:border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                  >
-                    <ChevronLeft className="h-4.5 w-4.5" />
-                  </button>
-
-                  {[...Array(totalPages)].map((_, i) => (
-                    <button
-                      key={i}
-                      onClick={() => setCurrentPage(i + 1)}
-                      className={cn(
-                        'w-9 h-9 flex items-center justify-center rounded-lg font-bold text-sm transition-all',
-                        currentPage === i + 1
-                          ? 'bg-[#C8102E] text-white shadow-md'
-                          : 'bg-white border border-gray-200 text-gray-500 hover:border-gray-300 hover:text-gray-900'
-                      )}
-                    >
-                      {i + 1}
-                    </button>
-                  ))}
-
-                  <button
-                    disabled={currentPage === totalPages}
-                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                    className="w-9 h-9 flex items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-400 hover:text-gray-900 hover:border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                  >
-                    <ChevronRight className="h-4.5 w-4.5" />
-                  </button>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-gray-500">Hiển thị</span>
-                  <select
-                    value={pageSize}
-                    onChange={(e) => {
-                      setPageSize(Number(e.target.value));
-                      setCurrentPage(1);
-                    }}
-                    className="h-9 pl-3 pr-8 text-sm font-semibold bg-white border border-gray-200 rounded-xl focus:outline-none focus:border-[#C8102E] transition-all cursor-pointer"
-                  >
-                    <option value={5}>5</option>
-                    <option value={10}>10</option>
-                    <option value={20}>20</option>
-                  </select>
-                </div>
+              {/* Common Pagination - same as NguoiDungPage */}
+              <div className="border-t border-gray-100 shrink-0">
+                <Pagination
+                  currentPage={currentPage}
+                  totalPages={totalPages}
+                  pageSize={pageSize}
+                  totalItems={totalItems}
+                  onPageChange={setCurrentPage}
+                  onPageSizeChange={(size) => {
+                    setPageSize(size);
+                    setCurrentPage(1);
+                  }}
+                  itemLabel="nhân sự"
+                />
               </div>
             </>
           )}

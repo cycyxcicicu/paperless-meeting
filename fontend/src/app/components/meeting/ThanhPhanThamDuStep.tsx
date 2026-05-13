@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Plus, Trash2, Users as UsersIcon } from 'lucide-react';
-import { Button } from '../ui/hp-button';
+import { Button } from '@/app/components/common/ui/Button';
 import { SelectUnitModal, Member } from './SelectUnitModal';
 import { cn } from '../../../lib/utils';
 

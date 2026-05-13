@@ -7,11 +7,12 @@ import { WeekCalendarView, WeekDay } from '../components/calendar/WeekCalendarVi
 import { MonthCalendarView, MonthDay } from '../components/calendar/MonthCalendarView';
 import { CalendarEvent } from '../components/calendar/CalendarEventCard';
 import { mergeEventsWithPreviousDay } from '../utils/calendarHelpers';
+import { PageHeader } from '../components/layout/PageHeader';
 
 
 
 const LichHopPage = () => {
-  const [viewMode, setViewMode] = useState<'week' | 'month'>('month');
+  const [viewMode, setViewMode] = useState<'week' | 'month'>('week');
   const [currentDate, setCurrentDate] = useState(new Date(2026, 3, 7)); // 7/4/2026
 
   // Generate month data based on currentDate
@@ -472,30 +473,16 @@ const LichHopPage = () => {
   return (
     <>
 
-        {/* Page Header */}
-        <div className="bg-white border-b border-gray-200/60 px-8 py-6 mb-8">
-          <div className="flex items-center gap-2 text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">
-            <Home className="h-3.5 w-3.5" />
-            <span>Trang chủ</span>
-            <span>/</span>
-            <span>Phòng họp</span>
-            <span>/</span>
-            <span className="text-[#C8102E]">Lịch họp</span>
-          </div>
+        <div className="p-8">
+          {/* Page Header */}
+          <PageHeader
+            breadcrumbs={[
+              { name: "Trang chủ", path: "/" },
+              { name: "Phòng họp" },
+              { name: "Lịch họp" },
+            ]}
+          />
 
-          <div className="flex items-end justify-between">
-            <div>
-              <h1 className="text-3xl font-black text-gray-900 mb-1 tracking-tight">
-                Lịch họp
-              </h1>
-              <p className="text-sm text-gray-500">
-                Theo dõi lịch và quản lý các cuộc họp
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="px-8">
           <CalendarControls
             dateRangeLabel={getDateRangeLabel()}
             viewMode={viewMode}

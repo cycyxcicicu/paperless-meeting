@@ -1,8 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { X, Search, Eye, ChevronLeft, ChevronRight } from 'lucide-react';
-import { Button } from '../ui/hp-button';
-import { Badge } from '../ui/hp-badge';
-import { Card, CardContent } from '../ui/hp-card';
+import { Button } from '@/app/components/common/ui/Button';
+import { Badge } from '@/app/components/ui/badge';
+import { Card, CardContent  } from '@/app/components/ui/card';
 import { AttendanceDetailModal, AttendanceDetailRecord } from './AttendanceDetailModal';
 
 type TabType = 'individual' | 'unit' | 'guest' | 'absent';

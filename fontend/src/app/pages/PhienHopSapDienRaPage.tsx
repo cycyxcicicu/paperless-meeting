@@ -18,9 +18,9 @@ import { PageHeader } from "../components/layout/PageHeader";
 import { Sidebar } from "../components/layout/Sidebar";
 import { CollapsibleSection } from "../components/meeting/CollapsibleSection";
 import { ConfirmAttendanceModal } from "../components/meeting/ConfirmAttendanceModal";
-import { Badge } from "../components/ui/hp-badge";
-import { Button } from "../components/ui/hp-button";
-import { Card, CardContent } from "../components/ui/hp-card";
+import { Badge } from '@/app/components/ui/badge';
+import { Button } from '@/app/components/common/ui/Button';
+import { Card, CardContent  } from '@/app/components/ui/card';
 
 import { PHIEN_HOP_SIDEBAR_ITEMS } from "../constants/sidebar";
 export default function PhienHopSapDienRaPage() {

@@ -16,9 +16,9 @@ import {
     PostponeData,
     PostponeModal,
 } from "../components/meeting/PostponeModal";
-import { Badge } from "../components/ui/hp-badge";
-import { Button } from "../components/ui/hp-button";
-import { Card } from "../components/ui/hp-card";
+import { Badge } from '@/app/components/ui/badge';
+import { Button } from '@/app/components/common/ui/Button';
+import { Card  } from '@/app/components/ui/card';
 
 import { PHIEN_HOP_SIDEBAR_ITEMS } from "../constants/sidebar";
 export default function PhienHopChiTietPage() {

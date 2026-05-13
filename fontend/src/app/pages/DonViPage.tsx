@@ -6,6 +6,7 @@ import {
   Sidebar,
   SidebarItem,
 } from "../components/layout/Sidebar";
+import { PageHeader } from "../components/layout/PageHeader";
 import {
   Users,
   Shield,
@@ -2031,6 +2032,20 @@ const DonViPage = () => {
     return null;
   };
 
+  const findNodeByCode = (
+    nodes: TreeNode[],
+    code: string,
+  ): TreeNode | null => {
+    for (const node of nodes) {
+      if (node.code === code) return node;
+      if (node.children) {
+        const found = findNodeByCode(node.children, code);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
+
   const selectedNode = findNodeById(treeData, selectedTreeNode);
 
   // Handler to open detail panel
@@ -2062,7 +2077,7 @@ const DonViPage = () => {
   const getChildUnitsFromTree = (unitId: string | null): any[] => {
     if (!unitId) return [];
 
-    const node = findNodeById(treeData, unitId);
+    const node = findNodeByCode(treeData, unitId);
     if (!node || !node.children) return [];
 
     return node.children.map((child, index) => {
@@ -2093,16 +2108,33 @@ const DonViPage = () => {
     ? allUnitUsers[selectedUnitId] || []
     : [];
 
+  const selectedDetailNode = findNodeByCode(treeData, selectedUnitId || 'UBND_HP');
+  const level = selectedDetailNode?.level || 0;
+
+  let infoLabel = "Thông tin đơn vị";
+  let childrenLabel = "Đơn vị trực thuộc";
+  let childUnitTypeLabel = "đơn vị trực thuộc";
+
+  if (level === 1) {
+    infoLabel = "Thông tin sở";
+    childrenLabel = "Phòng ban trực thuộc";
+    childUnitTypeLabel = "phòng ban trực thuộc";
+  } else if (level >= 2) {
+    infoLabel = "Thông tin phòng ban";
+    childrenLabel = "Bộ phận trực thuộc";
+    childUnitTypeLabel = "bộ phận trực thuộc";
+  }
+
   // Detail panel tabs configuration
   const detailTabs = [
     {
       key: "info" as TabKey,
-      label: "Thông tin đơn vị",
+      label: infoLabel,
       icon: Info,
     },
     {
       key: "child-units" as TabKey,
-      label: "Đơn vị trực thuộc",
+      label: childrenLabel,
       icon: Building2,
       count: currentChildUnits.length,
     },
@@ -2424,32 +2456,16 @@ const DonViPage = () => {
     <>
       <div className="bg-gray-50/50">
 
-        {/* Page Header */}
-        <div className="bg-white border-b border-gray-200/60 px-8 py-6">
-          <div className="flex items-start justify-between">
-            <div>
-              <div className="flex items-center gap-2 text-sm text-gray-500 mb-2">
-                <Home className="h-4 w-4" />
-                <span>/</span>
-                <span>Quản lý người dùng</span>
-                <span>/</span>
-                <span>Quản lý đơn vị</span>
-              </div>
-              <h1 className="text-2xl font-bold text-gray-900 mb-1">
-                Quản lý đơn vị
-              </h1>
-              <p className="text-sm text-gray-600">
-                Quản lý cơ cấu tổ chức và đơn vị trong hệ thống
-              </p>
-            </div>
-            <button className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[#C8102E] to-[#A90F14] text-white text-sm font-semibold rounded-xl hover:shadow-lg transition-all">
-              <Plus className="h-4 w-4" />
-              Thêm đơn vị mới
-            </button>
-          </div>
-        </div>
-
         <div className="p-8">
+          {/* Page Header */}
+          <PageHeader
+            breadcrumbs={[
+              { name: "Trang chủ", path: "/" },
+              { name: "Quản lý người dùng", path: "/nguoi-dung" },
+              { name: "Quản lý đơn vị" },
+            ]}
+          />
+
           {/* Summary Stats */}
           <div className="grid grid-cols-3 gap-4 mb-6">
             <div className="bg-white rounded-2xl border border-gray-200/60 p-5 shadow-sm hover:shadow-md transition-shadow">
@@ -2675,6 +2691,7 @@ const DonViPage = () => {
                     {activeTab === "child-units" && (
                       <ChildUnitsTab
                         units={currentChildUnits}
+                        label={childUnitTypeLabel}
                         onAdd={handleOpenAddUnitModal}
                         onEdit={handleOpenEditUnitModal}
                         onDelete={handleOpenDeleteUnitModal}
@@ -2718,7 +2735,6 @@ const DonViPage = () => {
       />
 
       {/* Unit Modals */}
-      {console.log('Rendering UnitFormModal, isOpen:', unitFormModal.isOpen, 'mode:', unitFormModal.mode)}
       <UnitFormModal
         isOpen={unitFormModal.isOpen}
         onClose={handleCloseUnitFormModal}
@@ -2726,6 +2742,7 @@ const DonViPage = () => {
         mode={unitFormModal.mode}
         initialData={unitFormData}
         parentUnitName={currentUnitDetails?.name}
+        unitTypeLabel={childUnitTypeLabel}
       />
 
       <DeleteUnitModal

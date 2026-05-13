@@ -78,9 +78,7 @@ export const PositionTable: React.FC<PositionTableProps> = ({
             <th className="px-4 py-3 text-xs font-bold text-gray-400 uppercase tracking-widest text-center">
               Số nhân sự
             </th>
-            <th className="px-4 py-3 text-xs font-bold text-gray-400 uppercase tracking-widest text-center">
-              Trạng thái
-            </th>
+
             <th className="px-4 py-3 text-xs font-bold text-gray-400 uppercase tracking-widest text-center">
               Thao tác
             </th>
@@ -163,25 +161,7 @@ export const PositionTable: React.FC<PositionTableProps> = ({
                   </div>
                 </td>
 
-                {/* Status */}
-                <td className={cn(
-                  "px-4 py-4 border-y text-center transition-colors duration-300",
-                  isSelected ? "border-red-100" : "border-gray-100"
-                )}>
-                  <span className={cn(
-                    "inline-flex items-center gap-1.5 px-3 py-1 text-[11px] font-bold rounded-full uppercase tracking-wider shadow-sm transition-all duration-300",
-                    position.status === 'active' 
-                      ? "bg-emerald-50 text-emerald-700 border border-emerald-200" 
-                      : "bg-gray-100 text-gray-500 border border-gray-200"
-                  )}>
-                    {position.status === 'active' ? (
-                      <CheckCircle2 className="h-3 w-3" />
-                    ) : (
-                      <XCircle className="h-3 w-3" />
-                    )}
-                    {position.status === 'active' ? 'Hoạt động' : 'Tạm dừng'}
-                  </span>
-                </td>
+
 
                 {/* Actions */}
                 <td className={cn(

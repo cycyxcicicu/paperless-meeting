@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { QUAN_TRI_SIDEBAR_ITEMS } from '../constants/sidebar';
 import { Sidebar, SidebarItem } from '../components/layout/Sidebar';
-import { AppPagination } from '../components/common/AppPagination';
+import { Pagination as AppPagination } from '@/app/components/common/ui/Pagination';
+import { PageHeader } from '../components/layout/PageHeader';
 import { PositionFormModal } from '../components/positions/PositionFormModal';
 import { DeletePositionModal } from '../components/positions/DeletePositionModal';
 import {
@@ -175,54 +176,16 @@ const ChucVuPage = () => {
     <>
 
         {/* Page Header */}
-        <div className="bg-white border-b border-gray-200/60 px-8 py-8 shadow-sm relative z-30">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2 text-xs font-semibold text-gray-400 uppercase tracking-widest">
-              <Home className="h-3.5 w-3.5" />
-              <span>/</span>
-              <span>Quản lý người dùng</span>
-              <span>/</span>
-              <span className="text-[#C8102E]">Danh mục chức vụ</span>
-            </div>
-          </div>
-          
-          <div className="flex items-end justify-between">
-            <div>
-              <h1 className="text-3xl font-black text-gray-900 mb-1 tracking-tight">Quản lý chức vụ</h1>
-              <div className="flex items-center gap-4 text-sm text-gray-500">
-                <p>Hệ thống danh mục chức vụ công vụ trong bộ máy nhà nước</p>
-                <div className="w-1 h-1 rounded-full bg-gray-300" />
-                <p className="flex items-center gap-1.5 font-medium text-gray-700">
-                  <Briefcase className="h-4 w-4 text-[#C8102E]" />
-                  Cập nhật: 17/04/2026
-                </p>
-              </div>
-            </div>
-            
-            <div className="flex items-center bg-gray-100/80 p-1 rounded-xl border border-gray-200 shadow-inner translate-y-2">
-              <button 
-                onClick={() => setViewMode('list')}
-                className={cn(
-                  "p-2 rounded-lg transition-all",
-                  viewMode === 'list' ? "bg-white text-[#C8102E] shadow-md scale-105" : "text-gray-400 hover:text-gray-600"
-                )}
-              >
-                <List className="h-4.5 w-4.5" />
-              </button>
-              <button 
-                onClick={() => setViewMode('grid')}
-                className={cn(
-                  "p-2 rounded-lg transition-all",
-                  viewMode === 'grid' ? "bg-white text-[#C8102E] shadow-md scale-105" : "text-gray-400 hover:text-gray-600"
-                )}
-              >
-                <LayoutGrid className="h-4.5 w-4.5" />
-              </button>
-            </div>
-          </div>
-        </div>
-
         <div className="p-8">
+          <PageHeader
+            breadcrumbs={[
+              { name: "Trang chủ", path: "/" },
+              { name: "Quản lý người dùng", path: "/nguoi-dung" },
+              { name: "Danh mục chức vụ" },
+            ]}
+
+          />
+
           {/* Summary Strip */}
           <PositionSummary 
             totalPositions={mockPositions.length}

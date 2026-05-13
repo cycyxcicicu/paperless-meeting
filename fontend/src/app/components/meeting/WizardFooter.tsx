@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button } from '../ui/hp-button';
+import { Button } from '@/app/components/common/ui/Button';
 import { ChevronLeft, Save, Send, CheckCircle, X, Clock, CheckCheck } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 

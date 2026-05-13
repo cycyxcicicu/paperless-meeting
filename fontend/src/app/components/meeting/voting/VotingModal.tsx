@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Clock } from 'lucide-react';
-import { Button } from '../../ui/hp-button';
+import { Button } from '@/app/components/common/ui/Button';
 
 interface VotingModalProps {
   isOpen: boolean;

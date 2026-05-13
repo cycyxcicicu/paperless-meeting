@@ -81,16 +81,8 @@ export const LocationTable: React.FC<LocationTableProps> = ({
                   Sức chứa
                 </span>
               </th>
-              <th className="px-6 py-3.5 text-left">
-                <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-                  Tiện ích
-                </span>
-              </th>
-              <th className="px-6 py-3.5 text-center">
-                <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-                  Trạng thái
-                </span>
-              </th>
+
+
               <th className="px-6 py-3.5 text-center">
                 <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">
                   Thao tác
@@ -149,47 +141,9 @@ export const LocationTable: React.FC<LocationTableProps> = ({
                     </div>
                   </td>
 
-                  {/* Facilities */}
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-1.5">
-                      {location.facilities.slice(0, 3).map((facility, i) => {
-                        const Icon = facilityIcons[facility] || Wifi;
-                        return (
-                          <div
-                            key={i}
-                            className="w-7 h-7 rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center"
-                            title={facility}
-                          >
-                            <Icon className="h-3.5 w-3.5 text-gray-500" />
-                          </div>
-                        );
-                      })}
-                      {location.facilities.length > 3 && (
-                        <span className="text-xs text-gray-400 font-medium ml-1">
-                          +{location.facilities.length - 3}
-                        </span>
-                      )}
-                    </div>
-                  </td>
 
-                  {/* Status */}
-                  <td className="px-6 py-4 text-center">
-                    <span
-                      className={cn(
-                        'inline-flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-full uppercase tracking-wide',
-                        location.status === 'active'
-                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                          : 'bg-gray-100 text-gray-500 border border-gray-200'
-                      )}
-                    >
-                      {location.status === 'active' ? (
-                        <CheckCircle2 className="h-3 w-3" />
-                      ) : (
-                        <XCircle className="h-3 w-3" />
-                      )}
-                      {location.status === 'active' ? 'Hoạt động' : 'Tạm dừng'}
-                    </span>
-                  </td>
+
+
 
                   {/* Actions */}
                   <td className="px-6 py-4">

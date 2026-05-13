@@ -1,8 +1,9 @@
 import React from 'react';
+import { Link } from 'react-router';
 import { cn } from '../ui/utils';
 
 interface PageHeaderProps {
-  title: string | React.ReactNode;
+  title?: string | React.ReactNode;
   description?: string | React.ReactNode;
   actions?: React.ReactNode;
   breadcrumbs?: { name: string; path?: string }[];
@@ -10,64 +11,50 @@ interface PageHeaderProps {
 }
 
 const PageHeader: React.FC<PageHeaderProps> = ({
-  title,
-  description,
   actions,
   breadcrumbs,
   className,
 }) => {
   return (
-    <div className={cn('mb-6', className)}>
+    <div className={cn('mb-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-4', className)}>
       {breadcrumbs && breadcrumbs.length > 0 && (
-        <div className="flex items-center gap-2 mb-3">
-          {breadcrumbs.map((crumb, index) => (
-            <React.Fragment key={index}>
-              {index > 0 && <span className="text-[#D1D5DB]">/</span>}
+        <div className="flex flex-wrap items-center gap-2">
+          {breadcrumbs.map((crumb, index) => {
+            const isLast = index === breadcrumbs.length - 1;
+            const content = (
               <span
                 className={cn(
-                  'text-xs',
-                  index === breadcrumbs.length - 1
-                    ? 'text-[#111827] font-medium'
-                    : 'text-[#6B7280] hover:text-[#111827] cursor-pointer'
+                  'text-sm',
+                  isLast
+                    ? 'text-gray-900 font-semibold'
+                    : 'text-gray-500 hover:text-gray-900 transition-colors'
                 )}
               >
                 {crumb.name}
               </span>
-            </React.Fragment>
-          ))}
+            );
+
+            return (
+              <React.Fragment key={index}>
+                {index > 0 && <span className="text-gray-300">/</span>}
+                {crumb.path && !isLast ? (
+                  <Link to={crumb.path} className="flex items-center">
+                    {content}
+                  </Link>
+                ) : (
+                  content
+                )}
+              </React.Fragment>
+            );
+          })}
         </div>
       )}
-      
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex-1">
-          {typeof title === 'string' ? (
-            <h1 className="text-[28px] font-semibold text-[#111827] leading-tight mb-1">
-              {title}
-            </h1>
-          ) : (
-            <div className="text-[28px] font-semibold text-[#111827] leading-tight mb-1">
-              {title}
-            </div>
-          )}
-          {description && (
-            typeof description === 'string' ? (
-              <p className="text-sm text-[#6B7280] leading-relaxed">
-                {description}
-              </p>
-            ) : (
-              <div className="text-sm text-[#6B7280] leading-relaxed">
-                {description}
-              </div>
-            )
-          )}
-        </div>
 
-        {actions && (
-          <div className="flex items-center gap-2">
-            {actions}
-          </div>
-        )}
-      </div>
+      {actions && (
+        <div className="flex items-center gap-2 shrink-0">
+          {actions}
+        </div>
+      )}
     </div>
   );
 };

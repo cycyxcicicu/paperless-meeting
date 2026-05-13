@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Clock, MapPin, User, Calendar } from 'lucide-react';
-import { Badge } from '../components/ui/hp-badge';
-import { Button } from '../components/ui/hp-button';
+import { Badge } from '@/app/components/ui/badge';
+import { Button } from '@/app/components/common/ui/Button';
 
 interface MeetingItem {
   id: number;

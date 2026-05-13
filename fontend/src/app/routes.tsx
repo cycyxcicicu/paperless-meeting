@@ -3,8 +3,6 @@ import { MainLayout } from "./components/layout/MainLayout";
 import AuditLogPage from "./pages/AuditLogPage";
 import CauHinhPage from "./pages/CauHinhPage";
 import ChucVuPage from "./pages/ChucVuPage";
-import ComponentShowcase from "./pages/ComponentShowcase";
-import ComponentShowcasePage from "./pages/ComponentShowcasePage";
 import DienBienPhienHopPage from "./pages/DienBienPhienHopPage";
 import DonViPage from "./pages/DonViPage";
 import HomePage from "./pages/HomePage";
@@ -59,13 +57,5 @@ export const router = createBrowserRouter([
             { path: "phien-hop/phieu-lay-y-kien", Component: PhienHopPage },
             { path: "*", Component: NotFoundPage },
         ],
-    },
-    {
-        path: "/components-old",
-        Component: ComponentShowcase,
-    },
-    {
-        path: "/components",
-        Component: ComponentShowcasePage,
     },
 ]);

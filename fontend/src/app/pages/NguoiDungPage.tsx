@@ -1,7 +1,10 @@
 import React, { useState } from 'react';
 import { QUAN_TRI_SIDEBAR_ITEMS } from '../constants/sidebar';
 import { Sidebar, SidebarItem } from '../components/layout/Sidebar';
-import { AppPagination } from '../components/common/AppPagination';
+import { Pagination } from '../components/common/ui/Pagination';
+import { Button } from '../components/common/ui/Button';
+import { CustomDropdown } from '../components/common/ui/CustomDropdown';
+import { PageHeader } from '../components/layout/PageHeader';
 import { UserFormModal } from '../components/user/UserFormModal';
 import { DeleteUserModal } from '../components/user/DeleteUserModal';
 import { toast } from '../../lib/toast';
@@ -57,10 +60,6 @@ const NguoiDungPage = () => {
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterUnit, setFilterUnit] = useState<string>('all');
 
-  // Unit dropdown state
-  const [showUnitDropdown, setShowUnitDropdown] = useState(false);
-  const [unitSearchQuery, setUnitSearchQuery] = useState('');
-
   // Modal state
   const [userFormModal, setUserFormModal] = useState<{
     isOpen: boolean;
@@ -92,10 +91,7 @@ const NguoiDungPage = () => {
     { id: '14', name: 'Sở Lao động - Thương binh và Xã hội' },
   ];
 
-  // Filter units based on search
-  const filteredUnits = units.filter(unit =>
-    unit.name.toLowerCase().includes(unitSearchQuery.toLowerCase())
-  );
+
 
   // Mock data
   const allUsers: User[] = Array.from({ length: 32 }, (_, i) => ({
@@ -226,19 +222,7 @@ const NguoiDungPage = () => {
     return tags;
   };
 
-  // Close dropdown when clicking outside
-  React.useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as HTMLElement;
-      if (showUnitDropdown && !target.closest('.unit-dropdown-container')) {
-        setShowUnitDropdown(false);
-        setUnitSearchQuery('');
-      }
-    };
 
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showUnitDropdown]);
 
   // Modal handlers
   const handleOpenCreateModal = () => {
@@ -290,29 +274,24 @@ const NguoiDungPage = () => {
   return (
     <>
       <div className="bg-gray-50/50">
-        {/* Page Header */}
-        <div className="bg-white border-b border-gray-200/60 px-8 py-6">
-          <div className="flex items-start justify-between">
-            <div>
-              <div className="flex items-center gap-2 text-sm text-gray-500 mb-2">
-                <Home className="h-4 w-4" />
-                <span>/</span>
-                <span>Quản lý người dùng</span>
-              </div>
-              <h1 className="text-2xl font-bold text-gray-900 mb-1">Quản lý người dùng</h1>
-              <p className="text-sm text-gray-600">Quản lý và cấu hình tài khoản người dùng trong hệ thống</p>
-            </div>
-            <button
-              onClick={handleOpenCreateModal}
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[#C8102E] to-[#A90F14] text-white text-sm font-semibold rounded-xl hover:shadow-lg transition-all"
-            >
-              <Plus className="h-4 w-4" />
-              Thêm người dùng mới
-            </button>
-          </div>
-        </div>
-
         <div className="p-8">
+          {/* Page Header */}
+          <PageHeader
+            breadcrumbs={[
+              { name: "Trang chủ", path: "/" },
+              { name: "Quản lý người dùng" },
+            ]}
+            actions={
+              <Button
+                onClick={handleOpenCreateModal}
+                variant="primary"
+              >
+                <Plus className="h-4 w-4" />
+                Thêm người dùng mới
+              </Button>
+            }
+          />
+
           {/* Summary Stats */}
           <div className="grid grid-cols-3 gap-4 mb-6">
             <div className="bg-white rounded-2xl border border-gray-200/60 p-5 shadow-sm hover:shadow-md transition-shadow">
@@ -392,14 +371,14 @@ const NguoiDungPage = () => {
                   )}
                 </button>
 
-                <button className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 hover:border-gray-400 transition-all">
+                <Button variant="outline" className="gap-2">
                   <Download className="h-4 w-4" />
                   Xuất file
-                </button>
+                </Button>
 
-                <button className="w-11 h-11 flex items-center justify-center text-gray-600 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 hover:border-gray-400 transition-all">
+                <Button variant="outline" size="icon">
                   <RefreshCw className="h-4 w-4" />
-                </button>
+                </Button>
               </div>
 
               {/* Bulk Actions Bar */}
@@ -437,108 +416,50 @@ const NguoiDungPage = () => {
                   {/* Filter Controls */}
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {/* Role Filter */}
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-700 mb-2">Vai trò</label>
-                      <div className="relative">
-                        <select
-                          value={filterRole}
-                          onChange={(e) => setFilterRole(e.target.value)}
-                          className="w-full h-10 pl-4 pr-10 text-sm border border-gray-300 rounded-xl bg-white text-gray-900 font-medium focus:outline-none focus:border-[#C8102E] focus:ring-2 focus:ring-[#C8102E]/20 cursor-pointer transition-all appearance-none"
-                        >
-                          <option value="all">Tất cả</option>
-                          <option value="admin">Admin</option>
-                          <option value="staff">Nhân viên</option>
-                          <option value="user">Người dùng</option>
-                        </select>
-                        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
-                      </div>
-                    </div>
+                    <CustomDropdown
+                      label="Vai trò"
+                      options={[
+                        { value: 'all', label: 'Tất cả' },
+                        { value: 'admin', label: 'Admin' },
+                        { value: 'staff', label: 'Nhân viên' },
+                        { value: 'user', label: 'Người dùng' }
+                      ]}
+                      value={filterRole}
+                      onChange={(val) => {
+                        setFilterRole(val);
+                        setCurrentPage(1);
+                      }}
+                    />
 
                     {/* Status Filter */}
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-700 mb-2">Trạng thái</label>
-                      <div className="relative">
-                        <select
-                          value={filterStatus}
-                          onChange={(e) => setFilterStatus(e.target.value)}
-                          className="w-full h-10 pl-4 pr-10 text-sm border border-gray-300 rounded-xl bg-white text-gray-900 font-medium focus:outline-none focus:border-[#C8102E] focus:ring-2 focus:ring-[#C8102E]/20 cursor-pointer transition-all appearance-none"
-                        >
-                          <option value="all">Tất cả</option>
-                          <option value="active">Hoạt động</option>
-                          <option value="inactive">Ngừng hoạt động</option>
-                          <option value="pending">Chờ duyệt</option>
-                          <option value="locked">Bị khóa</option>
-                        </select>
-                        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
-                      </div>
-                    </div>
+                    <CustomDropdown
+                      label="Trạng thái"
+                      options={[
+                        { value: 'all', label: 'Tất cả' },
+                        { value: 'active', label: 'Hoạt động' },
+                        { value: 'inactive', label: 'Ngừng hoạt động' },
+                        { value: 'pending', label: 'Chờ duyệt' },
+                        { value: 'locked', label: 'Bị khóa' }
+                      ]}
+                      value={filterStatus}
+                      onChange={(val) => {
+                        setFilterStatus(val);
+                        setCurrentPage(1);
+                      }}
+                    />
 
                     {/* Unit Filter - Searchable Dropdown */}
-                    <div className="unit-dropdown-container relative">
-                      <label className="block text-xs font-semibold text-gray-700 mb-2">Đơn vị</label>
-                      <button
-                        type="button"
-                        onClick={() => setShowUnitDropdown(!showUnitDropdown)}
-                        className="w-full h-10 pl-4 pr-10 text-sm border border-gray-300 rounded-xl bg-white text-gray-900 font-medium focus:outline-none focus:border-[#C8102E] focus:ring-2 focus:ring-[#C8102E]/20 cursor-pointer transition-all text-left flex items-center justify-between"
-                      >
-                        <span className="truncate">
-                          {units.find(u => u.id === filterUnit)?.name || 'Tất cả'}
-                        </span>
-                        <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${showUnitDropdown ? 'rotate-180' : ''}`} />
-                      </button>
-
-                      {/* Searchable Dropdown Panel */}
-                      {showUnitDropdown && (
-                        <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-gray-300 rounded-xl shadow-lg z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
-                          {/* Search Input */}
-                          <div className="sticky top-0 bg-white border-b border-gray-200 p-3">
-                            <div className="relative">
-                              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                              <input
-                                type="text"
-                                placeholder="Tìm kiếm đơn vị..."
-                                value={unitSearchQuery}
-                                onChange={(e) => setUnitSearchQuery(e.target.value)}
-                                onClick={(e) => e.stopPropagation()}
-                                className="w-full h-9 pl-9 pr-3 text-sm border border-gray-300 rounded-xl bg-gray-50 text-gray-900 placeholder:text-gray-500 focus:outline-none focus:border-[#C8102E] focus:ring-2 focus:ring-[#C8102E]/20 transition-all"
-                              />
-                            </div>
-                          </div>
-
-                          {/* Unit List */}
-                          <div className="max-h-64 overflow-y-auto">
-                            {filteredUnits.length > 0 ? (
-                              filteredUnits.map((unit) => (
-                                <button
-                                  key={unit.id}
-                                  type="button"
-                                  onClick={() => {
-                                    setFilterUnit(unit.id);
-                                    setShowUnitDropdown(false);
-                                    setUnitSearchQuery('');
-                                  }}
-                                  className={`w-full h-11 px-4 text-sm text-left flex items-center justify-between transition-all ${
-                                    filterUnit === unit.id
-                                      ? 'bg-gradient-to-r from-[#C8102E]/10 to-[#A90F14]/10 text-[#C8102E] font-semibold'
-                                      : 'text-gray-900 hover:bg-gray-50'
-                                  }`}
-                                >
-                                  <span className="truncate">{unit.name}</span>
-                                  {filterUnit === unit.id && (
-                                    <Check className="h-4 w-4 text-[#C8102E] flex-shrink-0 ml-2" />
-                                  )}
-                                </button>
-                              ))
-                            ) : (
-                              <div className="py-8 px-4 text-center">
-                                <Building2 className="h-12 w-12 text-gray-300 mx-auto mb-2" />
-                                <p className="text-sm text-gray-500">Không tìm thấy đơn vị</p>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </div>
+                    <CustomDropdown
+                      label="Đơn vị"
+                      searchable={true}
+                      searchPlaceholder="Tìm kiếm đơn vị..."
+                      options={units.map(u => ({ value: u.id, label: u.name }))}
+                      value={filterUnit}
+                      onChange={(val) => {
+                        setFilterUnit(val);
+                        setCurrentPage(1);
+                      }}
+                    />
                   </div>
 
                   {/* Filter Actions */}
@@ -685,7 +606,7 @@ const NguoiDungPage = () => {
             </div>
 
             {/* Pagination */}
-            <AppPagination
+            <Pagination
               currentPage={currentPage}
               totalPages={totalPages}
               pageSize={pageSize}
@@ -695,7 +616,6 @@ const NguoiDungPage = () => {
                 setPageSize(size);
                 setCurrentPage(1);
               }}
-              itemLabel="người dùng"
             />
           </div>
         </div>

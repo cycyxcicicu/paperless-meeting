@@ -1,13 +1,15 @@
-import React, { useState, useEffect } from 'react';
-import { X, Building2 } from 'lucide-react';
-import { Button } from '../ui/hp-button';
-import { Label } from '../ui/label';
-import { Input } from '../ui/input';
-import { cn } from '../../../lib/utils';
+import React, { useEffect } from 'react';
+import { useForm, FormProvider } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
+import { Building2 } from 'lucide-react';
+import { Button } from '../common/ui/Button';
+import { Modal } from '../common/ui/Modal';
+import { FormInput } from '../common/form/FormInput';
 
 type ModalMode = 'create' | 'edit' | 'view';
 
-interface UnitFormData {
+export interface UnitFormData {
   id?: string;
   name: string;
   code: string;
@@ -24,7 +26,20 @@ interface UnitFormModalProps {
   mode: ModalMode;
   initialData?: UnitFormData;
   parentUnitName?: string;
+  /** Label describing unit type, e.g. "đơn vị", "phòng ban", "bộ phận" */
+  unitTypeLabel?: string;
 }
+
+const unitSchema = z.object({
+  name: z.string().min(1, 'Tên đơn vị là bắt buộc'),
+  code: z.string().min(1, 'Mã đơn vị là bắt buộc'),
+  phone: z.string().min(1, 'Số điện thoại là bắt buộc').regex(/^[0-9\s.\-()]+$/, 'Số điện thoại không hợp lệ'),
+  email: z.string().min(1, 'Email là bắt buộc').email('Email không hợp lệ'),
+  address: z.string().min(1, 'Địa chỉ là bắt buộc'),
+  description: z.string().optional().default(''),
+});
+
+type UnitFormValues = z.infer<typeof unitSchema>;
 
 export const UnitFormModal: React.FC<UnitFormModalProps> = ({
   isOpen,
@@ -33,297 +48,111 @@ export const UnitFormModal: React.FC<UnitFormModalProps> = ({
   mode,
   initialData,
   parentUnitName,
+  unitTypeLabel = 'đơn vị',
 }) => {
-  const [formData, setFormData] = useState<UnitFormData>({
-    name: '',
-    code: '',
-    address: '',
-    phone: '',
-    email: '',
-    description: '',
-  });
-  const [errors, setErrors] = useState<Record<string, string>>({});
-
   const isViewMode = mode === 'view';
   const isCreateMode = mode === 'create';
 
-  useEffect(() => {
-    if (initialData && mode !== 'create') {
-      setFormData(initialData);
-    } else {
-      resetForm();
-    }
-  }, [initialData, mode, isOpen]);
-
-  const resetForm = () => {
-    setFormData({
+  const methods = useForm<UnitFormValues>({
+    resolver: zodResolver(unitSchema),
+    defaultValues: {
       name: '',
       code: '',
       address: '',
       phone: '',
       email: '',
       description: '',
-    });
-    setErrors({});
-  };
+    }
+  });
+
+  useEffect(() => {
+    if (isOpen) {
+      if (initialData && mode !== 'create') {
+        methods.reset(initialData);
+      } else {
+        methods.reset({ name: '', code: '', address: '', phone: '', email: '', description: '' });
+      }
+    }
+  }, [initialData, mode, isOpen, methods]);
 
   const handleClose = () => {
-    resetForm();
+    methods.reset();
     onClose();
   };
 
-  const validate = (): boolean => {
-    const newErrors: Record<string, string> = {};
-
-    if (!formData.name.trim()) {
-      newErrors.name = 'Tên đơn vị là bắt buộc';
-    }
-
-    if (!formData.code.trim()) {
-      newErrors.code = 'Mã đơn vị là bắt buộc';
-    }
-
-    if (!formData.phone.trim()) {
-      newErrors.phone = 'Số điện thoại là bắt buộc';
-    } else if (!/^[0-9\s\.\-\(\)]+$/.test(formData.phone)) {
-      newErrors.phone = 'Số điện thoại không hợp lệ';
-    }
-
-    if (!formData.email.trim()) {
-      newErrors.email = 'Email là bắt buộc';
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      newErrors.email = 'Email không hợp lệ';
-    }
-
-    if (!formData.address.trim()) {
-      newErrors.address = 'Địa chỉ là bắt buộc';
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-
+  const onFormSubmit = (data: UnitFormValues) => {
     if (isViewMode) {
       handleClose();
       return;
     }
-
-    if (!validate()) {
-      return;
-    }
-
-    onSubmit(formData);
+    const payload = initialData?.id ? { ...data, id: initialData.id } : data;
+    onSubmit(payload as UnitFormData);
     handleClose();
   };
 
   const getModalTitle = () => {
     switch (mode) {
-      case 'create':
-        return 'Thêm đơn vị mới';
-      case 'edit':
-        return 'Cập nhật đơn vị';
-      case 'view':
-        return 'Thông tin đơn vị';
-      default:
-        return '';
+      case 'create': return `Thêm ${unitTypeLabel} mới`;
+      case 'edit': return `Cập nhật ${unitTypeLabel}`;
+      case 'view': return `Thông tin ${unitTypeLabel}`;
+      default: return '';
     }
   };
 
-  if (!isOpen) return null;
-
-  console.log('UnitFormModal rendering, mode:', mode, 'formData:', formData);
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-        onClick={handleClose}
-      />
-
-      {/* Modal */}
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 animate-in fade-in-0 zoom-in-95 max-h-[90vh] flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 flex-shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-[#C8102E]/10">
-              <Building2 className="h-5 w-5 text-[#C8102E]" />
-            </div>
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900">{getModalTitle()}</h3>
-              {isCreateMode && parentUnitName && (
-                <p className="text-sm text-gray-500">Đơn vị cha: {parentUnitName}</p>
-              )}
-            </div>
+    <Modal
+      isOpen={isOpen}
+      onClose={handleClose}
+      title={
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-lg bg-red-50">
+            <Building2 className="h-5 w-5 text-primary" />
           </div>
-          <button
-            onClick={handleClose}
-            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
-          >
-            <X className="h-5 w-5" />
-          </button>
+          <div>
+            <span className="text-lg font-semibold text-gray-900">{getModalTitle()}</span>
+            {isCreateMode && parentUnitName && (
+              <p className="text-sm font-normal text-gray-500 mt-0.5">Đơn vị cha: {parentUnitName}</p>
+            )}
+          </div>
         </div>
-
-        {/* Body - Scrollable */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto">
-          <div className="px-6 py-5 space-y-5">
-            {/* Form Fields - 2 Columns */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              {/* Name */}
-              <div className="space-y-2">
-                <Label htmlFor="name" className="text-sm font-medium text-gray-700">
-                  Tên đơn vị <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  id="name"
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="Nhập tên đơn vị"
-                  disabled={isViewMode}
-                  className={cn(
-                    'h-10 rounded-xl border-gray-300 hover:border-gray-400',
-                    errors.name && 'border-red-500 focus-visible:ring-red-500'
-                  )}
-                />
-                {errors.name && (
-                  <p className="text-xs text-red-600 font-medium">{errors.name}</p>
-                )}
-              </div>
-
-              {/* Code */}
-              <div className="space-y-2">
-                <Label htmlFor="code" className="text-sm font-medium text-gray-700">
-                  Mã đơn vị <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  id="code"
-                  type="text"
-                  value={formData.code}
-                  onChange={(e) => setFormData({ ...formData, code: e.target.value })}
-                  placeholder="Nhập mã đơn vị"
-                  disabled={isViewMode}
-                  className={cn(
-                    'h-10 rounded-xl border-gray-300 hover:border-gray-400',
-                    errors.code && 'border-red-500 focus-visible:ring-red-500'
-                  )}
-                />
-                {errors.code && (
-                  <p className="text-xs text-red-600 font-medium">{errors.code}</p>
-                )}
-              </div>
-
-              {/* Phone */}
-              <div className="space-y-2">
-                <Label htmlFor="phone" className="text-sm font-medium text-gray-700">
-                  Số điện thoại <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  id="phone"
-                  type="tel"
-                  value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                  placeholder="Nhập số điện thoại"
-                  disabled={isViewMode}
-                  className={cn(
-                    'h-10 rounded-xl border-gray-300 hover:border-gray-400',
-                    errors.phone && 'border-red-500 focus-visible:ring-red-500'
-                  )}
-                />
-                {errors.phone && (
-                  <p className="text-xs text-red-600 font-medium">{errors.phone}</p>
-                )}
-              </div>
-
-              {/* Email */}
-              <div className="space-y-2">
-                <Label htmlFor="email" className="text-sm font-medium text-gray-700">
-                  Email <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  placeholder="Nhập địa chỉ email"
-                  disabled={isViewMode}
-                  className={cn(
-                    'h-10 rounded-xl border-gray-300 hover:border-gray-400',
-                    errors.email && 'border-red-500 focus-visible:ring-red-500'
-                  )}
-                />
-                {errors.email && (
-                  <p className="text-xs text-red-600 font-medium">{errors.email}</p>
-                )}
-              </div>
-            </div>
-
-            {/* Address - Full Width */}
-            <div className="space-y-2">
-              <Label htmlFor="address" className="text-sm font-medium text-gray-700">
-                Địa chỉ <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                id="address"
-                type="text"
-                value={formData.address}
-                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                placeholder="Nhập địa chỉ"
-                disabled={isViewMode}
-                className={cn(
-                  'h-10 rounded-xl border-gray-300 hover:border-gray-400',
-                  errors.address && 'border-red-500 focus-visible:ring-red-500'
-                )}
-              />
-              {errors.address && (
-                <p className="text-xs text-red-600 font-medium">{errors.address}</p>
-              )}
-            </div>
-
-            {/* Description - Full Width */}
-            <div className="space-y-2">
-              <Label htmlFor="description" className="text-sm font-medium text-gray-700">
-                Mô tả
-              </Label>
-              <textarea
-                id="description"
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                placeholder="Nhập mô tả về đơn vị"
-                disabled={isViewMode}
-                rows={3}
-                className={cn(
-                  'w-full px-3 py-2 rounded-xl border border-gray-300 hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-[#C8102E]/20 focus:border-[#C8102E] transition-all resize-none',
-                  isViewMode && 'bg-gray-50 cursor-not-allowed'
-                )}
-              />
-            </div>
+      }
+      className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto"
+    >
+      <FormProvider {...methods}>
+        <form onSubmit={methods.handleSubmit(onFormSubmit)} className="space-y-5 pt-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <FormInput name="name" label={`Tên ${unitTypeLabel}`} required disabled={isViewMode} />
+            <FormInput name="code" label={`Mã ${unitTypeLabel}`} required disabled={isViewMode} className="font-mono" />
+            <FormInput name="phone" label="Số điện thoại" type="tel" required disabled={isViewMode} />
+            <FormInput name="email" label="Email" type="email" required disabled={isViewMode} />
           </div>
 
-          {/* Footer */}
-          <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50 flex-shrink-0">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleClose}
-              className="px-5 py-2 border-gray-300 text-gray-700 hover:bg-gray-100"
-            >
+          <FormInput name="address" label="Địa chỉ" required disabled={isViewMode} />
+
+          <div className="space-y-2">
+            <label htmlFor="description" className="text-sm font-medium text-gray-700">Mô tả</label>
+            <textarea
+              id="description"
+              {...methods.register('description')}
+              disabled={isViewMode}
+              rows={3}
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-xl bg-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary hover:border-gray-400 transition-colors resize-none disabled:bg-gray-50 disabled:cursor-not-allowed"
+              placeholder="Nhập mô tả về đơn vị"
+            />
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
+            <Button type="button" variant="outline" onClick={handleClose}>
               {isViewMode ? 'Đóng' : 'Hủy bỏ'}
             </Button>
             {!isViewMode && (
-              <Button
-                type="submit"
-                className="px-5 py-2 bg-gradient-to-r from-[#C8102E] to-[#A90F14] text-white hover:shadow-lg"
-              >
-                {isCreateMode ? 'Thêm đơn vị' : 'Cập nhật'}
+              <Button type="submit" variant="primary">
+                {isCreateMode ? `Thêm ${unitTypeLabel}` : 'Cập nhật'}
               </Button>
             )}
           </div>
         </form>
-      </div>
-    </div>
+      </FormProvider>
+    </Modal>
   );
 };

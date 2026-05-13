@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Clock } from 'lucide-react';
-import { Button } from '../ui/hp-button';
+import { Button } from '@/app/components/common/ui/Button';
 import { Label } from '../ui/label';
 import { Textarea } from '../ui/textarea';
 import { DateTimePicker } from '../ui/datetime-picker';

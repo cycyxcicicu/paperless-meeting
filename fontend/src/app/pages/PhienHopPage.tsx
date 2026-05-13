@@ -9,10 +9,11 @@ import {
     Search,
     Users,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { toast } from "../../lib/toast";
-import { AppPagination } from "../components/common/AppPagination";
+import { CustomDropdown } from '@/app/components/common/ui/CustomDropdown';
+import { Pagination as AppPagination } from '@/app/components/common/ui/Pagination';
 import { FilterBar } from "../components/layout/FilterBar";
 import { PageHeader } from "../components/layout/PageHeader";
 import { Sidebar } from "../components/layout/Sidebar";
@@ -23,9 +24,9 @@ import {
     PostponeModal,
 } from "../components/meeting/PostponeModal";
 import { PollManagement } from "../components/poll/PollManagement";
-import { Badge } from "../components/ui/hp-badge";
-import { Button } from "../components/ui/hp-button";
-import { Card, CardContent } from "../components/ui/hp-card";
+import { Badge } from '@/app/components/ui/badge';
+import { Button } from '@/app/components/common/ui/Button';
+import { Card, CardContent  } from '@/app/components/ui/card';
 
 import { PHIEN_HOP_SIDEBAR_ITEMS } from "../constants/sidebar";
 const PhienHopPage = () => {
@@ -38,6 +39,8 @@ const PhienHopPage = () => {
     const [selectedTime, setSelectedTime] = useState<string>("month");
     const [currentPage, setCurrentPage] = useState(1);
     const [pageSize, setPageSize] = useState(10);
+
+
     const [searchQuery, setSearchQuery] = useState("");
     const [confirmModal, setConfirmModal] = useState<{
         isOpen: boolean;
@@ -627,10 +630,6 @@ const PhienHopPage = () => {
                             ]}
                             actions={
                                 <>
-                                    <Button variant="secondary" size="default">
-                                        <Filter className="h-4 w-4" />
-                                        Bộ lọc
-                                    </Button>
                                     <Link to="/phien-hop/tao-moi">
                                         <Button
                                             variant="primary"
@@ -647,7 +646,7 @@ const PhienHopPage = () => {
                         <FilterBar>
                             <div className="flex items-center gap-3 flex-1">
                                 {/* Enhanced Search Input */}
-                                <div className="relative flex-1 max-w-xl">
+                                <div className="relative flex-1 w-full">
                                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#9CA3AF]" />
                                     <input
                                         type="text"
@@ -662,57 +661,36 @@ const PhienHopPage = () => {
                                 </div>
 
                                 {/* Status Filter Dropdown */}
-                                <div className="relative shrink-0">
-                                    <select
-                                        value={selectedStatus}
-                                        onChange={(e) => {
-                                            setSelectedStatus(e.target.value);
-                                            setCurrentPage(1); // Reset to first page on filter
-                                        }}
-                                        className="h-10 pl-3 pr-10 rounded-xl border border-[#E5E7EB] bg-white text-sm text-[#111827] font-medium hover:border-[#C8102E]/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8102E] focus-visible:border-[#C8102E] transition-all appearance-none cursor-pointer"
-                                        style={{
-                                            backgroundImage: "none",
-                                        }}
-                                    >
-                                        <option value="all">
-                                            Tất cả trạng thái
-                                        </option>
-                                        <option value="draft">Nháp</option>
-                                        <option value="upcoming">
-                                            Sắp diễn ra
-                                        </option>
-                                        <option value="ongoing">
-                                            Đang diễn ra
-                                        </option>
-                                        <option value="completed">
-                                            Đã kết thúc
-                                        </option>
-                                    </select>
-                                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none flex items-center gap-1.5">
-                                        <Filter className="h-3.5 w-3.5 text-[#9CA3AF]" />
-                                        <ChevronDown className="h-4 w-4 text-[#6B7280]" />
-                                    </div>
-                                </div>
+                                <CustomDropdown
+                                    className="shrink-0 w-48"
+                                    options={[
+                                        { value: "all", label: "Tất cả trạng thái" },
+                                        { value: "draft", label: "Nháp" },
+                                        { value: "upcoming", label: "Sắp diễn ra" },
+                                        { value: "ongoing", label: "Đang diễn ra" },
+                                        { value: "completed", label: "Đã kết thúc" },
+                                    ]}
+                                    value={selectedStatus}
+                                    onChange={(val) => {
+                                        setSelectedStatus(val);
+                                        setCurrentPage(1);
+                                    }}
+                                />
 
                                 {/* Time Filter Dropdown */}
-                                <div className="relative shrink-0">
-                                    <select
-                                        value={selectedTime}
-                                        onChange={(e) =>
-                                            setSelectedTime(e.target.value)
-                                        }
-                                        className="h-10 pl-3 pr-9 rounded-xl border border-[#E5E7EB] bg-white text-sm text-[#111827] font-medium hover:border-[#C8102E]/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8102E] focus-visible:border-[#C8102E] transition-all appearance-none cursor-pointer"
-                                        style={{
-                                            backgroundImage: "none",
-                                        }}
-                                    >
-                                        <option value="month">Tháng này</option>
-                                        <option value="week">Tuần này</option>
-                                        <option value="today">Hôm nay</option>
-                                        <option value="custom">Tùy chọn</option>
-                                    </select>
-                                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#6B7280] pointer-events-none" />
-                                </div>
+                                <CustomDropdown
+                                    className="shrink-0 w-36"
+                                    options={[
+                                        { value: "month", label: "Tháng" },
+                                        { value: "week", label: "Tuần" },
+                                        { value: "today", label: "Hôm nay" },
+                                        { value: "custom", label: "Tùy chọn" },
+                                    ]}
+                                    value={selectedTime}
+                                    onChange={(val) => {
+                                        setSelectedTime(val);
+                                    }}
+                                />
                             </div>
                             <div className="flex items-center gap-2 text-sm text-[#6B7280]">
                                 <span>

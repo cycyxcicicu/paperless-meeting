@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { X } from 'lucide-react';
-import { Button } from '../../ui/hp-button';
-import { Badge } from '../../ui/hp-badge';
+import { Button } from '@/app/components/common/ui/Button';
+import { Badge } from '@/app/components/ui/badge';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 
 interface VotingResult {

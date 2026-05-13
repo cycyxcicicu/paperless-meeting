@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { X, Plus } from 'lucide-react';
-import { Button } from '../ui/hp-button';
+import { Button } from '@/app/components/common/ui/Button';
 import { CustomSelect } from '../ui/CustomSelect';
 
 interface ConfirmAttendanceModalProps {

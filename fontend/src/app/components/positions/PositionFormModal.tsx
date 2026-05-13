@@ -1,13 +1,15 @@
-import React, { useState, useEffect } from 'react';
-import { X, Briefcase } from 'lucide-react';
-import { Button } from '../ui/hp-button';
-import { Label } from '../ui/label';
-import { Input } from '../ui/input';
-import { cn } from '../../../lib/utils';
+import React, { useEffect } from 'react';
+import { useForm, FormProvider } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
+import { Briefcase } from 'lucide-react';
+import { Button } from '../common/ui/Button';
+import { Modal } from '../common/ui/Modal';
+import { FormInput } from '../common/form/FormInput';
 
 type ModalMode = 'create' | 'edit' | 'view';
 
-interface PositionFormData {
+export interface PositionFormData {
   id?: string;
   name: string;
   description: string;
@@ -21,6 +23,13 @@ interface PositionFormModalProps {
   initialData?: PositionFormData;
 }
 
+const positionSchema = z.object({
+  name: z.string().min(1, 'Vui lòng nhập tên chức vụ'),
+  description: z.string().optional().default(''),
+});
+
+type PositionFormValues = z.infer<typeof positionSchema>;
+
 export const PositionFormModal: React.FC<PositionFormModalProps> = ({
   isOpen,
   onClose,
@@ -28,178 +37,94 @@ export const PositionFormModal: React.FC<PositionFormModalProps> = ({
   mode,
   initialData,
 }) => {
-  const [formData, setFormData] = useState<PositionFormData>({
-    name: '',
-    description: '',
-  });
-  const [errors, setErrors] = useState<Record<string, string>>({});
-
   const isViewMode = mode === 'view';
   const isCreateMode = mode === 'create';
 
-  useEffect(() => {
-    if (initialData && mode !== 'create') {
-      setFormData(initialData);
-    } else {
-      resetForm();
-    }
-  }, [initialData, mode, isOpen]);
-
-  const resetForm = () => {
-    setFormData({
+  const methods = useForm<PositionFormValues>({
+    resolver: zodResolver(positionSchema),
+    defaultValues: {
       name: '',
       description: '',
-    });
-    setErrors({});
-  };
+    }
+  });
+
+  useEffect(() => {
+    if (isOpen) {
+      if (initialData && mode !== 'create') {
+        methods.reset(initialData);
+      } else {
+        methods.reset({ name: '', description: '' });
+      }
+    }
+  }, [initialData, mode, isOpen, methods]);
 
   const handleClose = () => {
-    resetForm();
+    methods.reset();
     onClose();
   };
 
-  const validate = (): boolean => {
-    const newErrors: Record<string, string> = {};
-
-    if (!formData.name.trim()) {
-      newErrors.name = 'Vui lòng nhập tên chức vụ';
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-
+  const onFormSubmit = (data: PositionFormValues) => {
     if (isViewMode) {
       handleClose();
       return;
     }
-
-    if (!validate()) {
-      return;
-    }
-
-    onSubmit(formData);
+    const payload = initialData?.id ? { ...data, id: initialData.id } : data;
+    onSubmit(payload as PositionFormData);
     handleClose();
   };
 
   const getModalTitle = () => {
     switch (mode) {
-      case 'create':
-        return 'Thêm chức vụ mới';
-      case 'edit':
-        return 'Cập nhật chức vụ';
-      case 'view':
-        return 'Thông tin chức vụ';
-      default:
-        return '';
+      case 'create': return 'Thêm chức vụ mới';
+      case 'edit': return 'Cập nhật chức vụ';
+      case 'view': return 'Thông tin chức vụ';
+      default: return '';
     }
   };
 
-  if (!isOpen) return null;
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-        onClick={handleClose}
-      />
-
-      {/* Modal */}
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 animate-in fade-in-0 zoom-in-95 max-h-[90vh] flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 flex-shrink-0">
-          <h3 className="text-lg font-semibold text-gray-900">{getModalTitle()}</h3>
-          <button
-            onClick={handleClose}
-            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
-        {/* Body - Scrollable */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto">
-          <div className="px-6 py-5 space-y-6">
-            {/* Icon */}
-            <div className="flex justify-center">
-              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-purple-50 to-purple-100 flex items-center justify-center border-4 border-white shadow-lg">
-                <Briefcase className="h-10 w-10 text-purple-600" />
-              </div>
-            </div>
-
-            {/* Form Fields */}
-            <div className="space-y-5">
-              {/* Position Name */}
-              <div className="space-y-2">
-                <Label htmlFor="name" className="text-sm font-medium text-gray-700">
-                  Tên chức vụ <span className="text-red-500">*</span>
-                </Label>
-                <Input
-                  id="name"
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="Nhập tên chức vụ"
-                  disabled={isViewMode}
-                  className={cn(
-                    'h-10 rounded-xl border-gray-300 hover:border-gray-400',
-                    errors.name && 'border-red-500 focus-visible:ring-red-500'
-                  )}
-                />
-                {errors.name && (
-                  <p className="text-xs text-red-600 font-medium">{errors.name}</p>
-                )}
-              </div>
-
-              {/* Description */}
-              <div className="space-y-2">
-                <Label htmlFor="description" className="text-sm font-medium text-gray-700">
-                  Mô tả
-                </Label>
-                <textarea
-                  id="description"
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  placeholder="Nhập mô tả chức vụ"
-                  disabled={isViewMode}
-                  rows={4}
-                  className={cn(
-                    'w-full px-3 py-2 text-sm border border-gray-300 rounded-xl bg-white placeholder:text-gray-500',
-                    'focus:outline-none focus:ring-2 focus:ring-[#C8102E]/20 focus:border-[#C8102E]',
-                    'hover:border-gray-400 transition-colors resize-none',
-                    isViewMode && 'bg-gray-50 cursor-not-allowed'
-                  )}
-                />
-              </div>
+    <Modal
+      isOpen={isOpen}
+      onClose={handleClose}
+      title={getModalTitle()}
+      className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto"
+    >
+      <FormProvider {...methods}>
+        <form onSubmit={methods.handleSubmit(onFormSubmit)} className="space-y-6 pt-4">
+          <div className="flex justify-center">
+            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-purple-50 to-purple-100 flex items-center justify-center border-4 border-white shadow-lg">
+              <Briefcase className="h-10 w-10 text-purple-600" />
             </div>
           </div>
 
-          {/* Footer */}
-          <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50 flex-shrink-0">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleClose}
-              className="px-5 py-2 border-gray-300 text-gray-700 hover:bg-gray-100"
-            >
+          <div className="space-y-4">
+            <FormInput name="name" label="Tên chức vụ" required disabled={isViewMode} />
+            
+            <div className="space-y-2">
+              <label htmlFor="description" className="text-sm font-medium text-gray-700">Mô tả</label>
+              <textarea
+                id="description"
+                {...methods.register('description')}
+                disabled={isViewMode}
+                rows={4}
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-xl bg-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary hover:border-gray-400 transition-colors resize-none disabled:bg-gray-50 disabled:cursor-not-allowed"
+                placeholder="Nhập mô tả chức vụ"
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
+            <Button type="button" variant="outline" onClick={handleClose}>
               {isViewMode ? 'Đóng' : 'Hủy bỏ'}
             </Button>
             {!isViewMode && (
-              <Button
-                type="submit"
-                variant="primary"
-                className="px-5 py-2 bg-[#C8102E] hover:bg-[#a80d26]"
-              >
+              <Button type="submit" variant="primary">
                 {isCreateMode ? 'Thêm mới' : 'Lưu thay đổi'}
               </Button>
             )}
           </div>
         </form>
-      </div>
-    </div>
+      </FormProvider>
+    </Modal>
   );
 };

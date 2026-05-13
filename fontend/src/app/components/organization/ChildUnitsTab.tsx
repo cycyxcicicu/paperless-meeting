@@ -4,13 +4,13 @@ import {
   Search,
   Plus,
   MoreVertical,
-  ChevronRight,
   Phone,
   Users,
   Edit,
   Trash2
 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
+import { Pagination } from '../common/ui/Pagination';
 
 interface ChildUnit {
   id: number;
@@ -24,6 +24,8 @@ interface ChildUnit {
 
 interface ChildUnitsTabProps {
   units: ChildUnit[];
+  /** Label for the type of child unit, e.g. "đơn vị trực thuộc", "phòng ban trực thuộc" */
+  label?: string;
   onAdd?: () => void;
   onEdit?: (unitId: number) => void;
   onDelete?: (unitId: number) => void;
@@ -31,11 +33,14 @@ interface ChildUnitsTabProps {
 
 export const ChildUnitsTab: React.FC<ChildUnitsTabProps> = ({
   units,
+  label = 'đơn vị trực thuộc',
   onAdd,
   onEdit,
   onDelete
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(4);
 
   // Filter units by name
   const filteredUnits = useMemo(() => {
@@ -46,6 +51,18 @@ export const ChildUnitsTab: React.FC<ChildUnitsTabProps> = ({
     );
   }, [units, searchQuery]);
 
+  const totalItems = filteredUnits.length;
+  const totalPages = Math.ceil(totalItems / pageSize) || 1;
+
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, pageSize]);
+
+  const currentData = filteredUnits.slice(
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize
+  );
+
   return (
     <div className="flex flex-col h-full animate-in fade-in slide-in-from-bottom-2 duration-500">
       {/* Toolbar */}
@@ -54,7 +71,7 @@ export const ChildUnitsTab: React.FC<ChildUnitsTabProps> = ({
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4.5 w-4.5 text-gray-400 group-focus-within:text-[#C8102E] transition-colors" />
           <input
             type="text"
-            placeholder="Tìm kiếm đơn vị con theo tên..."
+            placeholder={`Tìm kiếm ${label} theo tên...`}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-11 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#C8102E]/20 focus:border-[#C8102E] transition-all"
@@ -71,10 +88,11 @@ export const ChildUnitsTab: React.FC<ChildUnitsTabProps> = ({
       </div>
 
       {/* Grid List */}
-      <div className="p-8">
+      <div className="p-8 flex-1 overflow-y-auto">
         {filteredUnits.length > 0 ? (
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-            {filteredUnits.map((unit) => (
+          <>
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
+            {currentData.map((unit) => (
               <div 
                 key={unit.id}
                 className="group bg-white rounded-2xl border border-gray-100 p-6 shadow-sm hover:shadow-xl hover:border-[#C8102E]/20 hover:-translate-y-1 transition-all duration-300 relative overflow-hidden"
@@ -123,31 +141,36 @@ export const ChildUnitsTab: React.FC<ChildUnitsTabProps> = ({
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between pt-5 border-t border-gray-50">
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => onEdit?.(unit.id)}
-                      className="text-sm font-bold text-amber-600 hover:text-amber-700 transition-colors flex items-center gap-1.5 group/btn"
-                    >
-                      <Edit className="h-3.5 w-3.5" />
-                      Sửa
-                    </button>
-                    <button
-                      onClick={() => onDelete?.(unit.id)}
-                      className="text-sm font-bold text-red-600 hover:text-red-700 transition-colors flex items-center gap-1.5 group/btn"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                      Xóa
-                    </button>
-                  </div>
-                  <button className="text-sm font-bold text-[#C8102E] hover:text-[#A90F14] transition-colors flex items-center gap-1 group/btn">
-                    Xem chi tiết
-                    <ChevronRight className="h-4 w-4 transition-transform group-hover/btn:translate-x-1" />
+                <div className="flex items-center gap-3 pt-5 border-t border-gray-50">
+                  <button
+                    onClick={() => onEdit?.(unit.id)}
+                    className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-sm font-bold text-amber-600 bg-amber-50 hover:bg-amber-100 hover:text-amber-700 transition-colors"
+                  >
+                    <Edit className="h-3.5 w-3.5" />
+                    Sửa
+                  </button>
+                  <button
+                    onClick={() => onDelete?.(unit.id)}
+                    className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-sm font-bold text-red-600 bg-red-50 hover:bg-red-100 hover:text-red-700 transition-colors"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Xóa
                   </button>
                 </div>
               </div>
             ))}
           </div>
+          
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            pageSize={pageSize}
+            totalItems={totalItems}
+            onPageChange={setCurrentPage}
+            onPageSizeChange={setPageSize}
+            pageSizeOptions={[4, 8, 12, 20]}
+          />
+          </>
         ) : (
           <div className="flex flex-col items-center justify-center py-20 bg-gray-50 rounded-3xl border-2 border-dashed border-gray-200">
             <div className="w-20 h-20 rounded-full bg-white flex items-center justify-center text-gray-200 mb-6 shadow-sm">
@@ -162,16 +185,16 @@ export const ChildUnitsTab: React.FC<ChildUnitsTabProps> = ({
               </>
             ) : (
               <>
-                <h4 className="text-xl font-bold text-gray-900 mb-2">Chưa có đơn vị con</h4>
+                <h4 className="text-xl font-bold text-gray-900 mb-2">Chưa có {label} nào</h4>
                 <p className="text-gray-500 max-w-xs text-center font-medium">
-                  Hiện tại chưa có đơn vị cấp dưới nào được khởi tạo trong hệ thống cho tổ chức này.
+                  Hiện tại chưa có {label} nào được khởi tạo trong hệ thống.
                 </p>
                 <button
                   onClick={onAdd}
                   className="mt-8 flex items-center gap-2 px-6 py-3 rounded-2xl bg-[#C8102E] text-white font-bold hover:bg-[#A90F14] transition-all shadow-lg shadow-[#C8102E]/20"
                 >
                   <Plus className="h-5 w-5" />
-                  Thêm đơn vị mới
+                  Thêm {label} mới
                 </button>
               </>
             )}
