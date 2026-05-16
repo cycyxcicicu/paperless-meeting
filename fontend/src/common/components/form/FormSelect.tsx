@@ -24,6 +24,7 @@ export interface FormSelectProps {
   required?: boolean
   className?: string
   disabled?: boolean
+  rules?: any
 }
 
 export const FormSelect = ({
@@ -34,7 +35,8 @@ export const FormSelect = ({
   description,
   required,
   className,
-  disabled
+  disabled,
+  rules
 }: FormSelectProps) => {
   const { control, formState: { errors } } = useFormContext()
   const errorMsg = errors[name]?.message as string | undefined
@@ -50,6 +52,7 @@ export const FormSelect = ({
       <Controller
         control={control}
         name={name}
+        rules={rules}
         render={({ field }) => (
           <Select
             onValueChange={field.onChange}

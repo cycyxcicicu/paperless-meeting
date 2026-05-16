@@ -1,66 +1,31 @@
-import React, { useState } from 'react';
-import { QUAN_TRI_SIDEBAR_ITEMS } from '@/app/constants/sidebar';
-import { Sidebar, SidebarItem } from '@/common/components/layout/Sidebar';
-import { Pagination } from '@/common/components/ui/app-pagination';
-import { Button } from '@/common/components/ui/button';
-import { CustomDropdown } from '@/common/components/ui/custom-dropdown';
+import React, { useState, useMemo } from 'react';
 import { PageHeader } from '@/common/components/layout/PageHeader';
 import { UserFormModal } from '@/modules/user/components/UserFormModal';
 import { DeleteUserModal } from '@/modules/user/components/DeleteUserModal';
+import { EmailUserModal } from '@/modules/user/components/EmailUserModal';
 import { toast } from '@/lib/toast';
-import {
-  Users,
-  Shield,
-  Building2,
-  Briefcase,
-  History,
-  Settings,
-  Eye,
-  MoreVertical,
-  Filter,
-  Download,
-  Plus,
-  RefreshCw,
-  Upload,
-  Home,
-  Search,
-  Edit,
-  Trash2,
-  UserCheck,
-  UserX,
-  Mail,
-  Phone,
-  X,
-  ChevronDown,
-  Check
-} from 'lucide-react';
+import { Users, UserCheck, UserX, Plus, Mail, Trash2 } from 'lucide-react';
+import { Button } from '@/common/components/ui/button';
+import { StatCard } from '@/common/components/ui/StatCard';
 
-
-
-interface User {
-  id: number;
-  username: string;
-  fullName: string;
-  email: string;
-  phone: string;
-  position: string;
-  department: string;
-  status: 'active' | 'inactive';
-}
+// Table Engine imports
+import { DataTable, DataToolbar, BulkActionDef } from '@/common/components/table-engine';
+import { User, getUserTableColumns, getUserRowActions, getUserFilters, getUserFilterLabel } from '@/modules/user/table/userTable.schema';
 
 const NguoiDungPage = () => {
+  // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  
+  // Search & Filter State
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedUsers, setSelectedUsers] = useState<number[]>([]);
-
-  // Filter state
   const [showFilters, setShowFilters] = useState(false);
-  const [filterRole, setFilterRole] = useState<string>('all');
-  const [filterStatus, setFilterStatus] = useState<string>('all');
-  const [filterUnit, setFilterUnit] = useState<string>('all');
+  const [filterValues, setFilterValues] = useState<Record<string, string>>({});
+  
+  // Selection State
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
 
-  // Modal state
+  // Modal State
   const [userFormModal, setUserFormModal] = useState<{
     isOpen: boolean;
     mode: 'create' | 'edit' | 'view';
@@ -70,11 +35,14 @@ const NguoiDungPage = () => {
   const [deleteModal, setDeleteModal] = useState<{
     isOpen: boolean;
     user?: User;
+    count?: number;
   }>({ isOpen: false });
 
-  // Sample unit data
-  const units = [
-    { id: 'all', name: 'Tất cả' },
+  const [emailModalIsOpen, setEmailModalIsOpen] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Mock data - Units
+  const units = useMemo(() => [
     { id: '1', name: 'Văn phòng UBND thành phố Hải Phòng' },
     { id: '2', name: 'Sở Tài chính' },
     { id: '3', name: 'Sở Kế hoạch và Đầu tư' },
@@ -89,12 +57,10 @@ const NguoiDungPage = () => {
     { id: '12', name: 'Sở Tư pháp' },
     { id: '13', name: 'Sở Nội vụ' },
     { id: '14', name: 'Sở Lao động - Thương binh và Xã hội' },
-  ];
+  ], []);
 
-
-
-  // Mock data
-  const allUsers: User[] = Array.from({ length: 32 }, (_, i) => ({
+  // Mock data - Users
+  const allUsers: User[] = useMemo(() => Array.from({ length: 32 }, (_, i) => ({
     id: i + 1,
     username: `user${String(i + 1).padStart(3, '0')}`,
     fullName: `Nguyễn Văn ${String.fromCharCode(65 + (i % 26))}`,
@@ -102,172 +68,139 @@ const NguoiDungPage = () => {
     phone: `09${String(Math.floor(Math.random() * 100000000)).padStart(8, '0')}`,
     position: i % 3 === 0 ? 'Trưởng phòng' : i % 3 === 1 ? 'Phó phòng' : 'Chuyên viên',
     department: 'Văn phòng UBND thành phố Hải Phòng',
-    status: 'active' as const,
-  }));
+    status: i % 5 === 0 ? 'inactive' : 'active' as const,
+  })), []);
 
-  // Filter users based on search and filters
-  const filteredUsers = allUsers.filter(user => {
-    // Search filter
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      const matchesSearch =
-        user.username.toLowerCase().includes(query) ||
-        user.fullName.toLowerCase().includes(query) ||
-        user.email.toLowerCase().includes(query) ||
-        user.phone.includes(query);
+  // Compute Filtered Data
+  const filteredUsers = useMemo(() => {
+    return allUsers.filter(user => {
+      // 1. Search filter
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase();
+        const matches = 
+          user.username.toLowerCase().includes(query) ||
+          user.fullName.toLowerCase().includes(query) ||
+          user.email.toLowerCase().includes(query) ||
+          user.phone.includes(query);
+        if (!matches) return false;
+      }
+      
+      // 2. Dropdown filters
+      if (filterValues.status && filterValues.status !== 'all') {
+        if (user.status !== filterValues.status) return false;
+      }
+      return true;
+    });
+  }, [allUsers, searchQuery, filterValues]);
 
-      if (!matchesSearch) return false;
-    }
-
-    // Role filter (mock - in real app would check user role)
-    if (filterRole !== 'all') {
-      // For demo purposes, we'll just keep all users
-      // In real app: if (user.role !== filterRole) return false;
-    }
-
-    // Status filter
-    if (filterStatus !== 'all') {
-      if (user.status !== filterStatus) return false;
-    }
-
-    // Unit filter (mock - in real app would check user department)
-    if (filterUnit !== 'all') {
-      // For demo purposes, we'll just keep all users
-      // In real app: if (user.departmentId !== filterUnit) return false;
-    }
-
-    return true;
-  });
-
+  // Compute Pagination
   const totalItems = filteredUsers.length;
   const totalPages = Math.ceil(totalItems / pageSize);
+  const currentUsers = filteredUsers.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
-  // Get current page users
-  const users = filteredUsers.slice(
-    (currentPage - 1) * pageSize,
-    currentPage * pageSize
-  );
+  // Compute Stats
+  const activeUsersCount = allUsers.filter(u => u.status === 'active').length;
+  const inactiveUsersCount = allUsers.filter(u => u.status === 'inactive').length;
 
-  // Reset to page 1 when filters change
-  React.useEffect(() => {
+  // Handlers for Filters
+  const handleFilterChange = (key: string, val: string) => {
+    setFilterValues(prev => ({ ...prev, [key]: val }));
     setCurrentPage(1);
-  }, [searchQuery, filterRole, filterStatus, filterUnit]);
-
-  const toggleSelectAll = () => {
-    if (selectedUsers.length === users.length) {
-      setSelectedUsers([]);
-    } else {
-      setSelectedUsers(users.map(u => u.id));
-    }
   };
 
-  const toggleSelectUser = (userId: number) => {
-    if (selectedUsers.includes(userId)) {
-      setSelectedUsers(selectedUsers.filter(id => id !== userId));
-    } else {
-      setSelectedUsers([...selectedUsers, userId]);
-    }
-  };
-
-  const activeUsers = filteredUsers.filter(u => u.status === 'active').length;
-  const inactiveUsers = filteredUsers.filter(u => u.status === 'inactive').length;
-
-  // Filter functions
-  const resetFilters = () => {
-    setFilterRole('all');
-    setFilterStatus('all');
-    setFilterUnit('all');
+  const handleResetFilters = () => {
+    setFilterValues({});
     setSearchQuery('');
+    setCurrentPage(1);
   };
 
-  const getActiveFiltersCount = () => {
-    let count = 0;
-    if (searchQuery) count++;
-    if (filterRole !== 'all') count++;
-    if (filterStatus !== 'all') count++;
-    if (filterUnit !== 'all') count++;
-    return count;
-  };
-
-  const activeFiltersCount = getActiveFiltersCount();
-
-  const getActiveFilterTags = () => {
+  // Compute Active Filter Tags
+  const activeFiltersCount = (searchQuery ? 1 : 0) + Object.values(filterValues).filter(v => v !== 'all').length;
+  
+  const activeFilterTags = useMemo(() => {
     const tags: Array<{ label: string; onRemove: () => void }> = [];
     if (searchQuery) {
-      tags.push({
-        label: `Tìm kiếm: "${searchQuery}"`,
-        onRemove: () => setSearchQuery('')
-      });
+      tags.push({ label: `Tìm kiếm: "${searchQuery}"`, onRemove: () => setSearchQuery('') });
     }
-    if (filterRole !== 'all') {
-      tags.push({
-        label: `Vai trò: ${filterRole === 'admin' ? 'Admin' : filterRole === 'staff' ? 'Nhân viên' : 'Người dùng'}`,
-        onRemove: () => setFilterRole('all')
-      });
-    }
-    if (filterStatus !== 'all') {
-      tags.push({
-        label: `Trạng thái: ${filterStatus === 'active' ? 'Hoạt động' : filterStatus === 'inactive' ? 'Ngừng hoạt động' : filterStatus === 'pending' ? 'Chờ duyệt' : 'Bị khóa'}`,
-        onRemove: () => setFilterStatus('all')
-      });
-    }
-    if (filterUnit !== 'all') {
-      const selectedUnit = units.find(u => u.id === filterUnit);
-      tags.push({
-        label: `Đơn vị: ${selectedUnit?.name || filterUnit}`,
-        onRemove: () => setFilterUnit('all')
-      });
-    }
+    Object.entries(filterValues).forEach(([key, value]) => {
+      if (value !== 'all') {
+        tags.push({
+          label: getUserFilterLabel(key, value, units),
+          onRemove: () => handleFilterChange(key, 'all')
+        });
+      }
+    });
     return tags;
+  }, [searchQuery, filterValues, units]);
+
+  // Handlers for Selection
+  const handleToggleSelectAll = () => {
+    if (selectedIds.length === currentUsers.length && currentUsers.length > 0) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(currentUsers.map(u => u.id));
+    }
   };
 
-
-
-  // Modal handlers
-  const handleOpenCreateModal = () => {
-    setUserFormModal({ isOpen: true, mode: 'create' });
+  const handleToggleSelectRow = (id: number) => {
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   };
 
-  const handleOpenViewModal = (user: User) => {
-    setUserFormModal({ isOpen: true, mode: 'view', user });
+  // Handlers for Actions
+  const handleRefresh = () => {
+    setIsRefreshing(true);
+    setTimeout(() => {
+      setIsRefreshing(false);
+      toast.success('Làm mới thành công', 'Dữ liệu đã được cập nhật');
+    }, 1000);
   };
 
-  const handleOpenEditModal = (user: User) => {
-    setUserFormModal({ isOpen: true, mode: 'edit', user });
+  // Table Engine Configs
+  const columns = useMemo(() => getUserTableColumns(), []);
+  
+  const rowActions = useMemo(() => getUserRowActions(
+    (user) => setUserFormModal({ isOpen: true, mode: 'view', user }),
+    (user) => setUserFormModal({ isOpen: true, mode: 'edit', user }),
+    (user) => setDeleteModal({ isOpen: true, user })
+  ), []);
+
+  const tableFilters = useMemo(() => getUserFilters(units), [units]);
+
+  const bulkActions: BulkActionDef[] = useMemo(() => [
+    {
+      key: 'email',
+      label: 'Gửi email',
+      icon: <Mail className="h-3.5 w-3.5" />,
+      onClick: () => setEmailModalIsOpen(true)
+    },
+    {
+      key: 'delete',
+      label: 'Xóa',
+      icon: <Trash2 className="h-3.5 w-3.5" />,
+      variant: 'danger',
+      onClick: (ids) => setDeleteModal({ isOpen: true, count: ids.length })
+    }
+  ], []);
+
+  const tableConfig = {
+    columns,
+    rowActions,
   };
 
-  const handleOpenDeleteModal = (user: User) => {
-    setDeleteModal({ isOpen: true, user });
-  };
-
-  const handleCloseUserFormModal = () => {
+  // Submit Handlers
+  const handleSubmitUserForm = (userData: any) => {
+    if (userFormModal.mode === 'create') {
+      toast.success('Thêm người dùng thành công');
+    } else {
+      toast.success('Cập nhật người dùng thành công');
+    }
     setUserFormModal({ isOpen: false, mode: 'create' });
   };
 
-  const handleCloseDeleteModal = () => {
-    setDeleteModal({ isOpen: false });
-  };
-
-  const handleSubmitUserForm = (userData: any) => {
-    // Handle create or update user
-    console.log('User form submitted:', userData);
-
-    if (userFormModal.mode === 'create') {
-      toast.success('Thêm người dùng thành công', `Đã thêm người dùng ${userData.fullName} vào hệ thống`);
-      // TODO: Call API to create user
-    } else if (userFormModal.mode === 'edit') {
-      toast.success('Cập nhật người dùng thành công', `Thông tin người dùng ${userData.fullName} đã được cập nhật`);
-      // TODO: Call API to update user
-    }
-  };
-
   const handleConfirmDelete = () => {
-    // Handle delete user
-    console.log('Delete user:', deleteModal.user);
-    if (deleteModal.user) {
-      toast.success('Xóa người dùng thành công', `Đã xóa người dùng ${deleteModal.user.fullName} khỏi hệ thống`);
-    }
-    // TODO: Call API to delete user
+    toast.success('Xóa người dùng thành công');
+    setDeleteModal({ isOpen: false });
+    setSelectedIds([]);
   };
 
   return (
@@ -276,366 +209,100 @@ const NguoiDungPage = () => {
         <div className="p-8">
           {/* Page Header */}
           <PageHeader
-            breadcrumbs={[
-              { name: "Trang chủ", path: "/" },
-              { name: "Quản lý người dùng" },
-            ]}
+            breadcrumbs={[{ name: "Trang chủ", path: "/" }, { name: "Quản lý" }]}
             actions={
-              <Button
-                onClick={handleOpenCreateModal}
-                variant="primary"
-              >
-                <Plus className="h-4 w-4" />
-                Thêm người dùng mới
+              <Button onClick={() => setUserFormModal({ isOpen: true, mode: 'create' })} variant="primary">
+                <Plus className="h-4 w-4" /> Thêm người dùng mới
               </Button>
             }
           />
 
           {/* Summary Stats */}
           <div className="grid grid-cols-3 gap-4 mb-6">
-            <div className="bg-white rounded-2xl border border-gray-200/60 p-5 shadow-sm hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600 mb-1">
-                    Tổng số người dùng
-                    {activeFiltersCount > 0 && (
-                      <span className="ml-2 text-xs text-blue-600 btn-primary">(Đã lọc)</span>
-                    )}
-                  </p>
-                  <p className="text-3xl heading text-gray-900">{totalItems}</p>
-                </div>
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-50 to-blue-100 flex items-center justify-center">
-                  <Users className="h-6 w-6 text-blue-600" />
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-2xl border border-gray-200/60 p-5 shadow-sm hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600 mb-1">Đang hoạt động</p>
-                  <p className="text-3xl heading text-emerald-600">{activeUsers}</p>
-                </div>
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-50 to-emerald-100 flex items-center justify-center">
-                  <UserCheck className="h-6 w-6 text-emerald-600" />
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-2xl border border-gray-200/60 p-5 shadow-sm hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600 mb-1">Ngừng hoạt động</p>
-                  <p className="text-3xl heading text-gray-400">{inactiveUsers}</p>
-                </div>
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center">
-                  <UserX className="h-6 w-6 text-gray-400" />
-                </div>
-              </div>
-            </div>
+            <StatCard 
+              title="Tổng số người dùng" 
+              value={allUsers.length} 
+              icon={<Users />} 
+              color="blue" 
+              hasFilters={activeFiltersCount > 0} 
+            />
+            <StatCard 
+              title="Đang hoạt động" 
+              value={activeUsersCount} 
+              icon={<UserCheck />} 
+              color="emerald" 
+            />
+            <StatCard 
+              title="Ngừng hoạt động" 
+              value={inactiveUsersCount} 
+              icon={<UserX />} 
+              color="gray" 
+            />
           </div>
 
-          {/* Main Content Card */}
+          {/* Main Content Card with Table Engine */}
           <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm">
-            {/* Toolbar */}
-            <div className="p-6 border-b border-gray-200/60">
-              <div className="flex items-center gap-3">
-                {/* Search */}
-                <div className="flex-1 relative">
-                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-                  <input
-                    type="text"
-                    placeholder="Tìm kiếm theo tên đăng nhập, email, số điện thoại..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full h-11 pl-12 pr-4 text-sm bg-gray-50 border border-gray-300 rounded-xl text-gray-900 placeholder:text-gray-500 focus:outline-none focus:border-[#C8102E] focus:ring-2 focus:ring-[#C8102E]/20 transition-all"
-                  />
-                </div>
+            <DataToolbar
+              searchQuery={searchQuery}
+              onSearchChange={(val) => { setSearchQuery(val); setCurrentPage(1); }}
+              filters={tableFilters}
+              filterValues={filterValues}
+              onFilterChange={handleFilterChange}
+              showFilters={showFilters}
+              onToggleFilters={() => setShowFilters(!showFilters)}
+              onResetFilters={handleResetFilters}
+              activeFiltersCount={activeFiltersCount}
+              activeFilterTags={activeFilterTags}
+              onRefresh={handleRefresh}
+              isRefreshing={isRefreshing}
+              selectedIds={selectedIds}
+              totalItems={currentUsers.length}
+              onSelectAll={handleToggleSelectAll}
+              bulkActions={bulkActions}
+            />
 
-                {/* Action Buttons */}
-                <button
-                  onClick={() => setShowFilters(!showFilters)}
-                  className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm body rounded-xl transition-all relative ${
-                    showFilters
-                      ? 'bg-gradient-to-r from-[#C8102E] to-[#A90F14] text-white shadow-md'
-                      : 'text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 hover:border-gray-400'
-                  }`}
-                >
-                  <Filter className="h-4 w-4" />
-                  Bộ lọc
-                  {activeFiltersCount > 0 && (
-                    <span className="absolute -top-1 -right-1 w-5 h-5 bg-blue-600 text-white text-xs heading rounded-full flex items-center justify-center shadow-md">
-                      {activeFiltersCount}
-                    </span>
-                  )}
-                </button>
-
-                <Button variant="outline" className="gap-2">
-                  <Download className="h-4 w-4" />
-                  Xuất file
-                </Button>
-
-                <Button variant="outline" size="icon">
-                  <RefreshCw className="h-4 w-4" />
-                </Button>
-              </div>
-
-              {/* Bulk Actions Bar */}
-              {selectedUsers.length > 0 && (
-                <div className="mt-4 flex items-center justify-between px-4 py-3 bg-blue-50 border border-blue-200 rounded-xl">
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="checkbox"
-                      checked={selectedUsers.length === users.length}
-                      onChange={toggleSelectAll}
-                      className="w-4 h-4 rounded border-gray-300 text-[#C8102E] focus:ring-[#C8102E] cursor-pointer"
-                    />
-                    <span className="text-sm body text-gray-900">
-                      Đã chọn {selectedUsers.length} người dùng
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button className="inline-flex items-center gap-2 px-3 py-1.5 text-sm body text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-all">
-                      <Mail className="h-3.5 w-3.5" />
-                      Gửi email
-                    </button>
-                    <button className="inline-flex items-center gap-2 px-3 py-1.5 text-sm body text-red-700 bg-white border border-red-300 rounded-lg hover:bg-red-50 transition-all">
-                      <Trash2 className="h-3.5 w-3.5" />
-                      Xóa
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Advanced Filter Panel */}
-            {showFilters && (
-              <div className="px-6 py-5 bg-gradient-to-br from-gray-50 to-white border-b border-gray-200/60">
-                <div className="space-y-4">
-                  {/* Filter Controls */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {/* Role Filter */}
-                    <CustomDropdown
-                      label="Vai trò"
-                      options={[
-                        { value: 'all', label: 'Tất cả' },
-                        { value: 'admin', label: 'Admin' },
-                        { value: 'staff', label: 'Nhân viên' },
-                        { value: 'user', label: 'Người dùng' }
-                      ]}
-                      value={filterRole}
-                      onChange={(val) => {
-                        setFilterRole(val);
-                        setCurrentPage(1);
-                      }}
-                    />
-
-                    {/* Status Filter */}
-                    <CustomDropdown
-                      label="Trạng thái"
-                      options={[
-                        { value: 'all', label: 'Tất cả' },
-                        { value: 'active', label: 'Hoạt động' },
-                        { value: 'inactive', label: 'Ngừng hoạt động' },
-                        { value: 'pending', label: 'Chờ duyệt' },
-                        { value: 'locked', label: 'Bị khóa' }
-                      ]}
-                      value={filterStatus}
-                      onChange={(val) => {
-                        setFilterStatus(val);
-                        setCurrentPage(1);
-                      }}
-                    />
-
-                    {/* Unit Filter - Searchable Dropdown */}
-                    <CustomDropdown
-                      label="Đơn vị"
-                      searchable={true}
-                      searchPlaceholder="Tìm kiếm đơn vị..."
-                      options={units.map(u => ({ value: u.id, label: u.name }))}
-                      value={filterUnit}
-                      onChange={(val) => {
-                        setFilterUnit(val);
-                        setCurrentPage(1);
-                      }}
-                    />
-                  </div>
-
-                  {/* Filter Actions */}
-                  <div className="flex items-center justify-between pt-4 border-t border-gray-200">
-                    <p className="text-xs text-gray-500">Bộ lọc tự động áp dụng khi bạn thay đổi</p>
-                    <button
-                      onClick={resetFilters}
-                      className="inline-flex items-center gap-2 px-4 py-2 text-sm body text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 hover:border-gray-400 transition-all"
-                    >
-                      <X className="h-4 w-4" />
-                      Đặt lại bộ lọc
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Active Filters Tags */}
-            {activeFiltersCount > 0 && (
-              <div className="px-6 py-3 bg-blue-50/50 border-b border-blue-200/30">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-xs btn-primary text-gray-700">Bộ lọc đang áp dụng:</span>
-                  {getActiveFilterTags().map((tag, index) => (
-                    <div
-                      key={index}
-                      className="inline-flex items-center gap-1.5 px-3 py-1 bg-white text-sm body text-gray-700 border border-gray-300 rounded-full shadow-sm"
-                    >
-                      <span>{tag.label}</span>
-                      <button
-                        onClick={tag.onRemove}
-                        className="w-4 h-4 flex items-center justify-center rounded-full hover:bg-gray-200 transition-colors"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </div>
-                  ))}
-                  <button
-                    onClick={resetFilters}
-                    className="text-xs btn-primary text-red-600 hover:text-red-700 underline ml-2"
-                  >
-                    Xóa tất cả
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Table */}
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="sticky top-0 z-10">
-                  <tr className="bg-gradient-to-r from-gray-50 to-gray-100/50 border-b-2 border-gray-200">
-                    <th className="w-12 px-6 py-4">
-                      <input
-                        type="checkbox"
-                        checked={selectedUsers.length === users.length && users.length > 0}
-                        onChange={toggleSelectAll}
-                        className="w-4 h-4 rounded border-gray-300 text-[#C8102E] focus:ring-[#C8102E] cursor-pointer"
-                      />
-                    </th>
-                    <th className="px-6 py-4 text-left text-xs heading text-gray-700 uppercase tracking-wider">STT</th>
-                    <th className="px-6 py-4 text-left text-xs heading text-gray-700 uppercase tracking-wider">Tên đăng nhập</th>
-                    <th className="px-6 py-4 text-left text-xs heading text-gray-700 uppercase tracking-wider">Họ và tên</th>
-                    <th className="px-6 py-4 text-left text-xs heading text-gray-700 uppercase tracking-wider">Email</th>
-                    <th className="px-6 py-4 text-left text-xs heading text-gray-700 uppercase tracking-wider">Số điện thoại</th>
-                    <th className="px-6 py-4 text-left text-xs heading text-gray-700 uppercase tracking-wider">Chức vụ</th>
-                    <th className="px-6 py-4 text-left text-xs heading text-gray-700 uppercase tracking-wider">Đơn vị</th>
-                    <th className="px-6 py-4 text-center text-xs heading text-gray-700 uppercase tracking-wider">Trạng thái</th>
-                    <th className="px-6 py-4 text-center text-xs heading text-gray-700 uppercase tracking-wider">Thao tác</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {users.map((user, index) => (
-                    <tr
-                      key={user.id}
-                      className={`transition-all hover:bg-blue-50/30 ${
-                        index % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'
-                      }`}
-                    >
-                      <td className="px-6 py-4">
-                        <input
-                          type="checkbox"
-                          checked={selectedUsers.includes(user.id)}
-                          onChange={() => toggleSelectUser(user.id)}
-                          className="w-4 h-4 rounded border-gray-300 text-[#C8102E] focus:ring-[#C8102E] cursor-pointer"
-                        />
-                      </td>
-                      <td className="px-6 py-4 text-sm body text-gray-900">
-                        {(currentPage - 1) * pageSize + index + 1}
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className="text-sm btn-primary text-gray-900">{user.username}</span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className="text-sm text-gray-900">{user.fullName}</span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2 text-sm text-gray-600">
-                          <Mail className="h-3.5 w-3.5 text-gray-400" />
-                          {user.email}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2 text-sm text-gray-600">
-                          <Phone className="h-3.5 w-3.5 text-gray-400" />
-                          {user.phone}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-600">{user.position}</td>
-                      <td className="px-6 py-4 text-sm text-gray-600">{user.department}</td>
-                      <td className="px-6 py-4 text-center">
-                        <span className="inline-flex items-center px-3 py-1 text-xs btn-primary rounded-full bg-gradient-to-r from-emerald-50 to-emerald-100 text-emerald-700 border border-emerald-200">
-                          Hoạt động
-                        </span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center justify-center gap-1">
-                          <button
-                            onClick={() => handleOpenViewModal(user)}
-                            className="w-9 h-9 flex items-center justify-center rounded-lg text-gray-600 hover:bg-blue-50 hover:text-blue-600 transition-all"
-                            title="Xem chi tiết"
-                          >
-                            <Eye className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() => handleOpenEditModal(user)}
-                            className="w-9 h-9 flex items-center justify-center rounded-lg text-gray-600 hover:bg-amber-50 hover:text-amber-600 transition-all"
-                            title="Chỉnh sửa"
-                          >
-                            <Edit className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() => handleOpenDeleteModal(user)}
-                            className="w-9 h-9 flex items-center justify-center rounded-lg text-gray-600 hover:bg-red-50 hover:text-red-600 transition-all"
-                            title="Xóa"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Pagination */}
-            <Pagination
+            <DataTable
+              data={currentUsers}
+              config={tableConfig}
+              selectedIds={selectedIds}
+              onToggleSelectAll={handleToggleSelectAll}
+              onToggleSelectRow={handleToggleSelectRow}
               currentPage={currentPage}
-              totalPages={totalPages}
               pageSize={pageSize}
               totalItems={totalItems}
+              totalPages={totalPages}
               onPageChange={setCurrentPage}
-              onPageSizeChange={(size) => {
-                setPageSize(size);
-                setCurrentPage(1);
-              }}
+              onPageSizeChange={(size) => { setPageSize(size); setCurrentPage(1); }}
+              itemLabel="người dùng"
             />
           </div>
         </div>
 
-      {/* Modals */}
-      <UserFormModal
-        isOpen={userFormModal.isOpen}
-        onClose={handleCloseUserFormModal}
-        onSubmit={handleSubmitUserForm}
-        mode={userFormModal.mode}
-        initialData={userFormModal.user}
-      />
+        {/* Modals */}
+        <UserFormModal
+          isOpen={userFormModal.isOpen}
+          onClose={() => setUserFormModal({ isOpen: false, mode: 'create' })}
+          onSubmit={handleSubmitUserForm}
+          mode={userFormModal.mode}
+          initialData={userFormModal.user}
+        />
 
-      <DeleteUserModal
-        isOpen={deleteModal.isOpen}
-        onClose={handleCloseDeleteModal}
-        onConfirm={handleConfirmDelete}
-        user={deleteModal.user}
-      />
-    </div>
-  </>
+        <DeleteUserModal
+          isOpen={deleteModal.isOpen}
+          onClose={() => setDeleteModal({ isOpen: false })}
+          onConfirm={handleConfirmDelete}
+          user={deleteModal.user}
+          count={deleteModal.count}
+        />
+
+        <EmailUserModal
+          isOpen={emailModalIsOpen}
+          onClose={() => setEmailModalIsOpen(false)}
+          onSubmit={(data) => toast.success('Gửi email thành công', `Đã gửi email với tiêu đề: ${data.subject}`)}
+          count={selectedIds.length}
+        />
+      </div>
+    </>
   );
 };
 

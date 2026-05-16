@@ -39,11 +39,13 @@ export const MonthCalendarView: React.FC<MonthCalendarViewProps> = ({
   const getEventStyle = (status: string) => {
     switch (status) {
       case 'ongoing':
-        return 'bg-green-50 border-l-2 border-green-500';
+        return 'bg-green-50 border-l-2 border-green-500 text-green-700';
       case 'upcoming':
-        return 'bg-blue-50 border-l-2 border-blue-500';
+        return 'bg-blue-50 border-l-2 border-blue-500 text-blue-700';
+      case 'finished':
+        return 'bg-red-50 border-l-2 border-red-500 text-red-700';
       default:
-        return 'bg-gray-50 border-l-2 border-gray-500';
+        return 'bg-gray-50 border-l-2 border-gray-500 text-gray-700';
     }
   };
 
@@ -53,6 +55,8 @@ export const MonthCalendarView: React.FC<MonthCalendarViewProps> = ({
         return 'bg-green-500';
       case 'upcoming':
         return 'bg-blue-500';
+      case 'finished':
+        return 'bg-red-500';
       default:
         return 'bg-gray-500';
     }

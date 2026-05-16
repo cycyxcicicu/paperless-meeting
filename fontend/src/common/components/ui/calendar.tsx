@@ -50,13 +50,18 @@ function Calendar({
           "day-range-end aria-selected:bg-primary aria-selected:text-primary-foreground",
         day_selected:
           "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",
-        day_today: "bg-accent text-accent-foreground",
+        day_today: "border border-[#C8102E] text-[#C8102E] font-bold",
         day_outside:
           "day-outside text-muted-foreground aria-selected:text-muted-foreground",
         day_disabled: "text-muted-foreground opacity-50",
         day_range_middle:
           "aria-selected:bg-accent aria-selected:text-accent-foreground",
         day_hidden: "invisible",
+        vhidden: "vhidden hidden",
+        caption_dropdowns: "flex justify-center gap-2 font-medium text-sm",
+        dropdown: "px-2 py-1 bg-gray-50 border border-gray-200 rounded-md outline-none focus:ring-2 focus:ring-primary/20",
+        dropdown_month: "flex items-center",
+        dropdown_year: "flex items-center",
         ...classNames,
       }}
       components={{

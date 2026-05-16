@@ -1,26 +1,15 @@
-import { clsx, type ClassValue } from "clsx";
-import { ChevronLeft, ChevronRight, Home, MapPin } from "lucide-react";
-import { AnimatePresence, motion } from "motion/react";
-import { useMemo, useState } from "react";
-import { twMerge } from "tailwind-merge";
+import { MapPin, Plus } from "lucide-react";
+import { useState, useMemo } from "react";
 import { toast } from '@/lib/toast';
 import { DeleteLocationModal } from '@/modules/meeting-rooms/components/DeleteLocationModal';
-import { LocationEmptyState } from '@/modules/meeting-rooms/components/LocationEmptyState';
 import { LocationFormModal } from '@/modules/meeting-rooms/components/LocationFormModal';
 import { LocationSummary } from '@/modules/meeting-rooms/components/LocationSummary';
-import {
-    LocationTable,
-    MeetingLocation,
-} from '@/modules/meeting-rooms/components/LocationTable';
-import { LocationToolbar } from '@/modules/meeting-rooms/components/LocationToolbar';
 import { PageHeader } from '@/common/components/layout/PageHeader';
-import { Pagination } from '@/common/components/ui/app-pagination';
+import { DataTable } from '@/common/components/table-engine/DataTable';
+import { createMeetingRoomColumns, createMeetingRoomRowActions, MeetingRoom } from '../table/meetingRoomTable.schema';
+import { DataToolbar } from "@/common/components/table-engine/DataToolbar";
 
-function cn(...inputs: ClassValue[]) {
-    return twMerge(clsx(inputs));
-}
-
-const mockLocations: MeetingLocation[] = [
+const mockLocations: MeetingRoom[] = [
     {
         id: "1",
         name: "Phòng họp Hội đồng",
@@ -118,52 +107,17 @@ const PhongHopPage = () => {
     const [locationFormModal, setLocationFormModal] = useState<{
         isOpen: boolean;
         mode: "create" | "edit" | "view";
-        location?: MeetingLocation;
+        location?: MeetingRoom;
     }>({ isOpen: false, mode: "create" });
 
     const [deleteModal, setDeleteModal] = useState<{
         isOpen: boolean;
-        location?: MeetingLocation;
+        location?: MeetingRoom;
     }>({ isOpen: false });
 
-    // Filter locations
-    const filteredLocations = useMemo(() => {
-        return mockLocations.filter(
-            (loc) =>
-                loc.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                loc.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                loc.building.toLowerCase().includes(searchQuery.toLowerCase()),
-        );
-    }, [searchQuery]);
-
-    const totalPages = Math.ceil(filteredLocations.length / pageSize);
-    const currentData = filteredLocations.slice(
-        (currentPage - 1) * pageSize,
-        currentPage * pageSize,
-    );
-
-    // Calculate stats
-    const totalCapacity = mockLocations.reduce(
-        (acc, loc) => acc + loc.capacity,
-        0,
-    );
-    const activeLocations = mockLocations.filter(
-        (loc) => loc.status === "active",
-    ).length;
-    const recentlyUsed = mockLocations.filter((loc) => loc.lastUsed).length;
-
     // Handlers
-    const handleRefresh = () => {
-        toast.success("Làm mới dữ liệu", "Dữ liệu địa điểm đã được cập nhật");
-        setSearchQuery("");
-    };
-
     const handleAddNew = () => {
         setLocationFormModal({ isOpen: true, mode: "create" });
-    };
-
-    const handleExport = () => {
-        toast.info("Xuất dữ liệu", "Đang chuẩn bị dữ liệu xuất file...");
     };
 
     const handleView = (id: string) => {
@@ -187,10 +141,6 @@ const PhongHopPage = () => {
         }
     };
 
-    const handleResetSearch = () => {
-        setSearchQuery("");
-    };
-
     const handleCloseLocationFormModal = () => {
         setLocationFormModal({ isOpen: false, mode: "create" });
     };
@@ -199,39 +149,58 @@ const PhongHopPage = () => {
         setDeleteModal({ isOpen: false });
     };
 
-    const handleSubmitLocationForm = (locationData: any) => {
-        console.log("Location form submitted:", locationData);
-
+    const handleSubmitLocationForm = (data: any) => {
         if (locationFormModal.mode === "create") {
-            toast.success(
-                "Thêm địa điểm thành công",
-                `Đã thêm địa điểm "${locationData.name}" vào hệ thống`,
-            );
-            // TODO: Call API to create location
-        } else if (locationFormModal.mode === "edit") {
-            toast.success(
-                "Cập nhật địa điểm thành công",
-                `Thông tin địa điểm "${locationData.name}" đã được cập nhật`,
-            );
-            // TODO: Call API to update location
+            toast.success("Thêm thành công", `Đã thêm phòng họp "${data.name}"`);
+        } else {
+            toast.success("Cập nhật thành công", `Đã cập nhật phòng họp "${data.name}"`);
         }
+        handleCloseLocationFormModal();
     };
 
     const handleConfirmDelete = () => {
-        console.log("Delete location:", deleteModal.location);
         if (deleteModal.location) {
-            toast.success(
-                "Xóa địa điểm thành công",
-                `Đã xóa địa điểm "${deleteModal.location.name}" khỏi hệ thống`,
-            );
+            toast.success("Xóa thành công", `Đã xóa phòng họp "${deleteModal.location.name}"`);
         }
-        // TODO: Call API to delete location
+        handleCloseDeleteModal();
     };
 
+    const handleRefresh = () => {
+        toast.success("Làm mới dữ liệu", "Danh sách phòng họp đã được cập nhật");
+    };
+
+    // Table Config
+    const columns = useMemo(() => createMeetingRoomColumns({
+        onView: handleView,
+        onEdit: handleEdit,
+        onDelete: handleDelete,
+    }), []);
+
+    const rowActions = useMemo(() => createMeetingRoomRowActions({
+        onView: handleView,
+        onEdit: handleEdit,
+        onDelete: handleDelete,
+    }), []);
+
+    const tableConfig = {
+        columns,
+        rowActions,
+    };
+
+    // Filtering
+    const filteredData = useMemo(() => {
+        return mockLocations.filter(item => 
+            item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            item.code.toLowerCase().includes(searchQuery.toLowerCase())
+        );
+    }, [searchQuery]);
+
+    const totalCapacity = mockLocations.reduce((acc, loc) => acc + loc.capacity, 0);
+    const activeLocations = mockLocations.filter((loc) => loc.status === "active").length;
+    const recentlyUsed = mockLocations.filter((loc) => loc.lastUsed).length;
+
     return (
-        <>
         <div className="p-8">
-            {/* Page Header */}
             <PageHeader
                 breadcrumbs={[
                     { name: "Trang chủ", path: "/" },
@@ -241,105 +210,48 @@ const PhongHopPage = () => {
                 actions={
                     <div className="flex items-center gap-2 text-xs text-gray-500">
                         <MapPin className="h-4 w-4 text-[#C8102E]" />
-                        <span className="body text-gray-700">
-                            Cập nhật: 17/04/2026
-                        </span>
+                        <span className="body text-gray-700">Cập nhật: 17/04/2026</span>
                     </div>
                 }
             />
 
-                {/* Summary Strip */}
-                <LocationSummary
-                    totalLocations={mockLocations.length}
-                    totalCapacity={totalCapacity}
-                    activeLocations={activeLocations}
-                    recentlyUsed={recentlyUsed}
+            <LocationSummary
+                totalLocations={mockLocations.length}
+                totalCapacity={totalCapacity}
+                activeLocations={activeLocations}
+                recentlyUsed={recentlyUsed}
+            />
+
+            <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
+                <DataToolbar
+                    searchQuery={searchQuery}
+                    onSearchChange={setSearchQuery}
+                    searchPlaceholder="Tìm kiếm theo tên hoặc mã phòng..."
+                    onRefresh={handleRefresh}
+                    primaryAction={{
+                        label: "Thêm phòng họp mới",
+                        icon: <Plus className="h-4 w-4" />,
+                        onClick: handleAddNew
+                    }}
                 />
 
-                {/* Main Content Card */}
-                <motion.div
-                    initial={{ y: 20, opacity: 0 }}
-                    animate={{ y: 0, opacity: 1 }}
-                    className="bg-white rounded-2xl border border-gray-200/60 shadow-lg shadow-gray-200/50 overflow-hidden"
-                >
-                    {/* Toolbar */}
-                    <LocationToolbar
-                        searchQuery={searchQuery}
-                        setSearchQuery={setSearchQuery}
-                        onRefresh={handleRefresh}
-                        onAddNew={handleAddNew}
-                        onExport={handleExport}
-                    />
-
-                    {/* Content Area */}
-                    <AnimatePresence mode="wait">
-                        {filteredLocations.length > 0 ? (
-                            <motion.div
-                                key="table"
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                exit={{ opacity: 0 }}
-                                transition={{ duration: 0.2 }}
-                            >
-                                <LocationTable
-                                    locations={currentData}
-                                    onEdit={handleEdit}
-                                    onDelete={handleDelete}
-                                    onView={handleView}
-                                    currentPage={currentPage}
-                                    pageSize={pageSize}
-                                />
-
-                                {/* Pagination */}
-                                <Pagination
-                                    currentPage={currentPage}
-                                    totalPages={totalPages}
-                                    pageSize={pageSize}
-                                    totalItems={filteredLocations.length}
-                                    onPageChange={setCurrentPage}
-                                    onPageSizeChange={setPageSize}
-                                    itemLabel="địa điểm"
-                                />
-                            </motion.div>
-                        ) : (
-                            <motion.div
-                                key="empty"
-                                initial={{ opacity: 0, scale: 0.95 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                exit={{ opacity: 0, scale: 0.95 }}
-                                transition={{ duration: 0.2 }}
-                            >
-                                <LocationEmptyState
-                                    type={searchQuery ? "search" : "no-data"}
-                                    onReset={handleResetSearch}
-                                    onAdd={handleAddNew}
-                                />
-                            </motion.div>
-                        )}
-                    </AnimatePresence>
-                </motion.div>
+                <DataTable
+                    data={filteredData}
+                    config={tableConfig}
+                    currentPage={currentPage}
+                    pageSize={pageSize}
+                    totalItems={filteredData.length}
+                    onPageChange={setCurrentPage}
+                    onPageSizeChange={setPageSize}
+                />
             </div>
 
-            {/* Modals */}
             <LocationFormModal
                 isOpen={locationFormModal.isOpen}
                 onClose={handleCloseLocationFormModal}
                 onSubmit={handleSubmitLocationForm}
                 mode={locationFormModal.mode}
-                initialData={
-                    locationFormModal.location
-                        ? {
-                              id: locationFormModal.location.id,
-                              name: locationFormModal.location.name,
-                              code: locationFormModal.location.code,
-                              type: "OFFLINE",
-                              capacity: locationFormModal.location.capacity.toString(),
-                              address: `${locationFormModal.location.floor}, ${locationFormModal.location.building}`,
-                              onlineLink: "",
-                              departmentId: "",
-                          }
-                        : undefined
-                }
+                initialData={locationFormModal.location}
             />
 
             <DeleteLocationModal
@@ -348,7 +260,7 @@ const PhongHopPage = () => {
                 onConfirm={handleConfirmDelete}
                 location={deleteModal.location}
             />
-        </>
+        </div>
     );
 };
 

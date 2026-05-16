@@ -7,7 +7,7 @@ export interface CalendarEvent {
   title: string;
   startTime: string;
   endTime: string;
-  status: 'ongoing' | 'upcoming';
+  status: 'ongoing' | 'upcoming' | 'finished';
   location?: string;
   participants?: number;
   colSpan?: number;
@@ -33,13 +33,15 @@ export const CalendarEventCard: React.FC<CalendarEventCardProps> = ({
   };
 
   const statusStyles = {
-    ongoing: 'bg-green-50 border-green-500',
-    upcoming: 'bg-blue-50 border-blue-500',
+    ongoing: 'bg-green-50 border-green-500 text-green-700',
+    upcoming: 'bg-blue-50 border-blue-500 text-blue-700',
+    finished: 'bg-red-50 border-red-500 text-red-700',
   };
 
   const dotStyles = {
     ongoing: 'bg-green-500',
     upcoming: 'bg-blue-500',
+    finished: 'bg-red-500',
   };
 
   return (

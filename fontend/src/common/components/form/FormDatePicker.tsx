@@ -6,7 +6,7 @@ import { Calendar as CalendarIcon } from "lucide-react"
 
 import { cn } from '@/common/utils/cn'
 import { Button } from '@/common/components/ui/button'
-import { Calendar } from '@/common/components/ui/calendar'
+import { ScrollDatePicker } from '@/common/components/ui/scroll-date-picker'
 import {
   Popover,
   PopoverContent,
@@ -22,6 +22,8 @@ export interface FormDatePickerProps {
   placeholder?: string
   className?: string
   disabled?: boolean
+  disableFutureDates?: boolean
+  showTime?: boolean
 }
 
 export const FormDatePicker = ({
@@ -31,7 +33,9 @@ export const FormDatePicker = ({
   required,
   placeholder = "Chọn ngày",
   className,
-  disabled
+  disabled,
+  disableFutureDates,
+  showTime,
 }: FormDatePickerProps) => {
   const { control, formState: { errors } } = useFormContext()
   const errorMsg = errors[name]?.message as string | undefined
@@ -61,19 +65,18 @@ export const FormDatePicker = ({
               >
                 <CalendarIcon className="mr-2 h-4 w-4" />
                 {field.value ? (
-                  format(new Date(field.value), "PPP", { locale: vi })
+                  format(new Date(field.value), showTime ? "dd/MM/yyyy HH:mm" : "dd/MM/yyyy", { locale: vi })
                 ) : (
                   <span>{placeholder}</span>
                 )}
               </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-auto p-0" align="start">
-              <Calendar
-                mode="single"
-                selected={field.value ? new Date(field.value) : undefined}
-                onSelect={field.onChange}
-                initialFocus
-                locale={vi}
+            <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+              <ScrollDatePicker
+                value={field.value ? new Date(field.value) : undefined}
+                onChange={(date) => field.onChange(date.toISOString())}
+                disableFutureDates={disableFutureDates}
+                showTime={showTime}
               />
             </PopoverContent>
           </Popover>

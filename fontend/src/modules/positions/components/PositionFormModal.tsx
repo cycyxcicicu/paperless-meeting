@@ -1,17 +1,20 @@
 import React, { useEffect } from 'react';
 import { useForm, FormProvider } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
 import { Briefcase } from 'lucide-react';
 import { Button } from '@/common/components/ui/button';
 import { Modal } from '@/common/components/ui/modal';
-import { FormInput } from '@/common/components/form/FormInput';
+import { DynamicFormRenderer } from '@/common/components/form-engine/DynamicFormRenderer';
+import { positionFormSchema } from '../form/positionForm.schema';
+import { positionFormValidationSchema } from '../form/positionForm.validation';
+import { FormMode } from '@/common/components/form-engine/form.types';
 
 type ModalMode = 'create' | 'edit' | 'view';
 
 export interface PositionFormData {
   id?: string;
   name: string;
+  code: string;
   description: string;
 }
 
@@ -23,13 +26,6 @@ interface PositionFormModalProps {
   initialData?: PositionFormData;
 }
 
-const positionSchema = z.object({
-  name: z.string().min(1, 'Vui lòng nhập tên chức vụ'),
-  description: z.string().optional().default(''),
-});
-
-type PositionFormValues = z.infer<typeof positionSchema>;
-
 export const PositionFormModal: React.FC<PositionFormModalProps> = ({
   isOpen,
   onClose,
@@ -40,10 +36,11 @@ export const PositionFormModal: React.FC<PositionFormModalProps> = ({
   const isViewMode = mode === 'view';
   const isCreateMode = mode === 'create';
 
-  const methods = useForm<PositionFormValues>({
-    resolver: zodResolver(positionSchema),
+  const methods = useForm<any>({
+    resolver: zodResolver(positionFormValidationSchema),
     defaultValues: {
       name: '',
+      code: '',
       description: '',
     }
   });
@@ -53,7 +50,7 @@ export const PositionFormModal: React.FC<PositionFormModalProps> = ({
       if (initialData && mode !== 'create') {
         methods.reset(initialData);
       } else {
-        methods.reset({ name: '', description: '' });
+        methods.reset({ name: '', code: '', description: '' });
       }
     }
   }, [initialData, mode, isOpen, methods]);
@@ -63,7 +60,7 @@ export const PositionFormModal: React.FC<PositionFormModalProps> = ({
     onClose();
   };
 
-  const onFormSubmit = (data: PositionFormValues) => {
+  const onFormSubmit = (data: PositionFormData) => {
     if (isViewMode) {
       handleClose();
       return;
@@ -90,35 +87,26 @@ export const PositionFormModal: React.FC<PositionFormModalProps> = ({
       className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto"
     >
       <FormProvider {...methods}>
-        <form onSubmit={methods.handleSubmit(onFormSubmit)} className="space-y-6 pt-4">
+        <form onSubmit={methods.handleSubmit(onFormSubmit as any)} className="space-y-6 pt-4" noValidate>
           <div className="flex justify-center">
-            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-purple-50 to-purple-100 flex items-center justify-center border-4 border-white shadow-lg">
-              <Briefcase className="h-10 w-10 text-purple-600" />
+            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-purple-50 to-purple-100 flex items-center justify-center border border-purple-200/50 shadow-sm group">
+              <Briefcase className="h-10 w-10 text-purple-600 transition-transform group-hover:scale-110" />
             </div>
           </div>
 
-          <div className="space-y-4">
-            <FormInput name="name" label="Tên chức vụ" required disabled={isViewMode} />
-            
-            <div className="space-y-2">
-              <label htmlFor="description" className="text-sm body text-gray-700">Mô tả</label>
-              <textarea
-                id="description"
-                {...methods.register('description')}
-                disabled={isViewMode}
-                rows={4}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-xl bg-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary hover:border-gray-400 transition-colors resize-none disabled:bg-gray-50 disabled:cursor-not-allowed"
-                placeholder="Nhập mô tả chức vụ"
-              />
-            </div>
+          <div className="px-1">
+            <DynamicFormRenderer 
+              groups={[{ id: 'main', fields: positionFormSchema }]} 
+              mode={mode as FormMode} 
+            />
           </div>
 
-          <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
-            <Button type="button" variant="outline" onClick={handleClose}>
+          <div className="flex justify-end gap-3 pt-5 border-t border-gray-100">
+            <Button type="button" variant="outline" onClick={handleClose} className="rounded-xl">
               {isViewMode ? 'Đóng' : 'Hủy bỏ'}
             </Button>
             {!isViewMode && (
-              <Button type="submit" variant="primary">
+              <Button type="submit" variant="primary" className="rounded-xl px-6">
                 {isCreateMode ? 'Thêm mới' : 'Lưu thay đổi'}
               </Button>
             )}
@@ -128,3 +116,4 @@ export const PositionFormModal: React.FC<PositionFormModalProps> = ({
     </Modal>
   );
 };
+

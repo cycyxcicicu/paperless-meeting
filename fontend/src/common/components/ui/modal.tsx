@@ -8,12 +8,25 @@ export interface ModalProps {
   description?: React.ReactNode;
   children: React.ReactNode;
   className?: string;
+  preventClose?: boolean; // Thêm prop này
 }
 
-export function Modal({ isOpen, onClose, title, description, children, className }: ModalProps) {
+export function Modal({ isOpen, onClose, title, description, children, className, preventClose }: ModalProps) {
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className={className}>
+    <Dialog 
+      open={isOpen} 
+      onOpenChange={(open) => {
+        // Nếu preventClose là true, không cho phép đóng qua onOpenChange (Esc, click ngoài)
+        if (preventClose) return;
+        if (!open) onClose();
+      }}
+    >
+      <DialogContent 
+        className={className}
+        // Chặn phím Esc và click ra ngoài nếu preventClose = true
+        onPointerDownOutside={(e) => preventClose && e.preventDefault()}
+        onEscapeKeyDown={(e) => preventClose && e.preventDefault()}
+      >
         {(title || description) && (
           <DialogHeader>
             {title && <DialogTitle>{title}</DialogTitle>}

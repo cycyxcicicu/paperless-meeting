@@ -29,12 +29,17 @@ export const FormMultiSelect = ({
 
   return (
     <div className={cn("space-y-2", className)}>
+      {/* Label với dấu sao bắt buộc */}
+      {label && (
+        <label className="block text-sm body text-gray-700">
+          {label} {required && <span className="text-red-500">*</span>}
+        </label>
+      )}
       <Controller
         control={control}
         name={name}
         render={({ field }) => (
           <MultiSelect
-            label={label}
             options={options}
             values={field.value || []}
             onChange={field.onChange}

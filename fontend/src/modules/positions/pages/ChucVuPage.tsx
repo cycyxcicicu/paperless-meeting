@@ -1,48 +1,23 @@
 import React, { useState, useMemo } from 'react';
-import { QUAN_TRI_SIDEBAR_ITEMS } from '@/app/constants/sidebar';
-import { Sidebar, SidebarItem } from '@/common/components/layout/Sidebar';
-import { Pagination as AppPagination } from '@/common/components/ui/app-pagination';
 import { PageHeader } from '@/common/components/layout/PageHeader';
 import { PositionFormModal } from '@/modules/positions/components/PositionFormModal';
 import { DeletePositionModal } from '@/modules/positions/components/DeletePositionModal';
 import {
-  Users,
-  Shield,
-  Building2,
-  Briefcase,
-  History,
-  Settings,
-  Home,
-  ChevronLeft,
-  ChevronRight,
-  LayoutGrid,
-  List,
+  Search,
+  Plus,
+  RefreshCw,
 } from 'lucide-react';
 import { PositionSummary } from '@/modules/positions/components/PositionSummary';
-import { PositionToolbar } from '@/modules/positions/components/PositionToolbar';
-import { PositionTable } from '@/modules/positions/components/PositionTable';
-import { EmptyState } from '@/modules/positions/components/EmptyState';
 import { motion, AnimatePresence } from 'motion/react';
 import { toast } from '@/lib/toast';
 
-// Tạm thời định nghĩa cn tại đây để tránh lỗi import nếu có
-import { clsx, type ClassValue } from 'clsx';
-import { twMerge } from 'tailwind-merge';
-function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
-}
-
-
-
-interface Position {
-  id: string;
-  name: string;
-  code: string;
-  description: string;
-  memberCount: number;
-  status: 'active' | 'inactive';
-  createdAt: string;
-}
+// Import Table Engine
+import { DataTable } from '@/common/components/table-engine/DataTable';
+import { 
+  getPositionTableColumns, 
+  getPositionRowActions,
+  Position 
+} from '../table/positionTable.schema';
 
 const mockPositions: Position[] = [
   { id: '1', name: 'Chủ tịch UBND Thành phố', code: 'CT_UBND', description: 'Người đứng đầu cơ quan hành chính nhà nước cao nhất ở địa phương.', memberCount: 1, status: 'active', createdAt: '2023-01-15' },
@@ -61,10 +36,8 @@ const mockPositions: Position[] = [
 
 const ChucVuPage = () => {
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedPositions, setSelectedPositions] = useState<string[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
 
   // Modal state
   const [positionFormModal, setPositionFormModal] = useState<{
@@ -86,26 +59,9 @@ const ChucVuPage = () => {
     );
   }, [searchQuery]);
 
-  const totalPages = Math.ceil(filteredPositions.length / pageSize);
   const currentData = filteredPositions.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   // Handlers
-  const handleToggleSelectAll = () => {
-    if (selectedPositions.length === currentData.length) {
-      setSelectedPositions([]);
-    } else {
-      setSelectedPositions(currentData.map(p => p.id));
-    }
-  };
-
-  const handleToggleSelect = (id: string) => {
-    if (selectedPositions.includes(id)) {
-      setSelectedPositions(prev => prev.filter(i => i !== id));
-    } else {
-      setSelectedPositions(prev => [...prev, id]);
-    }
-  };
-
   const handleRefresh = () => {
     toast.success('Dữ liệu đã được cập nhật');
     setSearchQuery('');
@@ -115,33 +71,16 @@ const ChucVuPage = () => {
     setPositionFormModal({ isOpen: true, mode: 'create' });
   };
 
-  const handleExport = () => {
-    toast.info('Đang chuẩn bị dữ liệu xuất file...');
+  const handleView = (position: Position) => {
+    setPositionFormModal({ isOpen: true, mode: 'view', position });
   };
 
-  const handleView = (id: string) => {
-    const position = mockPositions.find(p => p.id === id);
-    if (position) {
-      setPositionFormModal({ isOpen: true, mode: 'view', position });
-    }
+  const handleEdit = (position: Position) => {
+    setPositionFormModal({ isOpen: true, mode: 'edit', position });
   };
 
-  const handleEdit = (id: string) => {
-    const position = mockPositions.find(p => p.id === id);
-    if (position) {
-      setPositionFormModal({ isOpen: true, mode: 'edit', position });
-    }
-  };
-
-  const handleDelete = (id: string) => {
-    const position = mockPositions.find(p => p.id === id);
-    if (position) {
-      setDeleteModal({ isOpen: true, position });
-    }
-  };
-
-  const handleResetSearch = () => {
-    setSearchQuery('');
+  const handleDelete = (position: Position) => {
+    setDeleteModal({ isOpen: true, position });
   };
 
   const handleClosePositionFormModal = () => {
@@ -153,116 +92,106 @@ const ChucVuPage = () => {
   };
 
   const handleSubmitPositionForm = (positionData: any) => {
-    console.log('Position form submitted:', positionData);
-
     if (positionFormModal.mode === 'create') {
-      toast.success('Thêm chức vụ thành công', `Đã thêm chức vụ "${positionData.name}" vào hệ thống`);
-      // TODO: Call API to create position
+      toast.success('Thêm chức vụ thành công');
     } else if (positionFormModal.mode === 'edit') {
-      toast.success('Cập nhật chức vụ thành công', `Thông tin chức vụ "${positionData.name}" đã được cập nhật`);
-      // TODO: Call API to update position
+      toast.success('Cập nhật chức vụ thành công');
     }
+    handleClosePositionFormModal();
   };
 
   const handleConfirmDelete = () => {
-    console.log('Delete position:', deleteModal.position);
     if (deleteModal.position) {
-      toast.success('Xóa chức vụ thành công', `Đã xóa chức vụ "${deleteModal.position.name}" khỏi hệ thống`);
+      toast.success('Xóa chức vụ thành công');
     }
-    // TODO: Call API to delete position
+    handleCloseDeleteModal();
+  };
+
+  // Table Configuration
+  const tableConfig = {
+    columns: getPositionTableColumns(),
+    rowActions: getPositionRowActions(handleView, handleEdit, handleDelete)
   };
 
   return (
-    <>
+    <div className="flex flex-col h-full bg-gray-50/50">
+      <div className="p-8">
+        <PageHeader
+          breadcrumbs={[
+            { name: "Trang chủ", path: "/" },
+            { name: "Quản lý", path: "/nguoi-dung" },
+            { name: "Danh mục chức vụ" },
+          ]}
+        />
 
-        {/* Page Header */}
-        <div className="p-8">
-          <PageHeader
-            breadcrumbs={[
-              { name: "Trang chủ", path: "/" },
-              { name: "Quản lý người dùng", path: "/nguoi-dung" },
-              { name: "Danh mục chức vụ" },
-            ]}
+        {/* Summary Strip */}
+        <PositionSummary 
+          totalPositions={mockPositions.length}
+          totalUsers={mockPositions.reduce((acc, curr) => acc + curr.memberCount, 0)}
+          activePositions={mockPositions.filter(p => p.status === 'active').length}
+          inactivePositions={mockPositions.filter(p => p.status === 'inactive').length}
+        />
 
-          />
+        {/* Main Content Card */}
+        <motion.div 
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          className="bg-white rounded-3xl border border-gray-200/60 shadow-xl shadow-gray-200/50 overflow-hidden"
+        >
+          {/* Toolbar */}
+          <div className="p-6 border-b border-gray-100 bg-white sticky top-0 z-20">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="flex-1 relative group">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400 group-focus-within:text-[#C8102E] transition-colors" />
+                <input
+                  type="text"
+                  placeholder="Tìm kiếm theo tên hoặc mã chức vụ..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full h-11 pl-12 pr-4 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#C8102E]/50 focus:ring-4 focus:ring-[#C8102E]/5 focus:bg-white transition-all"
+                />
+              </div>
 
-          {/* Summary Strip */}
-          <PositionSummary 
-            totalPositions={mockPositions.length}
-            totalUsers={mockPositions.reduce((acc, curr) => acc + curr.memberCount, 0)}
-            activePositions={mockPositions.filter(p => p.status === 'active').length}
-            inactivePositions={mockPositions.filter(p => p.status === 'inactive').length}
-          />
+              <div className="flex items-center gap-3">
+                <button 
+                  onClick={handleRefresh}
+                  className="w-11 h-11 flex items-center justify-center text-gray-500 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-all shadow-sm active:scale-95"
+                  title="Làm mới"
+                >
+                  <RefreshCw className="h-4.5 w-4.5" />
+                </button>
+                <div className="w-px h-6 bg-gray-200 mx-1" />
+                <button 
+                  onClick={handleAddNew}
+                  className="inline-flex items-center gap-2 h-11 px-6 bg-gradient-to-r from-[#C8102E] to-[#A90F14] text-white text-sm heading rounded-xl shadow-md hover:shadow-xl hover:-translate-y-0.5 transition-all active:scale-95 group"
+                >
+                  <Plus className="h-5 w-5" />
+                  <span>Thêm chức vụ</span>
+                </button>
+              </div>
+            </div>
+          </div>
 
-          {/* Main Content Card */}
-          <motion.div 
-            initial={{ y: 20, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            className="bg-white rounded-3xl border border-gray-200/60 shadow-xl shadow-gray-200/50 overflow-hidden"
-          >
-            {/* Toolbar */}
-            <PositionToolbar
-              searchQuery={searchQuery}
-              setSearchQuery={setSearchQuery}
-              onRefresh={handleRefresh}
-              onAddNew={handleAddNew}
-              onExport={handleExport}
+          {/* Table Content */}
+          <div className="p-0">
+            <DataTable
+              data={currentData}
+              config={tableConfig}
+              currentPage={currentPage}
+              pageSize={pageSize}
+              totalItems={filteredPositions.length}
+              totalPages={Math.ceil(filteredPositions.length / pageSize)}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={(size) => {
+                setPageSize(size);
+                setCurrentPage(1);
+              }}
+              itemLabel="chức vụ"
+              getRowId={(row) => row.id}
             />
-
-            {/* Content Area */}
-            <AnimatePresence mode="wait">
-              {filteredPositions.length > 0 ? (
-                <motion.div
-                  key="table"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.3 }}
-                >
-                  <PositionTable 
-                    positions={currentData}
-                    selectedPositions={selectedPositions}
-                    onToggleSelectAll={handleToggleSelectAll}
-                    onToggleSelect={handleToggleSelect}
-                    onEdit={handleEdit}
-                    onDelete={handleDelete}
-                    onView={handleView}
-                    currentPage={currentPage}
-                    pageSize={pageSize}
-                  />
-
-                  {/* Pagination */}
-                  <AppPagination
-                    currentPage={currentPage}
-                    totalPages={totalPages}
-                    pageSize={pageSize}
-                    totalItems={filteredPositions.length}
-                    onPageChange={setCurrentPage}
-                    onPageSizeChange={(size) => {
-                      setPageSize(size);
-                      setCurrentPage(1);
-                    }}
-                    itemLabel="chức vụ"
-                  />
-                </motion.div>
-              ) : (
-                <motion.div
-                  key="empty"
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                  transition={{ duration: 0.3 }}
-                >
-                  <EmptyState 
-                    type={searchQuery ? 'search' : 'no-data'} 
-                    onReset={handleResetSearch}
-                    onAdd={handleAddNew}
-                  />
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </motion.div>
-        </div>
+          </div>
+        </motion.div>
+      </div>
 
       {/* Modals */}
       <PositionFormModal
@@ -279,7 +208,7 @@ const ChucVuPage = () => {
         onConfirm={handleConfirmDelete}
         position={deleteModal.position}
       />
-    </>
+    </div>
   );
 };
 

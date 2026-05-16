@@ -1,25 +1,17 @@
-import { clsx, type ClassValue } from "clsx";
 import {
-    Activity,
-    ChevronLeft,
-    ChevronRight,
-    History,
-    Home,
+  Search,
+  RefreshCw,
+  History,
 } from "lucide-react";
-import { AnimatePresence, motion } from "motion/react";
+import { motion } from "motion/react";
 import { useMemo, useState } from "react";
-import { toast } from "sonner";
-import { twMerge } from "tailwind-merge";
-import { AuditFilters } from '@/modules/audit/components/AuditFilters';
+import { toast } from "@/lib/toast";
 import { AuditSummary } from '@/modules/audit/components/AuditSummary';
-import { AuditLog, AuditTable } from '@/modules/audit/components/AuditTable';
-import { AuditToolbar } from '@/modules/audit/components/AuditToolbar';
-import { Pagination } from '@/common/components/ui/app-pagination';
 import { PageHeader } from '@/common/components/layout/PageHeader';
 
-function cn(...inputs: ClassValue[]) {
-    return twMerge(clsx(inputs));
-}
+// Import Table Engine
+import { DataTable } from '@/common/components/table-engine/DataTable';
+import { getAuditTableColumns, AuditLog } from '../table/auditTable.schema';
 
 const mockAuditLogs: AuditLog[] = [
     {
@@ -170,39 +162,19 @@ const mockAuditLogs: AuditLog[] = [
 
 const AuditLogPage = () => {
     const [searchQuery, setSearchQuery] = useState("");
-    const [showFilters, setShowFilters] = useState(false);
-    const [selectedAction, setSelectedAction] = useState("all");
-    const [selectedObjectType, setSelectedObjectType] = useState("all");
     const [currentPage, setCurrentPage] = useState(1);
     const [pageSize, setPageSize] = useState(10);
 
     // Filter logs
     const filteredLogs = useMemo(() => {
         return mockAuditLogs.filter((log) => {
-            const matchesSearch =
-                searchQuery === "" ||
-                log.username
-                    .toLowerCase()
-                    .includes(searchQuery.toLowerCase()) ||
-                log.ipAddress.includes(searchQuery) ||
-                log.objectName
-                    .toLowerCase()
-                    .includes(searchQuery.toLowerCase()) ||
-                log.description
-                    .toLowerCase()
-                    .includes(searchQuery.toLowerCase());
-
-            const matchesAction =
-                selectedAction === "all" || log.action === selectedAction;
-            const matchesObjectType =
-                selectedObjectType === "all" ||
-                log.objectType.toLowerCase() === selectedObjectType;
-
-            return matchesSearch && matchesAction && matchesObjectType;
+            return searchQuery === "" ||
+                log.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                log.objectName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                log.description.toLowerCase().includes(searchQuery.toLowerCase());
         });
-    }, [searchQuery, selectedAction, selectedObjectType]);
+    }, [searchQuery]);
 
-    const totalPages = Math.ceil(filteredLogs.length / pageSize);
     const currentData = filteredLogs.slice(
         (currentPage - 1) * pageSize,
         currentPage * pageSize,
@@ -221,47 +193,27 @@ const AuditLogPage = () => {
 
     const activeUsers = new Set(mockAuditLogs.map((log) => log.username)).size;
 
-    const activeFiltersCount =
-        (selectedAction !== "all" ? 1 : 0) +
-        (selectedObjectType !== "all" ? 1 : 0);
-
     // Handlers
     const handleRefresh = () => {
         toast.success("Dữ liệu đã được cập nhật");
-    };
-
-    const handleExport = () => {
-        toast.info("Đang chuẩn bị file xuất dữ liệu...");
-    };
-
-    const handleSettings = () => {
-        toast.info("Cấu hình audit log");
-    };
-
-    const handleClearFilters = () => {
-        setSelectedAction("all");
-        setSelectedObjectType("all");
         setSearchQuery("");
     };
 
+    // Table Config
+    const tableConfig = {
+      columns: getAuditTableColumns(),
+    };
+
     return (
-        <>
+        <div className="flex flex-col h-full bg-gray-50/50">
             <div className="p-8">
                 {/* Page Header */}
                 <PageHeader
                     breadcrumbs={[
                         { name: "Trang chủ", path: "/" },
                         { name: "Quản trị hệ thống", path: "/nguoi-dung" },
-                        { name: "Lịch sử thay đổi" },
+                        { name: "Lịch sử truy cập" },
                     ]}
-                    actions={
-                        <div className="flex items-center gap-2 px-4 py-2 bg-gradient-to-br from-blue-50 to-blue-100/50 border border-blue-200 rounded-xl">
-                            <Activity className="h-4 w-4 text-blue-600" />
-                            <span className="text-xs heading text-blue-700 uppercase tracking-wider">
-                                Monitoring Active
-                            </span>
-                        </div>
-                    }
                 />
 
                 {/* Summary Strip */}
@@ -276,76 +228,55 @@ const AuditLogPage = () => {
                 <motion.div
                     initial={{ y: 20, opacity: 0 }}
                     animate={{ y: 0, opacity: 1 }}
-                    className="bg-white rounded-2xl border border-gray-200/60 shadow-lg shadow-gray-200/50 overflow-hidden"
+                    className="bg-white rounded-3xl border border-gray-200/60 shadow-xl shadow-gray-200/50 overflow-hidden"
                 >
                     {/* Toolbar */}
-                    <AuditToolbar
-                        searchQuery={searchQuery}
-                        setSearchQuery={setSearchQuery}
-                        showFilters={showFilters}
-                        setShowFilters={setShowFilters}
-                        activeFiltersCount={activeFiltersCount}
-                        onRefresh={handleRefresh}
-                        onExport={handleExport}
-                        onSettings={handleSettings}
-                    />
+                    <div className="p-6 border-b border-gray-100 bg-white sticky top-0 z-20">
+                      <div className="flex flex-wrap items-center justify-between gap-4">
+                        <div className="flex-1 relative group">
+                          <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400 group-focus-within:text-[#C8102E] transition-colors" />
+                          <input
+                            type="text"
+                            placeholder="Tìm kiếm theo người dùng, đối tượng, mô tả..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="w-full h-11 pl-12 pr-4 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#C8102E]/50 focus:ring-4 focus:ring-[#C8102E]/5 focus:bg-white transition-all"
+                          />
+                        </div>
 
-                    {/* Filters */}
-                    <AuditFilters
-                        show={showFilters}
-                        selectedAction={selectedAction}
-                        setSelectedAction={setSelectedAction}
-                        selectedObjectType={selectedObjectType}
-                        setSelectedObjectType={setSelectedObjectType}
-                        onClearFilters={handleClearFilters}
-                    />
+                        <div className="flex items-center gap-3">
+                          <button 
+                            onClick={handleRefresh}
+                            className="w-11 h-11 flex items-center justify-center text-gray-500 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-all shadow-sm active:scale-95"
+                            title="Làm mới"
+                          >
+                            <RefreshCw className="h-4.5 w-4.5" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
 
-                    {/* Content Area */}
-                    <AnimatePresence mode="wait">
-                        {filteredLogs.length > 0 ? (
-                            <motion.div
-                                key="table"
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                exit={{ opacity: 0 }}
-                                transition={{ duration: 0.2 }}
-                            >
-                                <AuditTable
-                                    logs={currentData}
-                                    currentPage={currentPage}
-                                    pageSize={pageSize}
-                                />
-
-                                {/* Pagination */}
-                                <Pagination
-                                    currentPage={currentPage}
-                                    totalPages={totalPages}
-                                    pageSize={pageSize}
-                                    totalItems={filteredLogs.length}
-                                    onPageChange={setCurrentPage}
-                                    onPageSizeChange={setPageSize}
-                                    itemLabel="log"
-                                />
-                            </motion.div>
-                        ) : (
-                            <motion.div
-                                key="empty"
-                                initial={{ opacity: 0, scale: 0.95 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                exit={{ opacity: 0, scale: 0.95 }}
-                                transition={{ duration: 0.2 }}
-                                className="py-16 text-center"
-                            >
-                                <History className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-                                <p className="text-sm text-gray-500 body">
-                                    Không tìm thấy log nào phù hợp với bộ lọc
-                                </p>
-                            </motion.div>
-                        )}
-                    </AnimatePresence>
+                    {/* Table Content */}
+                    <div className="p-0">
+                      <DataTable
+                        data={currentData}
+                        config={tableConfig}
+                        currentPage={currentPage}
+                        pageSize={pageSize}
+                        totalItems={filteredLogs.length}
+                        totalPages={Math.ceil(filteredLogs.length / pageSize)}
+                        onPageChange={setCurrentPage}
+                        onPageSizeChange={(size) => {
+                          setPageSize(size);
+                          setCurrentPage(1);
+                        }}
+                        itemLabel="log"
+                        getRowId={(row) => row.id}
+                      />
+                    </div>
                 </motion.div>
             </div>
-        </>
+        </div>
     );
 };
 

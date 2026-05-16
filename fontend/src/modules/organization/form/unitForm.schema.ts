@@ -1,0 +1,70 @@
+import { FormFieldConfig } from '@/common/components/form-engine/form.types';
+
+export const unitFormSchema: FormFieldConfig[] = [
+  {
+    key: 'name',
+    label: 'Tên đơn vị',
+    type: 'text',
+    required: true,
+    col: 'col-span-1',
+    allowedChars: 'no-special',
+  },
+  {
+    key: 'code',
+    label: 'Mã đơn vị',
+    type: 'text',
+    required: true,
+    col: 'col-span-1',
+    allowedChars: 'alphanumeric',
+    uppercase: true,
+  },
+  {
+    key: 'phone',
+    label: 'Số điện thoại',
+    type: 'phone',
+    required: true,
+    col: 'col-span-1',
+  },
+  {
+    key: 'foundedDate',
+    label: 'Ngày thành lập',
+    type: 'date',
+    required: true,
+    col: 'col-span-1',
+    disableFutureDates: true,
+  },
+  {
+    key: 'email',
+    label: 'Email',
+    type: 'email',
+    required: true,
+    col: 'col-span-1',
+  },
+  {
+    key: 'status',
+    label: 'Trạng thái',
+    type: 'select',
+    required: true,
+    col: 'col-span-1',
+    options: [
+      { value: 'active', label: 'Hoạt động' },
+      { value: 'inactive', label: 'Tạm ngưng' },
+    ],
+  },
+  {
+    key: 'address',
+    label: 'Địa chỉ',
+    type: 'text',
+    required: true,
+    col: 'col-span-2',
+  },
+  {
+    key: 'description',
+    label: 'Mô tả',
+    type: 'textarea',
+    rows: 3,
+    required: false,
+    col: 'col-span-2',
+    showPlaceholder: true,
+  },
+];
