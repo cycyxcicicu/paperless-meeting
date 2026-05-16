@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Clock, MapPin, User, Calendar } from 'lucide-react';
-import { Badge } from '@/app/components/ui/badge';
-import { Button } from '@/app/components/common/ui/Button';
+import { Badge } from '@/common/components/ui/badge';
+import { Button } from '@/common/components/ui/button';
 
 interface MeetingItem {
   id: number;
@@ -264,7 +264,7 @@ const HomePage = () => {
       <div className="space-y-4">
         {/* Title and Badge */}
         <div className="flex items-start justify-between gap-3">
-          <h4 className="text-base font-semibold text-gray-900 flex-1 line-clamp-2">
+          <h4 className="text-base btn-primary text-gray-900 flex-1 line-clamp-2">
             {meeting.name}
           </h4>
           {meeting.status === 'ongoing' && (
@@ -331,8 +331,8 @@ const HomePage = () => {
               className={`${stat.bgColor} border ${stat.borderColor} rounded-2xl p-6 transition-all hover:shadow-md`}
             >
               <div className="text-center">
-                <p className={`text-5xl font-bold ${stat.textColor} mb-2`}>{stat.value}</p>
-                <p className="text-sm font-medium text-gray-600">{stat.label}</p>
+                <p className={`text-5xl heading ${stat.textColor} mb-2`}>{stat.value}</p>
+                <p className="text-sm body text-gray-600">{stat.label}</p>
               </div>
             </div>
           ))}
@@ -348,7 +348,7 @@ const HomePage = () => {
                 <div className="flex items-center gap-1 p-2">
                   <button
                     onClick={() => setActiveTab('ongoing')}
-                    className={`flex-1 px-4 py-3 text-sm font-medium rounded-xl transition-all ${
+                    className={`flex-1 px-4 py-3 text-sm body rounded-xl transition-all ${
                       activeTab === 'ongoing'
                         ? 'bg-green-100 text-green-700'
                         : 'text-gray-600 hover:bg-gray-50'
@@ -358,7 +358,7 @@ const HomePage = () => {
                   </button>
                   <button
                     onClick={() => setActiveTab('upcoming')}
-                    className={`flex-1 px-4 py-3 text-sm font-medium rounded-xl transition-all ${
+                    className={`flex-1 px-4 py-3 text-sm body rounded-xl transition-all ${
                       activeTab === 'upcoming'
                         ? 'bg-blue-100 text-blue-700'
                         : 'text-gray-600 hover:bg-gray-50'
@@ -368,7 +368,7 @@ const HomePage = () => {
                   </button>
                   <button
                     onClick={() => setActiveTab('unconfirmed')}
-                    className={`flex-1 px-4 py-3 text-sm font-medium rounded-xl transition-all ${
+                    className={`flex-1 px-4 py-3 text-sm body rounded-xl transition-all ${
                       activeTab === 'unconfirmed'
                         ? 'bg-amber-100 text-amber-700'
                         : 'text-gray-600 hover:bg-gray-50'
@@ -386,7 +386,7 @@ const HomePage = () => {
                     <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gray-100 mb-4">
                       <Calendar className="h-8 w-8 text-gray-400" />
                     </div>
-                    <p className="text-sm font-medium text-gray-900 mb-1">Không có dữ liệu</p>
+                    <p className="text-sm body text-gray-900 mb-1">Không có dữ liệu</p>
                     <p className="text-sm text-gray-500">Chưa có phiên họp nào</p>
                   </div>
                 ) : (
@@ -405,7 +405,7 @@ const HomePage = () => {
             {/* Approval Meetings Card */}
             <div className="bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col h-[400px]">
               <div className="px-6 py-4 border-b border-gray-200 shrink-0">
-                <h3 className="text-base font-semibold text-gray-900">Cuộc họp cần phê duyệt</h3>
+                <h3 className="text-base btn-primary text-gray-900">Cuộc họp cần phê duyệt</h3>
                 <p className="text-sm text-gray-500 mt-1">{approvalMeetings.length} phiên họp</p>
               </div>
               <div className="flex-1 overflow-hidden p-6">
@@ -417,7 +417,7 @@ const HomePage = () => {
                     >
                       <div className="space-y-3">
                         <div className="flex items-start justify-between gap-2">
-                          <h4 className="text-sm font-semibold text-gray-900 line-clamp-2 flex-1">
+                          <h4 className="text-sm btn-primary text-gray-900 line-clamp-2 flex-1">
                             {meeting.name}
                           </h4>
                           <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100 shrink-0 text-xs">
@@ -455,7 +455,7 @@ const HomePage = () => {
             {/* Document Meetings Card */}
             <div className="bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col h-[426px]">
               <div className="px-6 py-4 border-b border-gray-200 shrink-0">
-                <h3 className="text-base font-semibold text-gray-900">Cuộc họp cần chuẩn bị tài liệu</h3>
+                <h3 className="text-base btn-primary text-gray-900">Cuộc họp cần chuẩn bị tài liệu</h3>
                 <p className="text-sm text-gray-500 mt-1">{documentMeetings.length} phiên họp</p>
               </div>
               <div className="flex-1 overflow-hidden p-6">
@@ -467,7 +467,7 @@ const HomePage = () => {
                     >
                       <div className="space-y-3">
                         <div className="flex items-start justify-between gap-2">
-                          <h4 className="text-sm font-semibold text-gray-900 line-clamp-2 flex-1">
+                          <h4 className="text-sm btn-primary text-gray-900 line-clamp-2 flex-1">
                             {meeting.name}
                           </h4>
                           <Badge

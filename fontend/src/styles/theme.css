@@ -104,7 +104,7 @@
   --accent-foreground: var(--text-primary);
   --destructive: var(--error);
   --destructive-foreground: var(--error-foreground);
-  --input: transparent;
+  --input: var(--neutral-300);
   --input-background: var(--surface);
   --ring: var(--primary);
   --radius: var(--radius-md);
@@ -363,3 +363,4 @@
 .scrollbar-track-gray-100::-webkit-scrollbar-track {
   background: #f3f4f6;
 }
+

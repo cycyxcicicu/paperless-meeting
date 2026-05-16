@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { Button } from '@/app/components/common/ui/Button';
-import { Input } from '../components/ui/input';
-import { Checkbox } from '../components/ui/checkbox';
-import { ImageWithFallback } from '../components/figma/ImageWithFallback';
+import { Button } from '@/common/components/ui/button';
+import { Input } from '@/common/components/ui/input';
+import { Checkbox } from '@/common/components/ui/checkbox';
+import { ImageWithFallback } from '@/common/components/ui/ImageWithFallback';
 import { useNavigate } from 'react-router';
 
 export default function LoginPage() {
@@ -34,7 +34,7 @@ export default function LoginPage() {
             {/* Nội dung trên overlay */}
             <div className="absolute inset-0 flex flex-col justify-end p-12 text-white">
               <div className="bg-[#C8102E] bg-opacity-90 rounded-xl p-8">
-                <h2 className="text-2xl font-semibold mb-3">
+                <h2 className="text-2xl btn-primary mb-3">
                   Hệ thống quản lý phòng họp không giấy
                 </h2>
                 <p className="text-sm opacity-95 leading-relaxed">
@@ -70,7 +70,7 @@ export default function LoginPage() {
             {/* Form đăng nhập */}
             <form onSubmit={handleLogin} className="space-y-6">
               <div className="space-y-2">
-                <label htmlFor="username" className="block text-sm font-medium text-[#111827]">
+                <label htmlFor="username" className="block text-sm body text-[#111827]">
                   Tên đăng nhập
                 </label>
                 <Input
@@ -85,7 +85,7 @@ export default function LoginPage() {
               </div>
 
               <div className="space-y-2">
-                <label htmlFor="password" className="block text-sm font-medium text-[#111827]">
+                <label htmlFor="password" className="block text-sm body text-[#111827]">
                   Mật khẩu
                 </label>
                 <Input
