@@ -1,8 +1,12 @@
 import React, { useState } from 'react';
-import { Plus, Trash2, Users as UsersIcon } from 'lucide-react';
+import { Plus, Trash2, Users as UsersIcon, Edit2 } from 'lucide-react';
 import { Button } from '@/common/components/ui/button';
 import { SelectUnitModal, Member } from './SelectUnitModal';
+import { AddGuestModal, GuestData } from './AddGuestModal';
+import { DataTable } from '@/common/components/table-engine/DataTable';
+import { TableEngineConfig } from '@/common/components/table-engine/table.types';
 import { cn } from '@/common/utils/cn';
+import { toast } from '@/lib/toast';
 
 interface ThanhPhanThamDuData {
   donVi: Member[];
@@ -14,70 +18,177 @@ interface ThanhPhanThamDuData {
 
 interface ThanhPhanThamDuStepProps {
   data: ThanhPhanThamDuData;
-  onChange: (data: ThanhPhanThamDuData) => void;
+  onChange?: (data: ThanhPhanThamDuData) => void;
+  readOnly?: boolean;
 }
 
-type TabType = 'donvi' | 'canhan' | 'nhom' | 'khachmoi';
+type TabType = 'donvi' | 'khachmoi';
 
-const ThanhPhanThamDuStep: React.FC<ThanhPhanThamDuStepProps> = ({ data, onChange }) => {
+const ThanhPhanThamDuStep: React.FC<ThanhPhanThamDuStepProps> = ({ data, onChange, readOnly = false }) => {
   const [activeTab, setActiveTab] = useState<TabType>('donvi');
-  const [showModal, setShowModal] = useState(false);
-  const [modalMode, setModalMode] = useState<'unit' | 'individual'>('unit');
+  const [showUnitModal, setShowUnitModal] = useState(false);
+  const [showGuestModal, setShowGuestModal] = useState(false);
+  const [editingGuest, setEditingGuest] = useState<GuestData | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 10;
 
   const tabs = [
-    { id: 'donvi' as TabType, label: 'Đơn vị', count: data.donVi.length },
-    { id: 'canhan' as TabType, label: 'Cá nhân', count: data.caNhan.length },
-    { id: 'nhom' as TabType, label: 'Nhóm thành viên', count: data.nhomThanhVien.length },
-    { id: 'khachmoi' as TabType, label: 'Khách mời', count: data.khachMoi.length },
+    { id: 'donvi' as TabType, label: 'Đơn vị', count: data.donVi?.length || 0 },
+    { id: 'khachmoi' as TabType, label: 'Khách mời', count: data.khachMoi?.length || 0 },
   ];
 
-  const handleAddFromUnitTree = (mode: 'unit' | 'individual') => {
-    setModalMode(mode);
-    setShowModal(true);
-  };
+  const handleConfirmUnitSelection = (selectedMembers: Member[]) => {
+    const existingIds = new Set((data.donVi || []).map((m: Member) => m.id));
+    const newMembers = selectedMembers.filter(m => !existingIds.has(m.id));
 
-  const handleConfirmSelection = (selectedMembers: Member[]) => {
-    if (modalMode === 'individual') {
-      // Add to Cá nhân tab - avoid duplicates
-      const existingIds = new Set(data.caNhan.map(m => m.id));
-      const newMembers = selectedMembers.filter(m => !existingIds.has(m.id));
-
+    if (onChange) {
       onChange({
         ...data,
-        caNhan: [...data.caNhan, ...newMembers],
-      });
-    } else if (modalMode === 'unit') {
-      // Add to Đơn vị tab - avoid duplicates
-      const existingIds = new Set(data.donVi.map((m: Member) => m.id));
-      const newMembers = selectedMembers.filter(m => !existingIds.has(m.id));
-
-      onChange({
-        ...data,
-        donVi: [...data.donVi, ...newMembers],
+        donVi: [...(data.donVi || []), ...newMembers],
       });
     }
   };
 
-  const handleRemoveMember = (memberId: string) => {
-    onChange({
-      ...data,
-      caNhan: data.caNhan.filter((m) => m.id !== memberId),
-      chuTriId: data.chuTriId === memberId ? null : data.chuTriId,
-    });
-  };
-
-  const handleSetChuTri = (memberId: string) => {
-    onChange({
-      ...data,
-      chuTriId: memberId,
-    });
+  const handleConfirmGuest = (guest: GuestData) => {
+    let updatedKhachMoi = [...(data.khachMoi || [])];
+    if (editingGuest) {
+      updatedKhachMoi = updatedKhachMoi.map((m: any) => m.id === guest.id ? guest : m);
+    } else {
+      updatedKhachMoi.push(guest);
+    }
+    
+    if (onChange) {
+      onChange({
+        ...data,
+        khachMoi: updatedKhachMoi,
+      });
+    }
+    setEditingGuest(null);
   };
 
   const handleRemoveFromDonVi = (memberId: string) => {
-    onChange({
-      ...data,
-      donVi: data.donVi.filter((m: Member) => m.id !== memberId),
+    if (onChange) {
+      onChange({
+        ...data,
+        donVi: data.donVi.filter((m: Member) => m.id !== memberId),
+      });
+    }
+  };
+
+  const handleRemoveGuest = (guestId: string) => {
+    if (onChange) {
+      onChange({
+        ...data,
+        khachMoi: data.khachMoi.filter((m: any) => m.id !== guestId),
+      });
+    }
+  };
+
+  const handleToggleChair = (memberId: string, checked: boolean) => {
+    if (checked) {
+      const currentChairs = (data.donVi || []).filter(m => m.isChair).length;
+      if (currentChairs >= 3) {
+        toast.error('Tối đa 3 người chủ trì', 'Bạn chỉ được chọn tối đa 3 người chủ trì cho phiên họp.');
+        return;
+      }
+    }
+
+    const updatedDonVi = (data.donVi || []).map(m => {
+      if (m.id === memberId) {
+        return { ...m, isChair: checked };
+      }
+      return m;
     });
+
+    if (onChange) {
+      onChange({
+        ...data,
+        donVi: updatedDonVi,
+      });
+    }
+  };
+
+  const donViTableConfig: TableEngineConfig<Member> = {
+    columns: [
+      { key: 'name', header: 'Họ và tên' },
+      { key: 'position', header: 'Chức vụ' },
+      { key: 'unit', header: 'Đơn vị' },
+      { key: 'email', header: 'Email' },
+      {
+        key: 'isChair',
+        header: 'Chủ trì',
+        width: '120px',
+        align: 'center',
+        render: (row) => {
+          if (readOnly) {
+            return row.isChair ? (
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-[#C8102E]">
+                Chủ trì
+              </span>
+            ) : (
+              <span className="text-gray-400 text-xs">-</span>
+            );
+          }
+
+          const currentChairs = (data.donVi || []).filter(m => m.isChair).length;
+          const isMaxReached = currentChairs >= 3;
+          const isChecked = !!row.isChair;
+          const isDisabled = isMaxReached && !isChecked;
+
+          return (
+            <div className="flex justify-center">
+              <input
+                type="checkbox"
+                checked={isChecked}
+                disabled={isDisabled}
+                onChange={(e) => handleToggleChair(row.id, e.target.checked)}
+                className={`w-4 h-4 rounded border-gray-300 text-[#C8102E] focus:ring-[#C8102E] transition-all ${
+                  isDisabled ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer hover:scale-105'
+                }`}
+              />
+            </div>
+          );
+        }
+      }
+    ],
+    rowActions: readOnly ? [] : [
+      {
+        key: 'delete',
+        label: 'Xóa',
+        icon: <Trash2 className="h-4 w-4" />,
+        variant: 'danger',
+        onClick: (row) => handleRemoveFromDonVi(row.id),
+      },
+    ],
+  };
+
+  const guestTableConfig: TableEngineConfig<any> = {
+    columns: [
+      { key: 'name', header: 'Họ và tên' },
+      { key: 'position', header: 'Chức vụ' },
+      { key: 'unit', header: 'Đơn vị' },
+      { key: 'email', header: 'Email' },
+      { key: 'phone', header: 'Số điện thoại', render: (row) => row.phone || '-' },
+    ],
+    rowActions: readOnly ? [] : [
+      {
+        key: 'edit',
+        label: 'Sửa',
+        icon: <Edit2 className="h-4 w-4" />,
+        variant: 'primary',
+        onClick: (row) => {
+          setEditingGuest(row);
+          setShowGuestModal(true);
+        },
+      },
+      {
+        key: 'delete',
+        label: 'Xóa',
+        icon: <Trash2 className="h-4 w-4" />,
+        variant: 'danger',
+        onClick: (row) => handleRemoveGuest(row.id),
+      },
+    ],
   };
 
   const EmptyState: React.FC<{ message: string; onAdd?: () => void }> = ({ message, onAdd }) => (
@@ -98,36 +209,40 @@ const ThanhPhanThamDuStep: React.FC<ThanhPhanThamDuStepProps> = ({ data, onChang
   return (
     <div>
       <div className="border border-gray-400 rounded-xl overflow-hidden">
-        {/* Tabs */}
-        <div className="border-b border-gray-200 bg-gray-50/50">
-          <div className="flex gap-1 px-6">
+        {/* Tabs - 50/50 Layout with sliding effect */}
+        <div className="bg-gray-100 p-1 border-b border-gray-300">
+          <div className="relative flex w-full">
+            {/* Background slider */}
+            <div 
+              className="absolute top-0 bottom-0 w-1/2 bg-white rounded-lg shadow-sm transition-transform duration-300 ease-in-out"
+              style={{ transform: activeTab === 'donvi' ? 'translateX(0%)' : 'translateX(100%)' }}
+            />
+            
             {tabs.map((tab) => (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => {
+                  setActiveTab(tab.id);
+                  setCurrentPage(1); // Reset page on tab change
+                }}
                 className={cn(
-                  'relative px-6 py-3 text-sm btn-primary transition-colors',
-                  activeTab === tab.id
-                    ? 'text-[#C8102E]'
-                    : 'text-gray-600 hover:text-gray-900'
+                  'relative w-1/2 py-2.5 text-sm btn-primary transition-colors z-10',
+                  activeTab === tab.id ? 'text-[#C8102E]' : 'text-gray-600 hover:text-gray-900'
                 )}
               >
-                {tab.label}
-                {tab.count > 0 && (
-                  <span
-                    className={cn(
-                      'ml-2 px-2 py-0.5 rounded-full text-xs heading',
-                      activeTab === tab.id
-                        ? 'bg-red-100 text-[#C8102E]'
-                        : 'bg-gray-100 text-gray-600'
-                    )}
-                  >
-                    {tab.count}
-                  </span>
-                )}
-                {activeTab === tab.id && (
-                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-[#C8102E] to-[#A90F14]" />
-                )}
+                <div className="flex items-center justify-center">
+                  {tab.label}
+                  {tab.count > 0 && (
+                    <span
+                      className={cn(
+                        'ml-2 px-2 py-0.5 rounded-full text-xs heading transition-colors',
+                        activeTab === tab.id ? 'bg-red-50 text-[#C8102E]' : 'bg-gray-200 text-gray-600'
+                      )}
+                    >
+                      {tab.count}
+                    </span>
+                  )}
+                </div>
               </button>
             ))}
           </div>
@@ -139,159 +254,38 @@ const ThanhPhanThamDuStep: React.FC<ThanhPhanThamDuStepProps> = ({ data, onChang
           {activeTab === 'donvi' && (
             <div>
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm btn-primary text-gray-700">Danh sách đơn vị</h3>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => handleAddFromUnitTree('unit')}
-                >
-                  <Plus className="h-4 w-4" />
-                  Thêm từ cây đơn vị
-                </Button>
+                <h3 className="text-sm btn-primary text-gray-700">Danh sách nhân viên từ Đơn vị</h3>
+                {!readOnly && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setShowUnitModal(true)}
+                  >
+                    <Plus className="h-4 w-4" />
+                    Thêm từ đơn vị
+                  </Button>
+                )}
               </div>
-              {data.donVi.length === 0 ? (
+              
+              {!data.donVi || data.donVi.length === 0 ? (
                 <EmptyState
-                  message="Chưa có đơn vị nào được thêm"
-                  onAdd={() => handleAddFromUnitTree('unit')}
+                  message="Chưa có nhân viên nào được thêm từ đơn vị"
+                  onAdd={() => setShowUnitModal(true)}
                 />
               ) : (
-                <div className="border border-gray-400 rounded-xl overflow-hidden">
-                  <table className="w-full">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-4 py-3 text-left text-xs btn-primary text-gray-600 uppercase">
-                          STT
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs btn-primary text-gray-600 uppercase">
-                          Họ và tên
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs btn-primary text-gray-600 uppercase">
-                          Chức vụ
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs btn-primary text-gray-600 uppercase">
-                          Đơn vị
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs btn-primary text-gray-600 uppercase">
-                          Email
-                        </th>
-                        <th className="w-20 px-4 py-3"></th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {data.donVi.map((member: Member, index: number) => (
-                        <tr key={member.id} className="hover:bg-gray-50">
-                          <td className="px-4 py-3 text-sm text-gray-600">{index + 1}</td>
-                          <td className="px-4 py-3 text-sm body text-gray-900">
-                            {member.name}
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-600">{member.position}</td>
-                          <td className="px-4 py-3 text-sm text-gray-600">{member.unit}</td>
-                          <td className="px-4 py-3 text-sm text-gray-600">{member.email}</td>
-                          <td className="px-4 py-3">
-                            <button
-                              onClick={() => handleRemoveFromDonVi(member.id)}
-                              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div className="border border-gray-200 rounded-xl overflow-hidden">
+                  <DataTable
+                    data={data.donVi.slice((currentPage - 1) * pageSize, currentPage * pageSize)}
+                    config={donViTableConfig}
+                    currentPage={currentPage}
+                    pageSize={pageSize}
+                    totalItems={data.donVi.length}
+                    totalPages={Math.ceil(data.donVi.length / pageSize)}
+                    onPageChange={setCurrentPage}
+                    onPageSizeChange={() => {}} // Assuming fixed size for simplicity or pass handler
+                  />
                 </div>
               )}
-            </div>
-          )}
-
-          {/* Tab: Cá nhân */}
-          {activeTab === 'canhan' && (
-            <div>
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm btn-primary text-gray-700">Danh sách cá nhân</h3>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => handleAddFromUnitTree('individual')}
-                >
-                  <Plus className="h-4 w-4" />
-                  Thêm từ cây đơn vị
-                </Button>
-              </div>
-              {data.caNhan.length === 0 ? (
-                <EmptyState
-                  message="Chưa có cá nhân nào được thêm"
-                  onAdd={() => handleAddFromUnitTree('individual')}
-                />
-              ) : (
-                <div className="border border-gray-400 rounded-xl overflow-hidden">
-                  <table className="w-full">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-4 py-3 text-left text-xs btn-primary text-gray-600 uppercase">
-                          Họ và tên
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs btn-primary text-gray-600 uppercase">
-                          Chức vụ
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs btn-primary text-gray-600 uppercase">
-                          Đơn vị
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs btn-primary text-gray-600 uppercase">
-                          Email
-                        </th>
-                        <th className="px-4 py-3 text-center text-xs btn-primary text-gray-600 uppercase">
-                          Chủ trì
-                        </th>
-                        <th className="w-20 px-4 py-3"></th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {data.caNhan.map((member) => (
-                        <tr key={member.id} className="hover:bg-gray-50">
-                          <td className="px-4 py-3 text-sm body text-gray-900">
-                            {member.name}
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-600">{member.position}</td>
-                          <td className="px-4 py-3 text-sm text-gray-600">{member.unit}</td>
-                          <td className="px-4 py-3 text-sm text-gray-600">{member.email}</td>
-                          <td className="px-4 py-3 text-center">
-                            <input
-                              type="radio"
-                              name="chuTri"
-                              checked={data.chuTriId === member.id}
-                              onChange={() => handleSetChuTri(member.id)}
-                              className="w-4 h-4 text-[#C8102E] border-gray-300 focus:ring-[#C8102E]"
-                            />
-                          </td>
-                          <td className="px-4 py-3">
-                            <button
-                              onClick={() => handleRemoveMember(member.id)}
-                              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Tab: Nhóm thành viên */}
-          {activeTab === 'nhom' && (
-            <div>
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm btn-primary text-gray-700">Danh sách nhóm</h3>
-                <Button variant="secondary" size="sm">
-                  <Plus className="h-4 w-4" />
-                  Thêm nhóm
-                </Button>
-              </div>
-              <EmptyState message="Chưa có nhóm thành viên nào" />
             </div>
           )}
 
@@ -300,24 +294,52 @@ const ThanhPhanThamDuStep: React.FC<ThanhPhanThamDuStepProps> = ({ data, onChang
             <div>
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm btn-primary text-gray-700">Danh sách khách mời</h3>
-                <Button variant="secondary" size="sm">
-                  <Plus className="h-4 w-4" />
-                  Thêm khách mời
-                </Button>
+                {!readOnly && (
+                  <Button variant="secondary" size="sm" onClick={() => { setEditingGuest(null); setShowGuestModal(true); }}>
+                    <Plus className="h-4 w-4" />
+                    Thêm khách mời
+                  </Button>
+                )}
               </div>
-              <EmptyState message="Chưa có khách mời nào" />
+              
+              {!data.khachMoi || data.khachMoi.length === 0 ? (
+                <EmptyState 
+                  message="Chưa có khách mời nào được thêm" 
+                  onAdd={() => { setEditingGuest(null); setShowGuestModal(true); }}
+                />
+              ) : (
+                <div className="border border-gray-200 rounded-xl overflow-hidden">
+                  <DataTable
+                    data={data.khachMoi.slice((currentPage - 1) * pageSize, currentPage * pageSize)}
+                    config={guestTableConfig}
+                    currentPage={currentPage}
+                    pageSize={pageSize}
+                    totalItems={data.khachMoi.length}
+                    totalPages={Math.ceil(data.khachMoi.length / pageSize)}
+                    onPageChange={setCurrentPage}
+                    onPageSizeChange={() => {}}
+                  />
+                </div>
+              )}
             </div>
           )}
         </div>
       </div>
 
-      {/* Modal */}
+      {/* Modals */}
       <SelectUnitModal
-        isOpen={showModal}
-        onClose={() => setShowModal(false)}
-        onConfirm={handleConfirmSelection}
-        mode={modalMode}
-        title={modalMode === 'unit' ? 'Chọn đơn vị' : 'Chọn cá nhân'}
+        isOpen={showUnitModal}
+        onClose={() => setShowUnitModal(false)}
+        onConfirm={handleConfirmUnitSelection}
+        mode="unit"
+        title="Chọn từ đơn vị"
+      />
+
+      <AddGuestModal
+        isOpen={showGuestModal}
+        onClose={() => { setShowGuestModal(false); setEditingGuest(null); }}
+        onConfirm={handleConfirmGuest}
+        initialData={editingGuest}
       />
     </div>
   );

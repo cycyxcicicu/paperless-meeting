@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { X, Upload } from 'lucide-react';
+import { X } from 'lucide-react';
 import { Button } from '@/common/components/ui/button';
 import { Label } from '@/common/components/ui/label';
 import { Textarea } from '@/common/components/ui/textarea';
 import { CustomSelect } from '@/common/components/ui/custom-select';
 import { cn } from '@/common/utils/cn';
+import { FileUploader } from '@/common/components/ui/FileUploader';
 
 interface AddOpinionForContentModalProps {
   isOpen: boolean;
@@ -44,49 +45,7 @@ export const AddOpinionForContentModal: React.FC<
     onClose();
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files) return;
 
-    const fileArray = Array.from(files);
-    const validFiles: File[] = [];
-    const allowedExtensions = [
-      'doc',
-      'docx',
-      'xls',
-      'xlsx',
-      'txt',
-      'ppt',
-      'pptx',
-      'pdf',
-      'jpeg',
-      'jpg',
-      'png',
-    ];
-    const maxSize = 50 * 1024 * 1024; // 50MB
-
-    for (const file of fileArray) {
-      const extension = file.name.split('.').pop()?.toLowerCase();
-
-      if (!extension || !allowedExtensions.includes(extension)) {
-        alert(`File ${file.name} không đúng định dạng cho phép`);
-        continue;
-      }
-
-      if (file.size > maxSize) {
-        alert(`File ${file.name} vượt quá dung lượng 50MB`);
-        continue;
-      }
-
-      validFiles.push(file);
-    }
-
-    setAttachments([...attachments, ...validFiles]);
-  };
-
-  const handleRemoveFile = (index: number) => {
-    setAttachments(attachments.filter((_, i) => i !== index));
-  };
 
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};
@@ -152,8 +111,8 @@ export const AddOpinionForContentModal: React.FC<
           <div className="space-y-5">
             {/* Góp ý cho nội dung */}
             <div className="space-y-2">
-              <Label htmlFor="contentId" required className="text-sm body text-gray-700">
-                Góp ý cho nội dung
+              <Label htmlFor="contentId" className="text-sm body text-gray-700">
+                Góp ý cho nội dung <span className="text-[#C8102E]">*</span>
               </Label>
               <CustomSelect
                 value={contentId}
@@ -189,8 +148,8 @@ export const AddOpinionForContentModal: React.FC<
 
             {/* Chi tiết góp ý */}
             <div className="space-y-2">
-              <Label htmlFor="opinionDetail" required className="text-sm body text-gray-700">
-                Chi tiết góp ý
+              <Label htmlFor="opinionDetail" className="text-sm body text-gray-700">
+                Chi tiết góp ý <span className="text-[#C8102E]">*</span>
               </Label>
               <Textarea
                 id="opinionDetail"
@@ -209,60 +168,14 @@ export const AddOpinionForContentModal: React.FC<
             </div>
 
             {/* Tài liệu đính kèm */}
-            <div className="space-y-2">
-              <Label className="text-sm body text-gray-700">Tài liệu đính kèm</Label>
-              <label className="flex flex-col items-center justify-center w-full h-32 px-4 border-2 border-dashed border-gray-300 rounded-xl hover:border-[#C8102E]/60 hover:bg-red-50/30 transition-all cursor-pointer bg-gray-50/50">
-                <div className="text-center">
-                  <Upload className="h-8 w-8 mx-auto text-gray-400 mb-2" />
-                  <p className="text-sm text-gray-600 mb-1">
-                    <span className="btn-primary text-[#C8102E]">Chọn file</span> hoặc{' '}
-                    <span className="btn-primary">Kéo thả từ máy tính</span>
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    Tối đa 50MB, định dạng .doc, .docx, .xls, .xlsx, .txt, .ppt, .pptx,
-                    .pdf, jpeg, jpg, png
-                  </p>
-                </div>
-                <input
-                  type="file"
-                  className="hidden"
-                  accept=".doc,.docx,.xls,.xlsx,.txt,.ppt,.pptx,.pdf,.jpeg,.jpg,.png"
-                  multiple
-                  onChange={handleFileChange}
-                />
-              </label>
-
-              {/* Danh sách file đã chọn */}
-              {attachments.length > 0 && (
-                <div className="space-y-2 mt-3">
-                  {attachments.map((file, index) => (
-                    <div
-                      key={index}
-                      className="flex items-center justify-between p-3 bg-gray-50 border border-gray-200 rounded-lg"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded bg-blue-50 flex items-center justify-center">
-                          <Upload className="w-4 h-4 text-blue-600" />
-                        </div>
-                        <div>
-                          <p className="text-sm body text-gray-900">{file.name}</p>
-                          <p className="text-xs text-gray-500">
-                            {(file.size / 1024).toFixed(2)} KB
-                          </p>
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveFile(index)}
-                        className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+            <FileUploader
+              files={attachments}
+              onChange={setAttachments}
+              multiple={true}
+              accept=".doc,.docx,.xls,.xlsx,.txt,.ppt,.pptx,.pdf,.jpeg,.jpg,.png"
+              allowedExtensionsText="PDF, Word, Excel, Hình ảnh"
+              label="Tài liệu đính kèm"
+            />
           </div>
 
           {/* Footer */}

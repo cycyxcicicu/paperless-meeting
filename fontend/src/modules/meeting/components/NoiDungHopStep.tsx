@@ -1,11 +1,15 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, X, Upload, Trash2 } from 'lucide-react';
+import { Plus, X, Trash2, CalendarIcon } from 'lucide-react';
+import { FileUploader } from '@/common/components/ui/FileUploader';
 import { Button } from '@/common/components/ui/button';
 import { Label } from '@/common/components/ui/label';
 import { Input } from '@/common/components/ui/input';
 import { Textarea } from '@/common/components/ui/textarea';
-import { DateTimePicker } from '@/common/components/ui/datetime-picker';
+import { ScrollDatePicker } from '@/common/components/ui/scroll-date-picker';
+import { Popover, PopoverContent, PopoverTrigger } from '@/common/components/ui/popover';
 import { CustomSelect } from '@/common/components/ui/custom-select';
+import { format } from 'date-fns';
+import { vi } from 'date-fns/locale';
 import { cn } from '@/common/utils/cn';
 import { Member } from './SelectUnitModal';
 
@@ -52,6 +56,8 @@ interface NoiDungHopStepProps {
   inheritedParticipants?: ThanhPhanThamDuData;
 }
 
+
+
 const NoiDungHopStep: React.FC<NoiDungHopStepProps> = ({
   data,
   onChange,
@@ -96,8 +102,8 @@ const NoiDungHopStep: React.FC<NoiDungHopStepProps> = ({
     inheritedParticipants.caNhan.forEach((person) => {
       options.push({
         value: person.id,
-        label: person.chucVu
-          ? `${person.name} - ${person.chucVu}`
+        label: person.position
+          ? `${person.name} - ${person.position}`
           : person.name,
       });
     });
@@ -106,8 +112,8 @@ const NoiDungHopStep: React.FC<NoiDungHopStepProps> = ({
     inheritedParticipants.donVi.forEach((person) => {
       options.push({
         value: person.id,
-        label: person.chucVu
-          ? `${person.name} - ${person.chucVu}`
+        label: person.position
+          ? `${person.name} - ${person.position}`
           : person.name,
       });
     });
@@ -195,6 +201,8 @@ const NoiDungHopStep: React.FC<NoiDungHopStepProps> = ({
     });
   };
 
+
+
   const handleRemoveParticipant = (type: 'caNhan' | 'donVi' | 'khachMoi' | 'nhomThanhVien', id: string) => {
     const content = data.contents.find((c) => c.id === activeContentId);
     if (!content) return;
@@ -258,8 +266,8 @@ const NoiDungHopStep: React.FC<NoiDungHopStepProps> = ({
           <div className="p-6 space-y-6 bg-white">
             {/* Nội dung chi tiết */}
             <div className="space-y-2">
-              <Label htmlFor="noiDungChiTiet" required className="text-sm">
-                Nội dung chi tiết
+              <Label htmlFor="noiDungChiTiet" className="text-sm">
+                Nội dung chi tiết <span className="text-[#C8102E]">*</span>
               </Label>
               <Textarea
                 id="noiDungChiTiet"
@@ -286,78 +294,106 @@ const NoiDungHopStep: React.FC<NoiDungHopStepProps> = ({
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="thoiGianBatDau">Thời gian bắt đầu</Label>
-                <DateTimePicker
-                  value={activeContent.thoiGianBatDau}
-                  onChange={(value) =>
-                    handleUpdateContent(activeContentId, { thoiGianBatDau: value })
-                  }
-                  placeholder="Chọn thời gian bắt đầu"
-                />
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        'w-full justify-start text-left caption border-gray-400 hover:border-gray-500 rounded-xl font-normal',
+                        !activeContent.thoiGianBatDau && 'text-gray-500',
+                        errors[activeContentId]?.thoiGianBatDau && 'border-red-500 focus-visible:ring-red-500'
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {activeContent.thoiGianBatDau ? (
+                        format(new Date(activeContent.thoiGianBatDau), 'dd/MM/yyyy HH:mm', { locale: vi })
+                      ) : (
+                        <span>Chọn thời gian bắt đầu</span>
+                      )}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <ScrollDatePicker
+                      value={activeContent.thoiGianBatDau ? new Date(activeContent.thoiGianBatDau) : undefined}
+                      onChange={(date) =>
+                        handleUpdateContent(activeContentId, { thoiGianBatDau: date.toISOString() })
+                      }
+                      showTime={true}
+                    />
+                  </PopoverContent>
+                </Popover>
+                {errors[activeContentId]?.thoiGianBatDau && (
+                  <p className="text-xs text-red-600 body">
+                    {errors[activeContentId].thoiGianBatDau}
+                  </p>
+                )}
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="thoiGianKetThuc">Thời gian kết thúc</Label>
-                <DateTimePicker
-                  value={activeContent.thoiGianKetThuc}
-                  onChange={(value) =>
-                    handleUpdateContent(activeContentId, { thoiGianKetThuc: value })
-                  }
-                  placeholder="Chọn thời gian kết thúc"
-                />
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        'w-full justify-start text-left caption border-gray-400 hover:border-gray-500 rounded-xl font-normal',
+                        !activeContent.thoiGianKetThuc && 'text-gray-500',
+                        errors[activeContentId]?.thoiGianKetThuc && 'border-red-500 focus-visible:ring-red-500'
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {activeContent.thoiGianKetThuc ? (
+                        format(new Date(activeContent.thoiGianKetThuc), 'dd/MM/yyyy HH:mm', { locale: vi })
+                      ) : (
+                        <span>Chọn thời gian kết thúc</span>
+                      )}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <ScrollDatePicker
+                      value={activeContent.thoiGianKetThuc ? new Date(activeContent.thoiGianKetThuc) : undefined}
+                      onChange={(date) =>
+                        handleUpdateContent(activeContentId, { thoiGianKetThuc: date.toISOString() })
+                      }
+                      showTime={true}
+                    />
+                  </PopoverContent>
+                </Popover>
+                {errors[activeContentId]?.thoiGianKetThuc && (
+                  <p className="text-xs text-red-600 body">
+                    {errors[activeContentId].thoiGianKetThuc}
+                  </p>
+                )}
               </div>
             </div>
 
-            {/* Người chuẩn bị & duyệt */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="nguoiChuanBi">Người chuẩn bị tài liệu</Label>
-                <CustomSelect
-                  value={activeContent.nguoiChuanBi}
-                  onChange={(value) =>
-                    handleUpdateContent(activeContentId, { nguoiChuanBi: value })
-                  }
-                  options={participantOptions}
-                  placeholder={
-                    participantOptions.length === 0
-                      ? 'Vui lòng chọn thành phần tham dự ở bước 2'
-                      : 'Chọn người chuẩn bị'
-                  }
-                  disabled={participantOptions.length === 0}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="nguoiDuyet">Người duyệt tài liệu</Label>
-                <CustomSelect
-                  value={activeContent.nguoiDuyet}
-                  onChange={(value) =>
-                    handleUpdateContent(activeContentId, { nguoiDuyet: value })
-                  }
-                  options={participantOptions}
-                  placeholder={
-                    participantOptions.length === 0
-                      ? 'Vui lòng chọn thành phần tham dự ở bước 2'
-                      : 'Chọn người duyệt'
-                  }
-                  disabled={participantOptions.length === 0}
-                />
-              </div>
+            {/* Người chuẩn bị tài liệu */}
+            <div className="space-y-2">
+              <Label htmlFor="nguoiChuanBi">Người chuẩn bị tài liệu</Label>
+              <CustomSelect
+                value={activeContent.nguoiChuanBi}
+                onChange={(value) =>
+                  handleUpdateContent(activeContentId, { nguoiChuanBi: value })
+                }
+                options={participantOptions}
+                placeholder={
+                  participantOptions.length === 0
+                    ? 'Vui lòng chọn thành phần tham dự ở bước 2'
+                    : 'Chọn người chuẩn bị'
+                }
+                disabled={participantOptions.length === 0}
+              />
             </div>
 
             {/* Upload tài liệu */}
-            <div className="space-y-2">
-              <Label className="text-sm">Tài liệu đính kèm</Label>
-              <label className="flex items-center justify-center w-full h-28 px-4 border-2 border-dashed border-gray-400 rounded-xl hover:border-[#C8102E]/60 hover:bg-red-50/30 transition-all cursor-pointer bg-gray-50/50">
-                <div className="text-center">
-                  <Upload className="h-8 w-8 mx-auto text-gray-400 mb-2" />
-                  <p className="text-sm text-gray-600">
-                    <span className="btn-primary text-[#C8102E]">Chọn file</span> hoặc kéo thả
-                  </p>
-                  <p className="text-xs text-gray-500 mt-1">PDF, DOC, DOCX, XLS (Max 50MB)</p>
-                </div>
-                <input type="file" className="hidden" accept=".pdf,.doc,.docx,.xls,.xlsx" multiple />
-              </label>
-            </div>
+            <FileUploader
+              files={activeContent.taiLieu || []}
+              onChange={(files) => handleUpdateContent(activeContentId, { taiLieu: files })}
+              multiple={true}
+              accept=".pdf,.doc,.docx,.xls,.xlsx"
+              allowedExtensionsText="PDF, DOC, DOCX, XLS, XLSX"
+              label="Tài liệu đính kèm"
+            />
 
             {/* Danh sách vấn đề cần biểu quyết */}
             <div className="space-y-3">

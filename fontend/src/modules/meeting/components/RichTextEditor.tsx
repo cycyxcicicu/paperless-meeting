@@ -3,12 +3,12 @@ import ReactQuill, { Quill } from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
 
 // Register fonts
-const Font = Quill.import('formats/font');
+const Font = Quill.import('formats/font') as any;
 Font.whitelist = ['be-vietnam', 'arial', 'times', 'courier', 'georgia'];
 Quill.register(Font, true);
 
 // Register sizes
-const Size = Quill.import('formats/size');
+const Size = Quill.import('formats/size') as any;
 Size.whitelist = ['small', 'normal', 'large', 'huge'];
 Quill.register(Size, true);
 

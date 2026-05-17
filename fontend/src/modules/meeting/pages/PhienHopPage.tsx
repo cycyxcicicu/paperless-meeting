@@ -1,33 +1,20 @@
-import {
-    ChevronDown,
-    Clock,
-    Eye,
-    FileText,
-    Filter,
-    MapPin,
-    Plus,
-    Search,
-    Users,
-} from "lucide-react";
+import { Clock, Eye, Plus, Search, Users } from "lucide-react";
 import { useMemo, useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { toast } from '@/lib/toast';
 import { CustomDropdown } from '@/common/components/ui/custom-dropdown';
-import { Pagination as AppPagination } from '@/common/components/ui/app-pagination';
 import { FilterBar } from '@/common/components/layout/FilterBar';
 import { PageHeader } from '@/common/components/layout/PageHeader';
 import { Sidebar } from '@/common/components/layout/Sidebar';
 import { ConfirmActionModal } from '@/modules/meeting/components/ConfirmActionModal';
-import { MeetingActionMenu } from '@/modules/meeting/components/MeetingActionMenu';
-import {
-    PostponeData,
-    PostponeModal,
-} from '@/modules/meeting/components/PostponeModal';
+import { PostponeData, PostponeModal } from '@/modules/meeting/components/PostponeModal';
 import { PollManagement } from '@/modules/poll/components/PollManagement';
 import { Badge } from '@/common/components/ui/badge';
 import { Button } from '@/common/components/ui/button';
-import { Card, CardContent  } from '@/common/components/ui/card';
-
+import { Card, CardContent } from '@/common/components/ui/card';
+import { DataTable } from "@/common/components/table-engine/DataTable";
+import { MeetingCard } from "../components/MeetingCard";
+import { createMeetingColumns, createMeetingRowActions, Meeting } from "../table/meetingTable.schema";
 import { PHIEN_HOP_SIDEBAR_ITEMS } from '@/app/constants/sidebar';
 const PhienHopPage = () => {
     const navigate = useNavigate();
@@ -446,14 +433,7 @@ const PhienHopPage = () => {
 
     // Action handlers
     const handleViewDetail = (id: number) => {
-        const meeting = allMeetings.find((m) => m.id === id);
-
-        // Điều hướng theo trạng thái phiên họp
-        if (meeting?.status === "Sắp diễn ra") {
-            navigate(`/phien-hop/${id}/sap-dien-ra`);
-        } else {
-            navigate(`/phien-hop/${id}`);
-        }
+        navigate(`/phien-hop/${id}`);
     };
 
     const handleUpdate = (id: number) => {
@@ -463,10 +443,8 @@ const PhienHopPage = () => {
     const handleCopy = (id: number) => {
         const meeting = allMeetings.find((m) => m.id === id);
         console.log("Copy meeting:", id);
-        toast.success(
-            "Sao chép thành công",
-            `Đã sao chép phiên họp "${meeting?.title || "#" + id}"`,
-        );
+        // Navigate to create page with copy state
+        navigate('/phien-hop/tao-moi', { state: { copyFromId: id } });
     };
 
     const handlePostpone = (id: number) => {
@@ -606,14 +584,50 @@ const PhienHopPage = () => {
         return result;
     }, [selectedStatus, searchQuery]);
 
-    // Pagination calculations
     const totalItems = filteredMeetings.length;
-    const totalPages = Math.ceil(totalItems / pageSize);
+    
     const paginatedMeetings = useMemo(() => {
         const startIndex = (currentPage - 1) * pageSize;
         const endIndex = startIndex + pageSize;
         return filteredMeetings.slice(startIndex, endIndex);
     }, [filteredMeetings, currentPage, pageSize]);
+
+    // Table Config
+    const columns = useMemo(() => createMeetingColumns({
+        onView: handleViewDetail,
+        onUpdate: handleUpdate,
+        onCopy: handleCopy,
+        onPostpone: handlePostpone,
+        onCancel: handleCancel,
+        onSend: handleSend,
+    }), []);
+
+    const rowActions = useMemo(() => createMeetingRowActions({
+        onView: handleViewDetail,
+        onUpdate: handleUpdate,
+        onCopy: handleCopy,
+        onPostpone: handlePostpone,
+        onCancel: handleCancel,
+        onSend: handleSend,
+    }), []);
+
+    const tableConfig = {
+        columns,
+        rowActions,
+    };
+
+    const renderMeetingCard = (meeting: any) => (
+        <MeetingCard
+            key={meeting.id}
+            meeting={meeting as Meeting}
+            onViewDetail={handleViewDetail}
+            onUpdate={handleUpdate}
+            onCopy={handleCopy}
+            onPostpone={handlePostpone}
+            onCancel={handleCancel}
+            onSend={handleSend}
+        />
+    );
 
     return (
         <>
@@ -704,181 +718,17 @@ const PhienHopPage = () => {
                         </FilterBar>
 
                         {/* Meetings List */}
-                        <div className="space-y-4 mb-6">
-                            {paginatedMeetings.length > 0 ? (
-                                paginatedMeetings.map((meeting) => (
-                                    <Card
-                                        key={meeting.id}
-                                        className="hover:shadow-lg transition-all"
-                                    >
-                                        <CardContent className="p-6">
-                                            <div className="flex items-start gap-6">
-                                                {/* Left: Date icon + Content */}
-                                                <div className="flex gap-4 flex-1">
-                                                    <div className="w-14 h-14 rounded-xl bg-[#FEF2F2] flex flex-col items-center justify-center flex-shrink-0">
-                                                        <span className="text-xs text-[#C8102E] body">
-                                                            {
-                                                                meeting.date.split(
-                                                                    "/",
-                                                                )[0]
-                                                            }
-                                                        </span>
-                                                        <span className="text-lg heading text-[#C8102E]">
-                                                            T
-                                                            {
-                                                                meeting.date.split(
-                                                                    "/",
-                                                                )[1]
-                                                            }
-                                                        </span>
-                                                    </div>
-
-                                                    <div className="flex-1">
-                                                        {/* Title */}
-                                                        <div className="flex flex-col mb-2">
-                                                            <h3 className="text-base btn-primary text-[#111827] mb-1">
-                                                                {meeting.title}
-                                                            </h3>
-                                                            <p className="text-sm text-[#6B7280]">
-                                                                Chủ trì:{" "}
-                                                                {meeting.host}
-                                                            </p>
-                                                        </div>
-
-                                                        {/* Info Grid */}
-                                                        <div className="grid grid-cols-2 gap-x-6 gap-y-2 mt-3">
-                                                            <div className="flex items-center gap-2 text-sm text-[#6B7280]">
-                                                                <Clock className="h-4 w-4 text-[#9CA3AF]" />
-                                                                <span>
-                                                                    {
-                                                                        meeting.time
-                                                                    }
-                                                                </span>
-                                                            </div>
-                                                            <div className="flex items-center gap-2 text-sm text-[#6B7280]">
-                                                                <Users className="h-4 w-4 text-[#9CA3AF]" />
-                                                                <span>
-                                                                    {
-                                                                        meeting.participants
-                                                                    }{" "}
-                                                                    thành viên
-                                                                </span>
-                                                            </div>
-                                                            <div className="flex items-center gap-2 text-sm text-[#6B7280]">
-                                                                <MapPin className="h-4 w-4 text-[#9CA3AF]" />
-                                                                <span>
-                                                                    {
-                                                                        meeting.location
-                                                                    }
-                                                                </span>
-                                                            </div>
-                                                            <div className="flex items-center gap-2 text-sm text-[#6B7280]">
-                                                                <FileText className="h-4 w-4 text-[#9CA3AF]" />
-                                                                <span>
-                                                                    {
-                                                                        meeting.documents
-                                                                    }{" "}
-                                                                    tài liệu
-                                                                </span>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-
-                                                {/* Right: Actions */}
-                                                <div className="flex items-center pt-1">
-                                                    {/* Status Badge Column */}
-                                                    <div className="w-[140px] flex justify-start flex-shrink-0">
-                                                        <Badge
-                                                            variant={
-                                                                meeting.statusVariant
-                                                            }
-                                                            className="h-[30px] px-3.5 text-[13px] rounded-full whitespace-nowrap body"
-                                                        >
-                                                            {meeting.status}
-                                                        </Badge>
-                                                    </div>
-
-                                                    {/* View Detail Icon */}
-                                                    <div className="w-10 flex justify-center flex-shrink-0">
-                                                        <div className="relative group">
-                                                            <button
-                                                                type="button"
-                                                                onClick={() =>
-                                                                    handleViewDetail(
-                                                                        meeting.id,
-                                                                    )
-                                                                }
-                                                                className="p-2 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400 hover:text-[#C8102E] transition-all"
-                                                            >
-                                                                <Eye className="h-4 w-4" />
-                                                            </button>
-                                                            {/* Tooltip */}
-                                                            <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 hidden group-hover:block z-10">
-                                                                <div className="bg-gray-900 text-white text-xs rounded-lg px-3 py-1.5 whitespace-nowrap">
-                                                                    Xem chi tiết
-                                                                    <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 border-4 border-transparent border-t-gray-900"></div>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-
-                                                    {/* Action Menu (3 dots) */}
-                                                    <div className="w-10 flex justify-center flex-shrink-0">
-                                                        <MeetingActionMenu
-                                                            meetingId={
-                                                                meeting.id
-                                                            }
-                                                            status={
-                                                                meeting.status
-                                                            }
-                                                            onViewDetail={
-                                                                handleViewDetail
-                                                            }
-                                                            onUpdate={
-                                                                handleUpdate
-                                                            }
-                                                            onCopy={handleCopy}
-                                                            onPostpone={
-                                                                handlePostpone
-                                                            }
-                                                            onCancel={
-                                                                handleCancel
-                                                            }
-                                                            onSend={handleSend}
-                                                        />
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </CardContent>
-                                    </Card>
-                                ))
-                            ) : (
-                                <Card>
-                                    <CardContent className="p-12 text-center">
-                                        <p className="text-sm text-[#6B7280]">
-                                            Không tìm thấy phiên họp nào phù hợp
-                                        </p>
-                                    </CardContent>
-                                </Card>
-                            )}
-                        </div>
-
-                        {/* Pagination */}
-                        {totalItems > 0 && (
-                            <AppPagination
-                                currentPage={currentPage}
-                                totalPages={totalPages}
-                                pageSize={pageSize}
-                                totalItems={totalItems}
-                                onPageChange={setCurrentPage}
-                                onPageSizeChange={(size) => {
-                                    setPageSize(size);
-                                    setCurrentPage(1);
-                                }}
-                                itemLabel="phiên họp"
-                            />
-                        )}
+                        <DataTable
+                            data={paginatedMeetings}
+                            config={tableConfig}
+                            renderCustomRow={renderMeetingCard}
+                            containerClassName="space-y-4 mb-6"
+                            currentPage={currentPage}
+                            pageSize={pageSize}
+                            totalItems={totalItems}
+                            onPageChange={setCurrentPage}
+                            onPageSizeChange={setPageSize}
+                        />
                     </div>
                 )}
 

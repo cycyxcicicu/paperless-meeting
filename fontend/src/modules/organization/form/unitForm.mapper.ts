@@ -38,7 +38,9 @@ export const unitFormMapper = {
       address: values.address.trim(),
       phone: values.phone.trim(),
       email: values.email.trim(),
-      foundedDate: values.foundedDate,
+      foundedDate: values.foundedDate instanceof Date 
+        ? values.foundedDate.toISOString() 
+        : values.foundedDate,
       status: values.status,
       description: values.description?.trim() || '',
     };

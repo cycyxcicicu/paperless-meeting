@@ -1,93 +1,31 @@
-import {
-    ArrowLeft,
-    CheckCircle,
-    ChevronDown,
-    Clock,
-    Download,
-    Eye,
-    FileText,
-    MessageSquarePlus,
-    Pause,
-    PlayCircle,
-    Plus,
-    RotateCcw,
-    User,
-    Users,
-    X,
-} from "lucide-react";
+import { ArrowLeft, CheckCircle, Clock, Download, Eye, FileText, MessageSquarePlus, Pause, PlayCircle, Plus, RotateCcw, User, Users, X } from "lucide-react";
 import React, { useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { EmptyState } from "@/common/components/ui/empty-state";
 import { PageHeader } from '@/common/components/layout/PageHeader';
 import { Sidebar } from '@/common/components/layout/Sidebar';
-import {
-    AddOpinionForContentModal,
-    OpinionForContentData,
-} from '@/modules/meeting/components/AddOpinionForContentModal';
-import {
-    AddOpinionModal,
-    OpinionData,
-} from '@/modules/meeting/components/AddOpinionModal';
+import { AddOpinionForContentModal, OpinionForContentData } from '@/modules/meeting/components/AddOpinionForContentModal';
+import { AddOpinionModal, OpinionData } from '@/modules/meeting/components/AddOpinionModal';
 import { ApproveContentModal } from '@/modules/meeting/components/ApproveContentModal';
 import { AttendanceModal } from '@/modules/meeting/components/AttendanceModal';
 import { CollapsibleSection } from '@/modules/meeting/components/CollapsibleSection';
-import {
-    Participant,
-    SelectSpeakerModal,
-} from '@/modules/meeting/components/SelectSpeakerModal';
+import { SelectSpeakerModal } from '@/modules/meeting/components/SelectSpeakerModal';
 import { SpeakerActionMenu } from '@/modules/meeting/components/SpeakerActionMenu';
-import {
-    MeetingContent,
-    StartContentModal,
-} from '@/modules/meeting/components/StartContentModal';
+import { StartContentModal } from '@/modules/meeting/components/StartContentModal';
 import { ConfirmBroadcastModal } from '@/modules/meeting/components/voting/ConfirmBroadcastModal';
 import { PauseVotingModal } from '@/modules/meeting/components/voting/PauseVotingModal';
-import {
-    Delegate,
-    ReadinessCheckModal,
-} from '@/modules/meeting/components/voting/ReadinessCheckModal';
+import { ReadinessCheckModal } from '@/modules/meeting/components/voting/ReadinessCheckModal';
 import { VotingModal } from '@/modules/meeting/components/voting/VotingModal';
-import {
-    NotVotedDelegate,
-    VotedDelegate,
-    VotingResult,
-    VotingResultModal,
-} from '@/modules/meeting/components/voting/VotingResultModal';
+import { VotingResultModal } from '@/modules/meeting/components/voting/VotingResultModal';
 import { VotingTimeModal } from '@/modules/meeting/components/voting/VotingTimeModal';
 import { Badge } from '@/common/components/ui/badge';
 import { Button } from '@/common/components/ui/button';
-import { Card, CardContent  } from '@/common/components/ui/card';
-
+import { Card, CardContent } from '@/common/components/ui/card';
+import { DataTable } from '@/common/components/table-engine/DataTable';
+import { TableEngineConfig } from '@/common/components/table-engine/table.types';
+import { cn } from '@/common/utils/cn';
+import { Speaker, Opinion, VotingIssue, Delegate, Participant, MeetingContent, VotingResult, VotedDelegate, NotVotedDelegate, MOCK_DELEGATES, MOCK_PARTICIPANTS, MOCK_VOTING_ISSUES, MOCK_SPEAKERS, MOCK_AVAILABLE_DOCUMENTS, MOCK_MEETING_CONTENTS } from '../meeting.mock';
 import { PHIEN_HOP_SIDEBAR_ITEMS } from '@/app/constants/sidebar';
-interface Speaker {
-    id: number;
-    name: string;
-    position: string;
-    unit: string;
-    note?: string;
-    startTime?: string;
-    status: "waiting" | "speaking" | "finished";
-    addedTime: string;
-}
-
-interface Opinion {
-    id: number;
-    userName: string;
-    userPosition: string;
-    documentName?: string;
-    opinionDetail: string;
-    attachments: { name: string; size: number }[];
-    createdAt: string;
-}
-
-interface VotingIssue {
-    id: number;
-    issue: string;
-    time: string;
-    status: "pending" | "broadcasting" | "voting" | "paused" | "completed";
-    broadcastEnabled: boolean;
-    votingDuration?: number;
-}
 
 export default function DienBienPhienHopPage() {
     const navigate = useNavigate();
@@ -107,7 +45,6 @@ export default function DienBienPhienHopPage() {
     ] = useState(false);
     const [selectedContent, setSelectedContent] =
         useState<MeetingContent | null>(null);
-    const [testModalOpen, setTestModalOpen] = useState(false);
 
     // Voting modal states
     const [currentVotingIssue, setCurrentVotingIssue] =
@@ -131,111 +68,112 @@ export default function DienBienPhienHopPage() {
     const [opinions, setOpinions] = useState<Opinion[]>([]);
 
     // Danh sách vấn đề cần biểu quyết
-    const [votingIssues, setVotingIssues] = useState<VotingIssue[]>([
-        {
-            id: 1,
-            issue: "Giải trình về việc cơ quan nhà nước cung cấp, giải thích, làm rõ thông tin liên quan đến dự án đầu tư công",
-            time: "10:00:00",
-            status: "pending",
-            broadcastEnabled: false,
-        },
-    ]);
+    const [votingIssues, setVotingIssues] = useState<VotingIssue[]>(MOCK_VOTING_ISSUES);
 
     // Mock delegates data
-    const mockDelegates: Delegate[] = [
-        {
-            id: 1,
-            unit: "Sở Kế hoạch và Đầu tư",
-            name: "Nguyễn Văn A",
-            position: "Giám đốc",
-            isReady: true,
-        },
-        {
-            id: 2,
-            unit: "Sở Tài chính",
-            name: "Trần Thị B",
-            position: "Phó Giám đốc",
-            isReady: true,
-        },
-        {
-            id: 3,
-            unit: "Sở Xây dựng",
-            name: "Lê Văn C",
-            position: "Trưởng phòng",
-            isReady: false,
-        },
-        {
-            id: 4,
-            unit: "Sở Giáo dục",
-            name: "Phạm Thị D",
-            position: "Giám đốc",
-            isReady: true,
-        },
-        {
-            id: 5,
-            unit: "Sở Y tế",
-            name: "Hoàng Văn E",
-            position: "Phó Giám đốc",
-            isReady: true,
-        },
-    ];
+    const mockDelegates: Delegate[] = MOCK_DELEGATES;
 
     // Mock danh sách người tham gia cuộc họp
-    const meetingParticipants: Participant[] = [
-        {
-            id: "p-1",
-            name: "Nguyễn Văn A",
-            position: "Phó Chủ tịch UBND",
-            unit: "Sở Kế hoạch và Đầu tư",
-            attendanceStatus: "Tham gia",
-            type: "individual",
-        },
-        {
-            id: "p-2",
-            name: "Trần Thị B",
-            position: "Trưởng phòng",
-            unit: "Sở Tài chính",
-            attendanceStatus: "Tham gia",
-            type: "unit",
-        },
-        {
-            id: "p-3",
-            name: "Lê Văn C",
-            position: "Chuyên viên",
-            unit: "Sở Xây dựng",
-            attendanceStatus: "Tham gia",
-            type: "individual",
-        },
-        {
-            id: "p-4",
-            name: "Phạm Thị D",
-            position: "Giám đốc",
-            unit: "Sở Giáo dục",
-            attendanceStatus: "Tham gia",
-            type: "unit",
-        },
-        {
-            id: "p-5",
-            name: "Hoàng Văn E",
-            position: "Cố vấn",
-            unit: "Công ty ABC",
-            attendanceStatus: "Khách mời",
-            type: "guest",
-        },
-    ];
+    const meetingParticipants: Participant[] = MOCK_PARTICIPANTS;
 
     // Danh sách người phát biểu
-    const [speakers, setSpeakers] = useState<Speaker[]>([
-        {
-            id: 1,
-            name: "Nguyễn Văn A",
-            position: "Phó Chủ tịch UBND",
-            unit: "Sở Kế hoạch và Đầu tư",
-            startTime: "17/04/2026 22:40",
-            status: "speaking",
-            addedTime: "17/04/2026 22:35",
-        },
-    ]);
+    const [speakers, setSpeakers] = useState<Speaker[]>(MOCK_SPEAKERS);
+
+    // Table Configs
+    const votingTableConfig: TableEngineConfig<VotingIssue> = {
+        columns: [
+            {
+                key: 'issue',
+                header: 'Vấn đề',
+                render: (row) => (
+                    <div className="truncate max-w-md" title={row.issue}>
+                        {row.issue}
+                    </div>
+                )
+            },
+            { key: 'time', header: 'Thời gian', width: '128px', align: 'center', className: 'font-mono' },
+            {
+                key: 'status',
+                header: 'Trạng thái',
+                width: '160px',
+                align: 'center',
+                render: (row) => {
+                    const statusMap: Record<string, { label: string, className: string }> = {
+                        pending: { label: 'Chưa biểu quyết', className: 'bg-amber-100 text-amber-700' },
+                        broadcasting: { label: 'Đã phát lệnh', className: 'bg-purple-100 text-purple-700' },
+                        voting: { label: 'Đang biểu quyết', className: 'bg-blue-100 text-blue-700' },
+                        paused: { label: 'Tạm dừng', className: 'bg-orange-100 text-orange-700' },
+                        completed: { label: 'Đã hoàn thành', className: 'bg-green-100 text-green-700' }
+                    };
+                    const cfg = statusMap[row.status] || statusMap.pending;
+                    return (
+                        <Badge className={cn("px-3 py-1 text-xs rounded-full border-none hover:bg-opacity-80", cfg.className)}>
+                            {cfg.label}
+                        </Badge>
+                    );
+                }
+            },
+            {
+                key: 'broadcastEnabled',
+                header: 'Phát lệnh',
+                width: '128px',
+                align: 'center',
+                render: (row) => (
+                    <button
+                        type="button"
+                        onClick={() => handleToggleBroadcast(row.id)}
+                        className={cn(
+                            "relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2",
+                            row.broadcastEnabled ? "bg-[#C8102E] focus:ring-[#C8102E]" : "bg-gray-300 focus:ring-gray-400"
+                        )}
+                    >
+                        <span className={cn(
+                            "inline-block h-4 w-4 transform rounded-full bg-white transition-transform",
+                            row.broadcastEnabled ? "translate-x-6" : "translate-x-1"
+                        )} />
+                    </button>
+                )
+            },
+            {
+                key: 'id',
+                header: 'Hành động',
+                width: '140px',
+                align: 'center',
+                render: (row) => (
+                    <div className="flex items-center justify-center gap-2">
+                        {(row.status === "voting" || row.status === "paused") && (
+                            <>
+                                <button
+                                    type="button"
+                                    onClick={() => handlePauseVoting(row.id)}
+                                    className="p-2 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400 transition-all"
+                                    title="Tạm dừng"
+                                >
+                                    <Pause className="h-4 w-4" />
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => handleRevote(row.id)}
+                                    className="p-2 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400 transition-all"
+                                    title="Bỏ phiếu lại"
+                                >
+                                    <RotateCcw className="h-4 w-4" />
+                                </button>
+                            </>
+                        )}
+                        <button
+                            type="button"
+                            onClick={() => handleViewVotingResult(row.id)}
+                            className="p-2 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400 transition-all"
+                            title="Xem kết quả"
+                        >
+                            <Eye className="h-4 w-4" />
+                        </button>
+                    </div>
+                )
+            }
+        ]
+    };
 
     // Người đang phát biểu
     const currentSpeaker = speakers.find((s) => s.status === "speaking");
@@ -298,13 +236,7 @@ export default function DienBienPhienHopPage() {
     };
 
     // Danh sách tài liệu cho dropdown
-    const availableDocuments = [
-        {
-            value: "doc-1",
-            label: "Báo cáo tình hình kinh tế - xã hội Quý 1.pdf",
-        },
-        { value: "doc-2", label: "Kế hoạch triển khai Quý 2 chi tiết.docx" },
-    ];
+    const availableDocuments = MOCK_AVAILABLE_DOCUMENTS;
 
     // Thêm góp ý mới
     const handleAddOpinion = (data: OpinionData) => {
@@ -316,7 +248,7 @@ export default function DienBienPhienHopPage() {
 
         const documentName = data.documentId
             ? availableDocuments.find((doc) => doc.value === data.documentId)
-                  ?.label
+                ?.label
             : undefined;
 
         const newOpinion: Opinion = {
@@ -396,10 +328,10 @@ export default function DienBienPhienHopPage() {
             votingIssues.map((i) =>
                 i.id === currentVotingIssue.id
                     ? {
-                          ...i,
-                          broadcastEnabled: true,
-                          status: "broadcasting" as const,
-                      }
+                        ...i,
+                        broadcastEnabled: true,
+                        status: "broadcasting" as const,
+                    }
                     : i,
             ),
         );
@@ -428,10 +360,10 @@ export default function DienBienPhienHopPage() {
             votingIssues.map((i) =>
                 i.id === currentVotingIssue.id
                     ? {
-                          ...i,
-                          votingDuration: minutes,
-                          status: "voting" as const,
-                      }
+                        ...i,
+                        votingDuration: minutes,
+                        status: "voting" as const,
+                    }
                     : i,
             ),
         );
@@ -449,8 +381,8 @@ export default function DienBienPhienHopPage() {
             option === "agree"
                 ? "Đồng ý"
                 : option === "disagree"
-                  ? "Không đồng ý"
-                  : `Ý kiến khác: ${otherContent}`;
+                    ? "Không đồng ý"
+                    : `Ý kiến khác: ${otherContent}`;
         alert(`Đã biểu quyết: ${voteText}`);
         setIsVotingModalOpen(false);
     };
@@ -591,18 +523,7 @@ export default function DienBienPhienHopPage() {
     };
 
     // Mock data for meeting contents
-    const meetingContents: MeetingContent[] = [
-        {
-            id: 1,
-            title: "Nội dung 1",
-            description: "Báo cáo tình hình kinh tế - xã hội Quý 1/2026",
-        },
-        {
-            id: 2,
-            title: "Nội dung 2",
-            description: "Kế hoạch triển khai công việc Quý 2/2026",
-        },
-    ];
+    const meetingContents: MeetingContent[] = MOCK_MEETING_CONTENTS;
 
     const availableContents = meetingContents.map((content) => ({
         value: content.id.toString(),
@@ -647,1196 +568,902 @@ export default function DienBienPhienHopPage() {
         setIsAddOpinionForContentModalOpen(true);
     };
 
-    return (
-        <>
-            <div className="p-8">
-                <PageHeader
-                    title={
-                        <div className="flex items-center gap-3">
-                            <Button
-                                variant="ghost"
-                                onClick={() => navigate(`/phien-hop/${id}`)}
-                                className="text-gray-600 hover:text-[#C8102E] hover:bg-red-50 px-2 py-2 h-auto"
-                            >
-                                <ArrowLeft className="h-5 w-5" />
-                            </Button>
-                            <span>Diễn biến phiên họp</span>
-                        </div>
-                    }
-                    description={
-                        <div className="flex items-center gap-6 text-sm">
-                            <div className="flex items-center gap-2">
-                                <Clock className="h-4 w-4 text-gray-400" />
-                                <span>Thời gian: 17/04/2026 22:31 - 23:20</span>
-                            </div>
-                        </div>
-                    }
-                    breadcrumbs={[
-                        { name: "Trang chủ", path: "/" },
-                        { name: "Phiên họp", path: "/phien-hop" },
-                        {
-                            name: "Chi tiết phiên họp",
-                            path: `/phien-hop/${id}`,
-                        },
-                        { name: "Diễn biến phiên họp" },
-                    ]}
-                    actions={
+return (
+    <>
+        <div className="p-8">
+            <PageHeader
+                title={
+                    <div className="flex items-center gap-3">
                         <Button
-                            variant="primary"
-                            className="bg-[#C8102E] hover:bg-[#a80d26]"
-                            onClick={() => setIsAttendanceModalOpen(true)}
+                            variant="ghost"
+                            onClick={() => navigate(`/phien-hop/${id}`)}
+                            className="text-gray-600 hover:text-[#C8102E] hover:bg-red-50 px-2 py-2 h-auto"
                         >
-                            <Users className="h-4 w-4 mr-2" />
-                            Điểm danh
+                            <ArrowLeft className="h-5 w-5" />
                         </Button>
-                    }
-                />
-
-                {/* Tên phiên họp */}
-                <div className="text-center mb-6">
-                    <h2 className="text-2xl heading text-gray-900 uppercase mb-1">
-                        HỌP TRIỂN KHAI KẾ HOẠCH QUÝ II/2026
-                    </h2>
-                </div>
-
-                {/* Layout 3 cột */}
-                <div className="grid grid-cols-12 gap-5 mb-6">
-                    {/* Cột trái - 2 card xếp dọc */}
-                    <div className="col-span-3 flex flex-col gap-5">
-                        {/* Nội dung họp */}
-                        <Card className="bg-white rounded-2xl shadow-sm border border-gray-200">
-                            <CardContent className="p-5">
-                                <h3 className="text-base btn-primary text-gray-900 mb-4">
-                                    Nội dung họp
-                                </h3>
-                                <div className="space-y-2">
-                                    {meetingContents.map((content) => (
-                                        <div
-                                            key={content.id}
-                                            onClick={() =>
-                                                setActiveContent(content.id)
-                                            }
-                                            className={`p-3 rounded-lg cursor-pointer transition-colors ${
-                                                activeContent === content.id
-                                                    ? "bg-red-50 border border-[#C8102E] text-[#C8102E]"
-                                                    : "bg-gray-50 border border-transparent text-gray-700 hover:bg-gray-100"
-                                            }`}
-                                        >
-                                            <p className="text-sm body">
-                                                {content.title}
-                                            </p>
-                                        </div>
-                                    ))}
-                                </div>
-                            </CardContent>
-                        </Card>
-
-                        {/* Lịch sử phiên họp */}
-                        <Card className="bg-white rounded-2xl shadow-sm border border-gray-200 flex-1">
-                            <CardContent className="p-5 h-full flex flex-col">
-                                <h3 className="text-base btn-primary text-gray-900 mb-4">
-                                    Lịch sử phiên họp
-                                </h3>
-                                <EmptyState />
-                            </CardContent>
-                        </Card>
+                        <span>Diễn biến phiên họp</span>
                     </div>
-
-                    {/* Cột giữa - card lớn hơn */}
-                    <div className="col-span-5 flex flex-col">
-                        {/* Thông tin chi tiết phiên họp + Tài liệu đính kèm + Action buttons */}
-                        <Card className="bg-white rounded-2xl shadow-sm border border-gray-200">
-                            <CardContent className="p-5 space-y-6">
-                                {/* Nội dung đang được chọn */}
-                                <div>
-                                    <h3 className="text-base btn-primary text-gray-900 mb-4">
-                                        {
-                                            meetingContents.find(
-                                                (c) => c.id === activeContent,
-                                            )?.title
-                                        }
-                                    </h3>
-                                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                                        <p className="text-sm text-gray-700">
-                                            {
-                                                meetingContents.find(
-                                                    (c) =>
-                                                        c.id === activeContent,
-                                                )?.description
-                                            }
-                                        </p>
-                                    </div>
-                                </div>
-
-                                {/* Thông tin chi tiết */}
-                                <div>
-                                    <h3 className="text-base btn-primary text-gray-900 mb-4">
-                                        Thông tin chi tiết phiên họp
-                                    </h3>
-                                    <div className="space-y-3 text-sm">
-                                        <div className="flex items-start justify-between">
-                                            <span className="text-gray-500 body">
-                                                Chủ trì:
-                                            </span>
-                                            <span className="text-gray-900 body">
-                                                Ông Trần Văn A - Bí thư
-                                            </span>
-                                        </div>
-                                        <div className="flex items-start justify-between">
-                                            <span className="text-gray-500 body">
-                                                Người duyệt tài liệu:
-                                            </span>
-                                            <span className="text-gray-900 body">
-                                                Trần Văn C
-                                            </span>
-                                        </div>
-                                        <div className="flex items-start justify-between">
-                                            <span className="text-gray-500 body">
-                                                Trạng thái:
-                                            </span>
-                                            <Badge className="bg-green-100 text-green-700 hover:bg-green-100 px-3 py-1 text-xs rounded-full border-none">
-                                                Đang họp
-                                            </Badge>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Tài liệu đính kèm */}
-                                <div>
-                                    <h3 className="text-base btn-primary text-gray-900 mb-4">
-                                        Tài liệu đính kèm
-                                    </h3>
-                                    <div className="space-y-3">
-                                        <div className="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:bg-gray-50 transition-colors">
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 rounded-lg bg-red-50 flex items-center justify-center text-[#C8102E]">
-                                                    <FileText className="w-5 h-5" />
-                                                </div>
-                                                <div>
-                                                    <p className="body text-gray-900 text-sm">
-                                                        Báo cáo tình hình kinh
-                                                        tế - xã hội Quý 1.pdf
-                                                    </p>
-                                                    <p className="text-xs text-gray-500">
-                                                        2.4 MB
-                                                    </p>
-                                                </div>
-                                            </div>
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                className="text-gray-500 hover:text-[#C8102E]"
-                                            >
-                                                <Download className="w-4 h-4" />
-                                            </Button>
-                                        </div>
-                                        <div className="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:bg-gray-50 transition-colors">
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600">
-                                                    <FileText className="w-5 h-5" />
-                                                </div>
-                                                <div>
-                                                    <p className="body text-gray-900 text-sm">
-                                                        Kế hoạch triển khai Quý
-                                                        2 chi tiết.docx
-                                                    </p>
-                                                    <p className="text-xs text-gray-500">
-                                                        1.1 MB
-                                                    </p>
-                                                </div>
-                                            </div>
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                className="text-gray-500 hover:text-[#C8102E]"
-                                            >
-                                                <Download className="w-4 h-4" />
-                                            </Button>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Action Buttons for Content */}
-                                <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-100">
-                                    <button
-                                        type="button"
-                                        style={{
-                                            display: "inline-flex",
-                                            alignItems: "center",
-                                            gap: "8px",
-                                            padding: "10px 20px",
-                                            border: "1px solid #16a34a",
-                                            borderRadius: "9999px",
-                                            background: "transparent",
-                                            color: "#16a34a",
-                                            fontWeight: "500",
-                                            cursor: "pointer",
-                                        }}
-                                        onClick={(e) => {
-                                            e.preventDefault();
-                                            e.stopPropagation();
-                                            alert("Phê duyệt clicked!");
-                                            setIsApproveContentModalOpen(true);
-                                        }}
-                                    >
-                                        <CheckCircle className="w-4 h-4" />
-                                        Phê duyệt
-                                    </button>
-                                    <button
-                                        type="button"
-                                        style={{
-                                            display: "inline-flex",
-                                            alignItems: "center",
-                                            gap: "8px",
-                                            padding: "10px 20px",
-                                            border: "1px solid #2563eb",
-                                            borderRadius: "9999px",
-                                            background: "transparent",
-                                            color: "#2563eb",
-                                            fontWeight: "500",
-                                            cursor: "pointer",
-                                        }}
-                                        onClick={(e) => {
-                                            e.preventDefault();
-                                            e.stopPropagation();
-                                            alert("Bắt đầu clicked!");
-                                            const content =
-                                                meetingContents.find(
-                                                    (c) =>
-                                                        c.id === activeContent,
-                                                );
-                                            setSelectedContent(content || null);
-                                            setIsStartContentModalOpen(true);
-                                        }}
-                                    >
-                                        <PlayCircle className="w-4 h-4" />
-                                        Bắt đầu
-                                    </button>
-                                    <button
-                                        type="button"
-                                        style={{
-                                            display: "inline-flex",
-                                            alignItems: "center",
-                                            gap: "8px",
-                                            padding: "10px 20px",
-                                            border: "none",
-                                            borderRadius: "9999px",
-                                            background: "#C8102E",
-                                            color: "white",
-                                            fontWeight: "500",
-                                            cursor: "pointer",
-                                        }}
-                                        onClick={(e) => {
-                                            e.preventDefault();
-                                            e.stopPropagation();
-                                            alert("Thêm góp ý clicked!");
-                                            setIsAddOpinionForContentModalOpen(
-                                                true,
-                                            );
-                                        }}
-                                    >
-                                        <MessageSquarePlus className="w-4 h-4" />
-                                        Thêm góp ý
-                                    </button>
-                                </div>
-                            </CardContent>
-                        </Card>
+                }
+                description={
+                    <div className="flex items-center gap-6 text-sm">
+                        <div className="flex items-center gap-2">
+                            <Clock className="h-4 w-4 text-gray-400" />
+                            <span>Thời gian: 17/04/2026 22:31 - 23:20</span>
+                        </div>
                     </div>
+                }
+                breadcrumbs={[
+                    { name: "Trang chủ", path: "/" },
+                    { name: "Phiên họp", path: "/phien-hop" },
+                    {
+                        name: "Chi tiết phiên họp",
+                        path: `/phien-hop/${id}`,
+                    },
+                    { name: "Diễn biến phiên họp" },
+                ]}
+                actions={
+                    <Button
+                        variant="primary"
+                        className="bg-[#C8102E] hover:bg-[#a80d26]"
+                        onClick={() => setIsAttendanceModalOpen(true)}
+                    >
+                        <Users className="h-4 w-4 mr-2" />
+                        Điểm danh
+                    </Button>
+                }
+            />
 
-                    {/* Cột phải */}
-                    <div className="col-span-4 flex flex-col gap-5">
-                        {/* Thời gian phát biểu còn lại */}
-                        <Card className="bg-white rounded-2xl shadow-sm border border-gray-200">
-                            <CardContent className="p-5">
-                                <div className="flex items-center justify-between mb-4">
-                                    <h3 className="text-base btn-primary text-gray-900">
-                                        Thời gian phát biểu còn lại
-                                    </h3>
-                                    <Badge className="bg-green-100 text-green-700 hover:bg-green-100 px-3 py-1.5 text-sm rounded-full border-none font-mono heading">
-                                        00:09:44
-                                    </Badge>
-                                </div>
-
-                                {currentSpeaker ? (
-                                    <>
-                                        {/* Avatar placeholder */}
-                                        <div className="flex justify-center mb-4">
-                                            <div className="w-24 h-24 rounded-full bg-gray-200 flex items-center justify-center">
-                                                <User className="w-12 h-12 text-gray-400" />
-                                            </div>
-                                        </div>
-
-                                        {/* Thông tin người phát biểu */}
-                                        <div className="space-y-2 text-sm text-center mb-4">
-                                            <p className="text-gray-900 btn-primary">
-                                                {currentSpeaker.name}
-                                            </p>
-                                            <p className="text-gray-600">
-                                                {currentSpeaker.position}
-                                            </p>
-                                            <p className="text-gray-500">
-                                                {currentSpeaker.unit}
-                                            </p>
-                                        </div>
-
-                                        <Button
-                                            variant="outline"
-                                            className="w-full border-[#C8102E] text-[#C8102E] hover:bg-red-50 body rounded-full"
-                                            onClick={handleEndSpeaking}
-                                        >
-                                            Kết thúc phát biểu
-                                        </Button>
-                                    </>
-                                ) : (
-                                    <EmptyState
-                                        title="
-                                            Không có dữ liệu
-                                        "
-                                    />
-                                )}
-                            </CardContent>
-                        </Card>
-                    </div>
-                </div>
-
-                {/* Section full width bên dưới */}
-                <div className="space-y-6">
-                    {/* Danh sách vấn đề cần biểu quyết */}
-                    <Card className="bg-white rounded-2xl shadow-sm border border-gray-200">
-                        <CollapsibleSection
-                            title={`Danh sách vấn đề cần biểu quyết (${votingIssues.length})`}
-                        >
-                            {votingIssues.length > 0 ? (
-                                <div className="overflow-x-auto">
-                                    <table className="w-full text-left border-collapse text-sm">
-                                        <thead>
-                                            <tr className="bg-gray-50 border-b border-gray-200">
-                                                <th className="py-3 px-4 btn-primary text-gray-600 w-16 text-center">
-                                                    STT
-                                                </th>
-                                                <th className="py-3 px-4 btn-primary text-gray-600">
-                                                    Vấn đề
-                                                </th>
-                                                <th className="py-3 px-4 btn-primary text-gray-600 w-32 text-center">
-                                                    Thời gian
-                                                </th>
-                                                <th className="py-3 px-4 btn-primary text-gray-600 w-40 text-center">
-                                                    Trạng thái
-                                                </th>
-                                                <th className="py-3 px-4 btn-primary text-gray-600 w-32 text-center">
-                                                    Phát lệnh
-                                                </th>
-                                                <th className="py-3 px-4 btn-primary text-gray-600 w-28 text-center">
-                                                    Hành động
-                                                </th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {votingIssues.map(
-                                                (issue, index) => (
-                                                    <tr
-                                                        key={issue.id}
-                                                        className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
-                                                    >
-                                                        <td className="py-3 px-4 text-center text-gray-700">
-                                                            {index + 1}
-                                                        </td>
-                                                        <td className="py-3 px-4 text-gray-900">
-                                                            <div
-                                                                className="truncate max-w-md"
-                                                                title={
-                                                                    issue.issue
-                                                                }
-                                                            >
-                                                                {issue.issue}
-                                                            </div>
-                                                        </td>
-                                                        <td className="py-3 px-4 text-center text-gray-700 font-mono">
-                                                            {issue.time}
-                                                        </td>
-                                                        <td className="py-3 px-4 text-center">
-                                                            {issue.status ===
-                                                                "pending" && (
-                                                                <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100 px-3 py-1 text-xs rounded-full border-none">
-                                                                    Chưa biểu
-                                                                    quyết
-                                                                </Badge>
-                                                            )}
-                                                            {issue.status ===
-                                                                "broadcasting" && (
-                                                                <Badge className="bg-purple-100 text-purple-700 hover:bg-purple-100 px-3 py-1 text-xs rounded-full border-none">
-                                                                    Đã phát lệnh
-                                                                </Badge>
-                                                            )}
-                                                            {issue.status ===
-                                                                "voting" && (
-                                                                <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100 px-3 py-1 text-xs rounded-full border-none">
-                                                                    Đang biểu
-                                                                    quyết
-                                                                </Badge>
-                                                            )}
-                                                            {issue.status ===
-                                                                "paused" && (
-                                                                <Badge className="bg-orange-100 text-orange-700 hover:bg-orange-100 px-3 py-1 text-xs rounded-full border-none">
-                                                                    Tạm dừng
-                                                                </Badge>
-                                                            )}
-                                                            {issue.status ===
-                                                                "completed" && (
-                                                                <Badge className="bg-green-100 text-green-700 hover:bg-green-100 px-3 py-1 text-xs rounded-full border-none">
-                                                                    Đã hoàn
-                                                                    thành
-                                                                </Badge>
-                                                            )}
-                                                        </td>
-                                                        <td className="py-3 px-4 text-center">
-                                                            <button
-                                                                type="button"
-                                                                onClick={() =>
-                                                                    handleToggleBroadcast(
-                                                                        issue.id,
-                                                                    )
-                                                                }
-                                                                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 ${
-                                                                    issue.broadcastEnabled
-                                                                        ? "bg-[#C8102E] focus:ring-[#C8102E]"
-                                                                        : "bg-gray-300 focus:ring-gray-400"
-                                                                }`}
-                                                            >
-                                                                <span
-                                                                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                                                                        issue.broadcastEnabled
-                                                                            ? "translate-x-6"
-                                                                            : "translate-x-1"
-                                                                    }`}
-                                                                />
-                                                            </button>
-                                                        </td>
-                                                        <td className="py-3 px-4 text-center">
-                                                            <div className="flex items-center justify-center gap-2">
-                                                                {/* Hiển thị thêm icon khi đang voting hoặc paused */}
-                                                                {(issue.status ===
-                                                                    "voting" ||
-                                                                    issue.status ===
-                                                                        "paused") && (
-                                                                    <>
-                                                                        <button
-                                                                            type="button"
-                                                                            onClick={() =>
-                                                                                handlePauseVoting(
-                                                                                    issue.id,
-                                                                                )
-                                                                            }
-                                                                            className="p-2 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400 transition-all"
-                                                                            title="Tạm dừng"
-                                                                        >
-                                                                            <Pause className="h-4 w-4" />
-                                                                        </button>
-                                                                        <button
-                                                                            type="button"
-                                                                            onClick={() =>
-                                                                                handleRevote(
-                                                                                    issue.id,
-                                                                                )
-                                                                            }
-                                                                            className="p-2 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400 transition-all"
-                                                                            title="Bỏ phiếu lại"
-                                                                        >
-                                                                            <RotateCcw className="h-4 w-4" />
-                                                                        </button>
-                                                                    </>
-                                                                )}
-
-                                                                {/* Icon xem kết quả luôn hiển thị */}
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() =>
-                                                                        handleViewVotingResult(
-                                                                            issue.id,
-                                                                        )
-                                                                    }
-                                                                    className="p-2 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 hover:border-gray-400 transition-all"
-                                                                    title="Xem kết quả"
-                                                                >
-                                                                    <Eye className="h-4 w-4" />
-                                                                </button>
-                                                            </div>
-                                                        </td>
-                                                    </tr>
-                                                ),
-                                            )}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            ) : (
-                                <EmptyState />
-                            )}
-                        </CollapsibleSection>
-                    </Card>
-
-                    {/* Danh sách tham gia góp ý */}
-                    <Card className="bg-white rounded-2xl shadow-sm border border-gray-200">
-                        <CollapsibleSection
-                            title={`Danh sách tham gia góp ý (${opinions.length})`}
-                            action={
-                                <Button
-                                    variant="primary"
-                                    size="sm"
-                                    className="bg-[#C8102E] hover:bg-[#a80d26] h-9 gap-1.5"
-                                    onClick={() =>
-                                        setIsAddOpinionModalOpen(true)
-                                    }
-                                >
-                                    <Plus className="w-4 h-4" />
-                                    <span className="text-sm body">
-                                        Thêm
-                                    </span>
-                                </Button>
-                            }
-                        >
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-left border-collapse text-sm">
-                                    <thead>
-                                        <tr className="bg-gray-50 border-b border-gray-200">
-                                            <th className="py-3 px-4 btn-primary text-gray-600 w-16 text-center">
-                                                STT
-                                            </th>
-                                            <th className="py-3 px-4 btn-primary text-gray-600">
-                                                Tên đại biểu
-                                            </th>
-                                            <th className="py-3 px-4 btn-primary text-gray-600">
-                                                Chức vụ
-                                            </th>
-                                            <th className="py-3 px-4 btn-primary text-gray-600">
-                                                Chi tiết góp ý
-                                            </th>
-                                            <th className="py-3 px-4 btn-primary text-gray-600 w-32 text-center">
-                                                Hành động
-                                            </th>
-                                        </tr>
-                                    </thead>
-                                    {opinions.length > 0 && (
-                                        <tbody>
-                                            {opinions.map((opinion, index) => (
-                                                <tr
-                                                    key={opinion.id}
-                                                    className="border-b border-gray-100 hover:bg-gray-50"
-                                                >
-                                                    <td className="py-3 px-4 text-center text-gray-700">
-                                                        {index + 1}
-                                                    </td>
-                                                    <td className="py-3 px-4 text-gray-900 body">
-                                                        {opinion.userName}
-                                                    </td>
-                                                    <td className="py-3 px-4 text-gray-700">
-                                                        {opinion.userPosition}
-                                                    </td>
-                                                    <td className="py-3 px-4">
-                                                        <div className="space-y-1">
-                                                            {opinion.documentName && (
-                                                                <p className="text-xs text-gray-500">
-                                                                    Tài liệu:{" "}
-                                                                    {
-                                                                        opinion.documentName
-                                                                    }
-                                                                </p>
-                                                            )}
-                                                            <p className="text-gray-900">
-                                                                {
-                                                                    opinion.opinionDetail
-                                                                }
-                                                            </p>
-                                                            {opinion.attachments
-                                                                .length > 0 && (
-                                                                <p className="text-xs text-blue-600">
-                                                                    {
-                                                                        opinion
-                                                                            .attachments
-                                                                            .length
-                                                                    }{" "}
-                                                                    tài liệu
-                                                                    đính kèm
-                                                                </p>
-                                                            )}
-                                                        </div>
-                                                    </td>
-                                                    <td className="py-3 px-4 text-center">
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="icon"
-                                                            className="text-gray-500 hover:text-[#C8102E]"
-                                                        >
-                                                            <Eye className="w-4 h-4" />
-                                                        </Button>
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    )}
-                                </table>
-                                {opinions.length === 0 && (
-                                    <EmptyState
-                                        title="
-                                            Không có dữ liệu
-                                        "
-                                    />
-                                )}
-                            </div>
-                        </CollapsibleSection>
-                    </Card>
-
-                    {/* Danh sách phát biểu */}
-                    <Card className="bg-white rounded-2xl shadow-sm border border-gray-200">
-                        <CollapsibleSection
-                            title={`Danh sách phát biểu (${speakers.filter((s) => s.status === "speaking" || s.status === "finished").length})`}
-                            action={
-                                <Button
-                                    variant="primary"
-                                    size="sm"
-                                    className="bg-[#C8102E] hover:bg-[#a80d26] h-9 gap-1.5"
-                                    onClick={() =>
-                                        setIsAddSpeakerModalOpen(true)
-                                    }
-                                >
-                                    <Plus className="w-4 h-4" />
-                                    <span className="text-sm body">
-                                        Thêm người phát biểu
-                                    </span>
-                                </Button>
-                            }
-                        >
-                            {/* Tabs */}
-                            <div className="flex items-center gap-6 border-b border-gray-200 mb-4 px-2">
-                                <button
-                                    onClick={() => setActiveTab("cho")}
-                                    className={`pb-3 body text-[15px] border-b-2 transition-colors ${
-                                        activeTab === "cho"
-                                            ? "border-[#C8102E] text-[#C8102E]"
-                                            : "border-transparent text-gray-500 hover:text-gray-700"
-                                    }`}
-                                >
-                                    Chờ phát biểu
-                                </button>
-                                <button
-                                    onClick={() => setActiveTab("bac-bo")}
-                                    className={`pb-3 body text-[15px] border-b-2 transition-colors ${
-                                        activeTab === "bac-bo"
-                                            ? "border-[#C8102E] text-[#C8102E]"
-                                            : "border-transparent text-gray-500 hover:text-gray-700"
-                                    }`}
-                                >
-                                    Bác bỏ
-                                </button>
-                            </div>
-
-                            {/* Bảng */}
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-left border-collapse text-sm">
-                                    <thead>
-                                        <tr className="bg-gray-50 border-b border-gray-200">
-                                            <th className="py-3 px-4 btn-primary text-gray-600 w-16 text-center">
-                                                STT
-                                            </th>
-                                            <th className="py-3 px-4 btn-primary text-gray-600">
-                                                Tên đại biểu
-                                            </th>
-                                            <th className="py-3 px-4 btn-primary text-gray-600">
-                                                Chức vụ
-                                            </th>
-                                            <th className="py-3 px-4 btn-primary text-gray-600">
-                                                Ghi chú
-                                            </th>
-                                            <th className="py-3 px-4 btn-primary text-gray-600">
-                                                Thời gian bắt đầu phát biểu
-                                            </th>
-                                            <th className="py-3 px-4 btn-primary text-gray-600">
-                                                Trạng thái
-                                            </th>
-                                            <th className="py-3 px-4 btn-primary text-gray-600 w-32 text-center">
-                                                Hành động
-                                            </th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {speakers
-                                            .filter(
-                                                (s) =>
-                                                    s.status === "speaking" ||
-                                                    s.status === "finished",
-                                            )
-                                            .map((speaker, index) => (
-                                                <tr
-                                                    key={speaker.id}
-                                                    className="border-b border-gray-100 hover:bg-gray-50"
-                                                >
-                                                    <td className="py-3 px-4 text-center text-gray-700">
-                                                        {index + 1}
-                                                    </td>
-                                                    <td className="py-3 px-4 text-gray-900 body">
-                                                        {speaker.name}
-                                                    </td>
-                                                    <td className="py-3 px-4 text-gray-700">
-                                                        {speaker.position}
-                                                    </td>
-                                                    <td className="py-3 px-4 text-gray-700">
-                                                        {speaker.note || "-"}
-                                                    </td>
-                                                    <td className="py-3 px-4 text-gray-700">
-                                                        {speaker.startTime ||
-                                                            "-"}
-                                                    </td>
-                                                    <td className="py-3 px-4">
-                                                        {speaker.status ===
-                                                        "speaking" ? (
-                                                            <Badge className="bg-green-100 text-green-700 hover:bg-green-100 px-3 py-1 text-xs rounded-full border-none">
-                                                                Đang phát biểu
-                                                            </Badge>
-                                                        ) : (
-                                                            <Badge className="bg-gray-100 text-gray-700 hover:bg-gray-100 px-3 py-1 text-xs rounded-full border-none">
-                                                                Đã kết thúc
-                                                            </Badge>
-                                                        )}
-                                                    </td>
-                                                    <td className="py-3 px-4 text-center">
-                                                        <SpeakerActionMenu
-                                                            speakerId={
-                                                                speaker.id
-                                                            }
-                                                            onPrepare={
-                                                                handlePrepareSpeech
-                                                            }
-                                                            onAssign={
-                                                                handleAssignSpeech
-                                                            }
-                                                            onReject={
-                                                                handleRejectSpeech
-                                                            }
-                                                        />
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                    </tbody>
-                                </table>
-                            </div>
-
-                            {/* Pagination */}
-                            <div className="flex items-center justify-end gap-2 mt-4 px-2">
-                                <span className="text-sm text-gray-600">
-                                    1-
-                                    {
-                                        speakers.filter(
-                                            (s) =>
-                                                s.status === "speaking" ||
-                                                s.status === "finished",
-                                        ).length
-                                    }{" "}
-                                    của{" "}
-                                    {
-                                        speakers.filter(
-                                            (s) =>
-                                                s.status === "speaking" ||
-                                                s.status === "finished",
-                                        ).length
-                                    }
-                                </span>
-                                <div className="flex items-center gap-1">
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-8 w-8"
-                                        disabled
-                                    >
-                                        <ChevronDown className="h-4 w-4 rotate-90" />
-                                    </Button>
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-8 w-8"
-                                        disabled
-                                    >
-                                        <ChevronDown className="h-4 w-4 -rotate-90" />
-                                    </Button>
-                                </div>
-                            </div>
-                        </CollapsibleSection>
-                    </Card>
-                </div>
+            {/* Tên phiên họp */}
+            <div className="text-center mb-6">
+                <h2 className="text-2xl heading text-gray-900 uppercase mb-1">
+                    HỌP TRIỂN KHAI KẾ HOẠCH QUÝ II/2026
+                </h2>
             </div>
 
-            {/* Modal chọn người phát biểu từ danh sách tham gia */}
-            <SelectSpeakerModal
-                isOpen={isAddSpeakerModalOpen}
-                onClose={() => setIsAddSpeakerModalOpen(false)}
-                onSelect={handleAddSpeakers}
-                participants={meetingParticipants}
-                existingSpeakerIds={speakers.map((s) => s.id)}
-                allowMultiple={true}
-            />
-
-            {/* Modal điểm danh */}
-            <AttendanceModal
-                isOpen={isAttendanceModalOpen}
-                onClose={() => setIsAttendanceModalOpen(false)}
-            />
-
-            {/* Modal thêm góp ý */}
-            <AddOpinionModal
-                isOpen={isAddOpinionModalOpen}
-                onClose={() => setIsAddOpinionModalOpen(false)}
-                onAdd={handleAddOpinion}
-                documents={availableDocuments}
-            />
-
-            {/* INLINE TEST MODALS - Direct render without components */}
-            {isStartContentModalOpen && (
-                <div
-                    style={{
-                        position: "fixed",
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        backgroundColor: "rgba(0, 0, 0, 0.5)",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        zIndex: 99999,
-                    }}
-                    onClick={() => setIsStartContentModalOpen(false)}
-                >
-                    <div
-                        style={{
-                            backgroundColor: "white",
-                            borderRadius: "16px",
-                            padding: "24px",
-                            maxWidth: "500px",
-                            width: "90%",
-                            boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
-                        }}
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        <h2
-                            style={{
-                                fontSize: "18px",
-                                fontWeight: "bold",
-                                marginBottom: "16px",
-                            }}
-                        >
-                            Xác nhận bắt đầu nội dung
-                        </h2>
-                        {selectedContent && (
-                            <>
-                                <div
-                                    style={{
-                                        backgroundColor: "#dbeafe",
-                                        border: "1px solid #93c5fd",
-                                        borderRadius: "8px",
-                                        padding: "16px",
-                                        marginBottom: "16px",
-                                    }}
-                                >
-                                    <p
-                                        style={{
-                                            fontWeight: "600",
-                                            marginBottom: "4px",
-                                        }}
+            {/* Layout 3 cột */}
+            <div className="grid grid-cols-12 gap-5 mb-6">
+                {/* Cột trái - 2 card xếp dọc */}
+                <div className="col-span-3 flex flex-col gap-5">
+                    {/* Nội dung họp */}
+                    <Card className="bg-white rounded-2xl shadow-sm border border-gray-200">
+                        <CardContent className="p-5">
+                            <h3 className="text-base btn-primary text-gray-900 mb-4">
+                                Nội dung họp
+                            </h3>
+                            <div className="space-y-2">
+                                {meetingContents.map((content) => (
+                                    <div
+                                        key={content.id}
+                                        onClick={() =>
+                                            setActiveContent(content.id)
+                                        }
+                                        className={`p-3 rounded-lg cursor-pointer transition-colors ${activeContent === content.id
+                                                ? "bg-red-50 border border-[#C8102E] text-[#C8102E]"
+                                                : "bg-gray-50 border border-transparent text-gray-700 hover:bg-gray-100"
+                                            }`}
                                     >
-                                        {selectedContent.title}
-                                    </p>
-                                    <p
-                                        style={{
-                                            fontSize: "14px",
-                                            color: "#4b5563",
-                                        }}
-                                    >
-                                        {selectedContent.description}
-                                    </p>
-                                </div>
-                                <div
-                                    style={{
-                                        backgroundColor: "#fef3c7",
-                                        border: "1px solid #fcd34d",
-                                        borderRadius: "8px",
-                                        padding: "16px",
-                                        marginBottom: "16px",
-                                    }}
-                                >
-                                    <p
-                                        style={{
-                                            fontSize: "14px",
-                                            color: "#78350f",
-                                        }}
-                                    >
-                                        Bắt đầu nội dung này sẽ kết thúc những
-                                        nội dung đang họp khác, bạn có đồng ý
-                                        không?
-                                    </p>
-                                </div>
-                            </>
-                        )}
-                        <div
-                            style={{
-                                display: "flex",
-                                justifyContent: "flex-end",
-                                gap: "12px",
-                            }}
-                        >
-                            <button
-                                onClick={() =>
-                                    setIsStartContentModalOpen(false)
-                                }
-                                style={{
-                                    padding: "8px 16px",
-                                    border: "1px solid #d1d5db",
-                                    borderRadius: "8px",
-                                    background: "white",
-                                    cursor: "pointer",
-                                }}
-                            >
-                                Hủy bỏ
-                            </button>
-                            <button
-                                onClick={() => {
-                                    if (selectedContent) {
-                                        handleStartContent(selectedContent.id);
-                                    }
-                                    setIsStartContentModalOpen(false);
-                                }}
-                                style={{
-                                    padding: "8px 16px",
-                                    border: "none",
-                                    borderRadius: "8px",
-                                    background: "#C8102E",
-                                    color: "white",
-                                    cursor: "pointer",
-                                }}
-                            >
-                                Đồng ý
-                            </button>
-                        </div>
-                    </div>
+                                        <p className="text-sm body">
+                                            {content.title}
+                                        </p>
+                                    </div>
+                                ))}
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    {/* Lịch sử phiên họp */}
+                    <Card className="bg-white rounded-2xl shadow-sm border border-gray-200 flex-1">
+                        <CardContent className="p-5 h-full flex flex-col">
+                            <h3 className="text-base btn-primary text-gray-900 mb-4">
+                                Lịch sử phiên họp
+                            </h3>
+                            <EmptyState />
+                        </CardContent>
+                    </Card>
                 </div>
-            )}
 
-            {isApproveContentModalOpen && (
-                <div
-                    style={{
-                        position: "fixed",
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        backgroundColor: "rgba(0, 0, 0, 0.5)",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        zIndex: 99999,
-                    }}
-                    onClick={() => setIsApproveContentModalOpen(false)}
-                >
-                    <div
-                        style={{
-                            backgroundColor: "white",
-                            borderRadius: "16px",
-                            padding: "24px",
-                            maxWidth: "500px",
-                            width: "90%",
-                            boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
-                        }}
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        <h2
-                            style={{
-                                fontSize: "18px",
-                                fontWeight: "bold",
-                                marginBottom: "16px",
-                            }}
-                        >
-                            Xác nhận phê duyệt nội dung
-                        </h2>
-                        <div
-                            style={{
-                                backgroundColor: "#f3f4f6",
-                                border: "1px solid #e5e7eb",
-                                borderRadius: "8px",
-                                padding: "16px",
-                                marginBottom: "16px",
-                            }}
-                        >
-                            <p style={{ fontSize: "14px" }}>
-                                Xác nhận phê duyệt cho nội dung{" "}
-                                <strong>
-                                    "
+                {/* Cột giữa - card lớn hơn */}
+                <div className="col-span-5 flex flex-col">
+                    {/* Thông tin chi tiết phiên họp + Tài liệu đính kèm + Action buttons */}
+                    <Card className="bg-white rounded-2xl shadow-sm border border-gray-200">
+                        <CardContent className="p-5 space-y-6">
+                            {/* Nội dung đang được chọn */}
+                            <div>
+                                <h3 className="text-base btn-primary text-gray-900 mb-4">
                                     {
                                         meetingContents.find(
                                             (c) => c.id === activeContent,
                                         )?.title
                                     }
-                                    "
-                                </strong>
-                            </p>
+                                </h3>
+                                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                                    <p className="text-sm text-gray-700">
+                                        {
+                                            meetingContents.find(
+                                                (c) =>
+                                                    c.id === activeContent,
+                                            )?.description
+                                        }
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Thông tin chi tiết */}
+                            <div>
+                                <h3 className="text-base btn-primary text-gray-900 mb-4">
+                                    Thông tin chi tiết phiên họp
+                                </h3>
+                                <div className="space-y-3 text-sm">
+                                    <div className="flex items-start justify-between">
+                                        <span className="text-gray-500 body">
+                                            Chủ trì:
+                                        </span>
+                                        <span className="text-gray-900 body">
+                                            Ông Trần Văn A - Bí thư
+                                        </span>
+                                    </div>
+                                    <div className="flex items-start justify-between">
+                                        <span className="text-gray-500 body">
+                                            Người duyệt tài liệu:
+                                        </span>
+                                        <span className="text-gray-900 body">
+                                            Trần Văn C
+                                        </span>
+                                    </div>
+                                    <div className="flex items-start justify-between">
+                                        <span className="text-gray-500 body">
+                                            Trạng thái:
+                                        </span>
+                                        <Badge className="bg-green-100 text-green-700 hover:bg-green-100 px-3 py-1 text-xs rounded-full border-none">
+                                            Đang họp
+                                        </Badge>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Tài liệu đính kèm */}
+                            <div>
+                                <h3 className="text-base btn-primary text-gray-900 mb-4">
+                                    Tài liệu đính kèm
+                                </h3>
+                                <div className="space-y-3">
+                                    <div className="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:bg-gray-50 transition-colors">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-10 h-10 rounded-lg bg-red-50 flex items-center justify-center text-[#C8102E]">
+                                                <FileText className="w-5 h-5" />
+                                            </div>
+                                            <div>
+                                                <p className="body text-gray-900 text-sm">
+                                                    Báo cáo tình hình kinh
+                                                    tế - xã hội Quý 1.pdf
+                                                </p>
+                                                <p className="text-xs text-gray-500">
+                                                    2.4 MB
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="text-gray-500 hover:text-[#C8102E]"
+                                        >
+                                            <Download className="w-4 h-4" />
+                                        </Button>
+                                    </div>
+                                    <div className="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:bg-gray-50 transition-colors">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600">
+                                                <FileText className="w-5 h-5" />
+                                            </div>
+                                            <div>
+                                                <p className="body text-gray-900 text-sm">
+                                                    Kế hoạch triển khai Quý
+                                                    2 chi tiết.docx
+                                                </p>
+                                                <p className="text-xs text-gray-500">
+                                                    1.1 MB
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="text-gray-500 hover:text-[#C8102E]"
+                                        >
+                                            <Download className="w-4 h-4" />
+                                        </Button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Action Buttons for Content */}
+                            <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-100">
+                                <button
+                                    type="button"
+                                    style={{
+                                        display: "inline-flex",
+                                        alignItems: "center",
+                                        gap: "8px",
+                                        padding: "10px 20px",
+                                        border: "1px solid #16a34a",
+                                        borderRadius: "9999px",
+                                        background: "transparent",
+                                        color: "#16a34a",
+                                        fontWeight: "500",
+                                        cursor: "pointer",
+                                    }}
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        alert("Phê duyệt clicked!");
+                                        setIsApproveContentModalOpen(true);
+                                    }}
+                                >
+                                    <CheckCircle className="w-4 h-4" />
+                                    Phê duyệt
+                                </button>
+                                <button
+                                    type="button"
+                                    style={{
+                                        display: "inline-flex",
+                                        alignItems: "center",
+                                        gap: "8px",
+                                        padding: "10px 20px",
+                                        border: "1px solid #2563eb",
+                                        borderRadius: "9999px",
+                                        background: "transparent",
+                                        color: "#2563eb",
+                                        fontWeight: "500",
+                                        cursor: "pointer",
+                                    }}
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        alert("Bắt đầu clicked!");
+                                        const content =
+                                            meetingContents.find(
+                                                (c) =>
+                                                    c.id === activeContent,
+                                            );
+                                        setSelectedContent(content || null);
+                                        setIsStartContentModalOpen(true);
+                                    }}
+                                >
+                                    <PlayCircle className="w-4 h-4" />
+                                    Bắt đầu
+                                </button>
+                                <button
+                                    type="button"
+                                    style={{
+                                        display: "inline-flex",
+                                        alignItems: "center",
+                                        gap: "8px",
+                                        padding: "10px 20px",
+                                        border: "none",
+                                        borderRadius: "9999px",
+                                        background: "#C8102E",
+                                        color: "white",
+                                        fontWeight: "500",
+                                        cursor: "pointer",
+                                    }}
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        alert("Thêm góp ý clicked!");
+                                        setIsAddOpinionForContentModalOpen(
+                                            true,
+                                        );
+                                    }}
+                                >
+                                    <MessageSquarePlus className="w-4 h-4" />
+                                    Thêm góp ý
+                                </button>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </div>
+
+                {/* Cột phải */}
+                <div className="col-span-4 flex flex-col gap-5">
+                    {/* Thời gian phát biểu còn lại */}
+                    <Card className="bg-white rounded-2xl shadow-sm border border-gray-200">
+                        <CardContent className="p-5">
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="text-base btn-primary text-gray-900">
+                                    Thời gian phát biểu còn lại
+                                </h3>
+                                <Badge className="bg-green-100 text-green-700 hover:bg-green-100 px-3 py-1.5 text-sm rounded-full border-none font-mono heading">
+                                    00:09:44
+                                </Badge>
+                            </div>
+
+                            {currentSpeaker ? (
+                                <>
+                                    {/* Avatar placeholder */}
+                                    <div className="flex justify-center mb-4">
+                                        <div className="w-24 h-24 rounded-full bg-gray-200 flex items-center justify-center">
+                                            <User className="w-12 h-12 text-gray-400" />
+                                        </div>
+                                    </div>
+
+                                    {/* Thông tin người phát biểu */}
+                                    <div className="space-y-2 text-sm text-center mb-4">
+                                        <p className="text-gray-900 btn-primary">
+                                            {currentSpeaker.name}
+                                        </p>
+                                        <p className="text-gray-600">
+                                            {currentSpeaker.position}
+                                        </p>
+                                        <p className="text-gray-500">
+                                            {currentSpeaker.unit}
+                                        </p>
+                                    </div>
+
+                                    <Button
+                                        variant="outline"
+                                        className="w-full border-[#C8102E] text-[#C8102E] hover:bg-red-50 body rounded-full"
+                                        onClick={handleEndSpeaking}
+                                    >
+                                        Kết thúc phát biểu
+                                    </Button>
+                                </>
+                            ) : (
+                                <EmptyState title="Không có dữ liệu" />
+                            )}
+                        </CardContent>
+                    </Card>
+                </div>
+            </div>
+
+            {/* Section full width bên dưới */}
+            <div className="space-y-6">
+                {/* Danh sách vấn đề cần biểu quyết */}
+                <Card className="bg-white rounded-2xl shadow-sm border border-gray-200">
+                    <CollapsibleSection
+                        title={`Danh sách vấn đề cần biểu quyết (${votingIssues.length})`}
+                    >
+                        <div className="p-0">
+                            <DataTable
+                                data={votingIssues}
+                                config={votingTableConfig}
+                                pageSize={10}
+                                totalItems={votingIssues.length}
+                                onPageChange={() => { }}
+                            />
                         </div>
-                        <div style={{ marginBottom: "16px" }}>
-                            <label
+                    </CollapsibleSection>
+                </Card>
+
+                {/* Danh sách tham gia góp ý */}
+                <Card className="bg-white rounded-2xl shadow-sm border border-gray-200">
+                    <CollapsibleSection
+                        title={`Danh sách tham gia góp ý (${opinions.length})`}
+                        action={
+                            <Button
+                                variant="primary"
+                                size="sm"
+                                className="bg-[#C8102E] hover:bg-[#a80d26] h-9 gap-1.5"
+                                onClick={() =>
+                                    setIsAddOpinionModalOpen(true)
+                                }
+                            >
+                                <Plus className="w-4 h-4" />
+                                <span className="text-sm body">
+                                    Thêm
+                                </span>
+                            </Button>
+                        }
+                    >
+                        <div className="p-0">
+                            <DataTable
+                                data={opinions}
+                                config={{
+                                    columns: [
+                                        { key: 'userName', header: 'Tên đại biểu' },
+                                        { key: 'userPosition', header: 'Chức vụ' },
+                                        {
+                                            key: 'opinionDetail',
+                                            header: 'Chi tiết góp ý',
+                                            render: (row) => (
+                                                <div className="space-y-1">
+                                                    {row.documentName && (
+                                                        <p className="text-xs text-gray-500">
+                                                            Tài liệu: {row.documentName}
+                                                        </p>
+                                                    )}
+                                                    <p className="text-gray-900">{row.opinionDetail}</p>
+                                                    {row.attachments.length > 0 && (
+                                                        <p className="text-xs text-blue-600">
+                                                            {row.attachments.length} tài liệu đính kèm
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            )
+                                        },
+                                        {
+                                            key: 'id',
+                                            header: 'Hành động',
+                                            width: '100px',
+                                            align: 'center',
+                                            render: () => (
+                                                <Button variant="ghost" size="icon" className="text-gray-500 hover:text-[#C8102E]">
+                                                    <Eye className="w-4 h-4" />
+                                                </Button>
+                                            )
+                                        }
+                                    ]
+                                }}
+                                pageSize={10}
+                                totalItems={opinions.length}
+                                onPageChange={() => { }}
+                            />
+                        </div>
+                    </CollapsibleSection>
+                </Card>
+
+                {/* Danh sách phát biểu */}
+                <Card className="bg-white rounded-2xl shadow-sm border border-gray-200">
+                    <CollapsibleSection
+                        title={`Danh sách phát biểu (${speakers.filter((s) => s.status === "speaking" || s.status === "finished").length})`}
+                        action={
+                            <Button
+                                variant="primary"
+                                size="sm"
+                                className="bg-[#C8102E] hover:bg-[#a80d26] h-9 gap-1.5"
+                                onClick={() =>
+                                    setIsAddSpeakerModalOpen(true)
+                                }
+                            >
+                                <Plus className="w-4 h-4" />
+                                <span className="text-sm body">
+                                    Thêm người phát biểu
+                                </span>
+                            </Button>
+                        }
+                    >
+                        {/* Tabs */}
+                        <div className="flex items-center gap-6 border-b border-gray-200 mb-4 px-2">
+                            <button
+                                onClick={() => setActiveTab("cho")}
+                                className={`pb-3 body text-[15px] border-b-2 transition-colors ${activeTab === "cho"
+                                        ? "border-[#C8102E] text-[#C8102E]"
+                                        : "border-transparent text-gray-500 hover:text-gray-700"
+                                    }`}
+                            >
+                                Chờ phát biểu
+                            </button>
+                            <button
+                                onClick={() => setActiveTab("bac-bo")}
+                                className={`pb-3 body text-[15px] border-b-2 transition-colors ${activeTab === "bac-bo"
+                                        ? "border-[#C8102E] text-[#C8102E]"
+                                        : "border-transparent text-gray-500 hover:text-gray-700"
+                                    }`}
+                            >
+                                Bác bỏ
+                            </button>
+                        </div>
+
+                        <div className="p-0">
+                            <DataTable
+                                data={speakers.filter(s => s.status === "speaking" || s.status === "finished")}
+                                config={{
+                                    columns: [
+                                        { key: 'name', header: 'Tên đại biểu' },
+                                        { key: 'position', header: 'Chức vụ' },
+                                        { key: 'note', header: 'Ghi chú', render: (row) => row.note || '-' },
+                                        { key: 'startTime', header: 'Thời gian bắt đầu', render: (row) => row.startTime || '-' },
+                                        {
+                                            key: 'status',
+                                            header: 'Trạng thái',
+                                            render: (row) => (
+                                                <Badge className={cn(
+                                                    "px-3 py-1 text-xs rounded-full border-none",
+                                                    row.status === 'speaking' ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-700"
+                                                )}>
+                                                    {row.status === 'speaking' ? 'Đang phát biểu' : 'Đã kết thúc'}
+                                                </Badge>
+                                            )
+                                        },
+                                        {
+                                            key: 'id',
+                                            header: 'Hành động',
+                                            width: '100px',
+                                            align: 'center',
+                                            render: (row) => (
+                                                <SpeakerActionMenu
+                                                    speakerId={row.id}
+                                                    onPrepare={handlePrepareSpeech}
+                                                    onAssign={handleAssignSpeech}
+                                                    onReject={handleRejectSpeech}
+                                                />
+                                            )
+                                        }
+                                    ]
+                                }}
+                                pageSize={10}
+                                totalItems={speakers.filter(s => s.status === "speaking" || s.status === "finished").length}
+                                onPageChange={() => { }}
+                            />
+                        </div>
+                    </CollapsibleSection>
+                </Card>
+            </div>
+        </div>
+
+        {/* Modal chọn người phát biểu từ danh sách tham gia */}
+        <SelectSpeakerModal
+            isOpen={isAddSpeakerModalOpen}
+            onClose={() => setIsAddSpeakerModalOpen(false)}
+            onSelect={handleAddSpeakers}
+            participants={meetingParticipants}
+            existingSpeakerIds={speakers.map((s) => s.id)}
+            allowMultiple={true}
+        />
+
+        {/* Modal điểm danh */}
+        <AttendanceModal
+            isOpen={isAttendanceModalOpen}
+            onClose={() => setIsAttendanceModalOpen(false)}
+        />
+
+        {/* Modal thêm góp ý */}
+        <AddOpinionModal
+            isOpen={isAddOpinionModalOpen}
+            onClose={() => setIsAddOpinionModalOpen(false)}
+            onAdd={handleAddOpinion}
+            documents={availableDocuments}
+        />
+
+        {/* INLINE TEST MODALS - Direct render without components */}
+        {isStartContentModalOpen && (
+            <div
+                style={{
+                    position: "fixed",
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    backgroundColor: "rgba(0, 0, 0, 0.5)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    zIndex: 99999,
+                }}
+                onClick={() => setIsStartContentModalOpen(false)}
+            >
+                <div
+                    style={{
+                        backgroundColor: "white",
+                        borderRadius: "16px",
+                        padding: "24px",
+                        maxWidth: "500px",
+                        width: "90%",
+                        boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <h2
+                        style={{
+                            fontSize: "18px",
+                            fontWeight: "bold",
+                            marginBottom: "16px",
+                        }}
+                    >
+                        Xác nhận bắt đầu nội dung
+                    </h2>
+                    {selectedContent && (
+                        <>
+                            <div
                                 style={{
-                                    display: "flex",
-                                    alignItems: "center",
-                                    gap: "12px",
-                                    padding: "12px",
-                                    border: "1px solid #e5e7eb",
+                                    backgroundColor: "#dbeafe",
+                                    border: "1px solid #93c5fd",
                                     borderRadius: "8px",
-                                    marginBottom: "8px",
-                                    cursor: "pointer",
+                                    padding: "16px",
+                                    marginBottom: "16px",
                                 }}
                             >
-                                <input
-                                    type="radio"
-                                    name="approval"
-                                    defaultChecked
-                                />
-                                <span>Phê duyệt</span>
-                            </label>
-                            <label
+                                <p
+                                    style={{
+                                        fontWeight: "600",
+                                        marginBottom: "4px",
+                                    }}
+                                >
+                                    {selectedContent.title}
+                                </p>
+                                <p
+                                    style={{
+                                        fontSize: "14px",
+                                        color: "#4b5563",
+                                    }}
+                                >
+                                    {selectedContent.description}
+                                </p>
+                            </div>
+                            <div
                                 style={{
-                                    display: "flex",
-                                    alignItems: "center",
-                                    gap: "12px",
-                                    padding: "12px",
-                                    border: "1px solid #e5e7eb",
+                                    backgroundColor: "#fef3c7",
+                                    border: "1px solid #fcd34d",
                                     borderRadius: "8px",
-                                    cursor: "pointer",
+                                    padding: "16px",
+                                    marginBottom: "16px",
                                 }}
                             >
-                                <input type="radio" name="approval" />
-                                <span>Từ chối phê duyệt</span>
-                            </label>
-                        </div>
-                        <div
+                                <p
+                                    style={{
+                                        fontSize: "14px",
+                                        color: "#78350f",
+                                    }}
+                                >
+                                    Bắt đầu nội dung này sẽ kết thúc những
+                                    nội dung đang họp khác, bạn có đồng ý
+                                    không?
+                                </p>
+                            </div>
+                        </>
+                    )}
+                    <div
+                        style={{
+                            display: "flex",
+                            justifyContent: "flex-end",
+                            gap: "12px",
+                        }}
+                    >
+                        <button
+                            onClick={() =>
+                                setIsStartContentModalOpen(false)
+                            }
                             style={{
-                                display: "flex",
-                                justifyContent: "flex-end",
-                                gap: "12px",
+                                padding: "8px 16px",
+                                border: "1px solid #d1d5db",
+                                borderRadius: "8px",
+                                background: "white",
+                                cursor: "pointer",
                             }}
                         >
-                            <button
-                                onClick={() =>
-                                    setIsApproveContentModalOpen(false)
+                            Hủy bỏ
+                        </button>
+                        <button
+                            onClick={() => {
+                                if (selectedContent) {
+                                    handleStartContent(selectedContent.id);
                                 }
-                                style={{
-                                    padding: "8px 16px",
-                                    border: "1px solid #d1d5db",
-                                    borderRadius: "8px",
-                                    background: "white",
-                                    cursor: "pointer",
-                                }}
-                            >
-                                Hủy bỏ
-                            </button>
-                            <button
-                                onClick={() => {
-                                    handleApproveContent(activeContent, true);
-                                    setIsApproveContentModalOpen(false);
-                                }}
-                                style={{
-                                    padding: "8px 16px",
-                                    border: "none",
-                                    borderRadius: "8px",
-                                    background: "#C8102E",
-                                    color: "white",
-                                    cursor: "pointer",
-                                }}
-                            >
-                                Xác nhận
-                            </button>
-                        </div>
+                                setIsStartContentModalOpen(false);
+                            }}
+                            style={{
+                                padding: "8px 16px",
+                                border: "none",
+                                borderRadius: "8px",
+                                background: "#C8102E",
+                                color: "white",
+                                cursor: "pointer",
+                            }}
+                        >
+                            Đồng ý
+                        </button>
                     </div>
                 </div>
-            )}
+            </div>
+        )}
 
-            {/* Modal bắt đầu nội dung */}
-            <StartContentModal
-                isOpen={false}
-                onClose={() => setIsStartContentModalOpen(false)}
-                content={selectedContent}
-                onConfirm={handleStartContent}
-            />
+        {isApproveContentModalOpen && (
+            <div
+                style={{
+                    position: "fixed",
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    backgroundColor: "rgba(0, 0, 0, 0.5)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    zIndex: 99999,
+                }}
+                onClick={() => setIsApproveContentModalOpen(false)}
+            >
+                <div
+                    style={{
+                        backgroundColor: "white",
+                        borderRadius: "16px",
+                        padding: "24px",
+                        maxWidth: "500px",
+                        width: "90%",
+                        boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <h2
+                        style={{
+                            fontSize: "18px",
+                            fontWeight: "bold",
+                            marginBottom: "16px",
+                        }}
+                    >
+                        Xác nhận phê duyệt nội dung
+                    </h2>
+                    <div
+                        style={{
+                            backgroundColor: "#f3f4f6",
+                            border: "1px solid #e5e7eb",
+                            borderRadius: "8px",
+                            padding: "16px",
+                            marginBottom: "16px",
+                        }}
+                    >
+                        <p style={{ fontSize: "14px" }}>
+                            Xác nhận phê duyệt cho nội dung{" "}
+                            <strong>
+                                "
+                                {
+                                    meetingContents.find(
+                                        (c) => c.id === activeContent,
+                                    )?.title
+                                }
+                                "
+                            </strong>
+                        </p>
+                    </div>
+                    <div style={{ marginBottom: "16px" }}>
+                        <label
+                            style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "12px",
+                                padding: "12px",
+                                border: "1px solid #e5e7eb",
+                                borderRadius: "8px",
+                                marginBottom: "8px",
+                                cursor: "pointer",
+                            }}
+                        >
+                            <input
+                                type="radio"
+                                name="approval"
+                                defaultChecked
+                            />
+                            <span>Phê duyệt</span>
+                        </label>
+                        <label
+                            style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "12px",
+                                padding: "12px",
+                                border: "1px solid #e5e7eb",
+                                borderRadius: "8px",
+                                cursor: "pointer",
+                            }}
+                        >
+                            <input type="radio" name="approval" />
+                            <span>Từ chối phê duyệt</span>
+                        </label>
+                    </div>
+                    <div
+                        style={{
+                            display: "flex",
+                            justifyContent: "flex-end",
+                            gap: "12px",
+                        }}
+                    >
+                        <button
+                            onClick={() =>
+                                setIsApproveContentModalOpen(false)
+                            }
+                            style={{
+                                padding: "8px 16px",
+                                border: "1px solid #d1d5db",
+                                borderRadius: "8px",
+                                background: "white",
+                                cursor: "pointer",
+                            }}
+                        >
+                            Hủy bỏ
+                        </button>
+                        <button
+                            onClick={() => {
+                                handleApproveContent(activeContent, true);
+                                setIsApproveContentModalOpen(false);
+                            }}
+                            style={{
+                                padding: "8px 16px",
+                                border: "none",
+                                borderRadius: "8px",
+                                background: "#C8102E",
+                                color: "white",
+                                cursor: "pointer",
+                            }}
+                        >
+                            Xác nhận
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
 
-            {/* Modal phê duyệt nội dung */}
-            <ApproveContentModal
-                isOpen={false}
-                onClose={() => setIsApproveContentModalOpen(false)}
-                contentTitle={
-                    meetingContents.find((c) => c.id === activeContent)
-                        ?.title || ""
+        {/* Modal bắt đầu nội dung */}
+        <StartContentModal
+            isOpen={false}
+            onClose={() => setIsStartContentModalOpen(false)}
+            content={selectedContent}
+            onConfirm={handleStartContent}
+        />
+
+        {/* Modal phê duyệt nội dung */}
+        <ApproveContentModal
+            isOpen={false}
+            onClose={() => setIsApproveContentModalOpen(false)}
+            contentTitle={
+                meetingContents.find((c) => c.id === activeContent)
+                    ?.title || ""
+            }
+            contentId={activeContent}
+            onConfirm={handleApproveContent}
+        />
+
+        {/* Modal thêm góp ý cho nội dung */}
+        <AddOpinionForContentModal
+            isOpen={isAddOpinionForContentModalOpen}
+            onClose={() => setIsAddOpinionForContentModalOpen(false)}
+            onAdd={handleAddOpinionForContent}
+            contents={availableContents}
+            documents={availableDocuments}
+            defaultContentId={activeContent.toString()}
+        />
+
+        {/* Voting Modals */}
+        <ConfirmBroadcastModal
+            isOpen={isConfirmBroadcastModalOpen}
+            onClose={() => setIsConfirmBroadcastModalOpen(false)}
+            onConfirm={handleConfirmBroadcast}
+            issueTitle={currentVotingIssue?.issue || ""}
+        />
+
+        <ReadinessCheckModal
+            isOpen={isReadinessCheckModalOpen}
+            onClose={() => setIsReadinessCheckModalOpen(false)}
+            onProceed={handleProceedFromReadiness}
+            issueTitle={currentVotingIssue?.issue || ""}
+            delegates={mockDelegates}
+        />
+
+        <VotingTimeModal
+            isOpen={isVotingTimeModalOpen}
+            onClose={() => setIsVotingTimeModalOpen(false)}
+            onConfirm={handleConfirmVotingTime}
+        />
+
+        <VotingModal
+            isOpen={isVotingModalOpen}
+            onClose={() => setIsVotingModalOpen(false)}
+            onVote={handleVote}
+            issueTitle={currentVotingIssue?.issue || ""}
+            durationMinutes={currentVotingIssue?.votingDuration || 10}
+        />
+
+        <PauseVotingModal
+            isOpen={isPauseVotingModalOpen}
+            onClose={() => setIsPauseVotingModalOpen(false)}
+            onConfirm={handleConfirmPause}
+            issueTitle={currentVotingIssue?.issue || ""}
+        />
+
+        <VotingResultModal
+            isOpen={isVotingResultModalOpen}
+            onClose={() => setIsVotingResultModalOpen(false)}
+            issueTitle={currentVotingIssue?.issue || "Vấn đề biểu quyết"}
+            results={
+                votingResultData?.results || {
+                    agree: 0,
+                    disagree: 0,
+                    other: 0,
+                    notVoted: 0,
                 }
-                contentId={activeContent}
-                onConfirm={handleApproveContent}
-            />
-
-            {/* Modal thêm góp ý cho nội dung */}
-            <AddOpinionForContentModal
-                isOpen={isAddOpinionForContentModalOpen}
-                onClose={() => setIsAddOpinionForContentModalOpen(false)}
-                onAdd={handleAddOpinionForContent}
-                contents={availableContents}
-                documents={availableDocuments}
-                defaultContentId={activeContent.toString()}
-            />
-
-            {/* Voting Modals */}
-            <ConfirmBroadcastModal
-                isOpen={isConfirmBroadcastModalOpen}
-                onClose={() => setIsConfirmBroadcastModalOpen(false)}
-                onConfirm={handleConfirmBroadcast}
-                issueTitle={currentVotingIssue?.issue || ""}
-            />
-
-            <ReadinessCheckModal
-                isOpen={isReadinessCheckModalOpen}
-                onClose={() => setIsReadinessCheckModalOpen(false)}
-                onProceed={handleProceedFromReadiness}
-                issueTitle={currentVotingIssue?.issue || ""}
-                delegates={mockDelegates}
-            />
-
-            <VotingTimeModal
-                isOpen={isVotingTimeModalOpen}
-                onClose={() => setIsVotingTimeModalOpen(false)}
-                onConfirm={handleConfirmVotingTime}
-            />
-
-            <VotingModal
-                isOpen={isVotingModalOpen}
-                onClose={() => setIsVotingModalOpen(false)}
-                onVote={handleVote}
-                issueTitle={currentVotingIssue?.issue || ""}
-                durationMinutes={currentVotingIssue?.votingDuration || 10}
-            />
-
-            <PauseVotingModal
-                isOpen={isPauseVotingModalOpen}
-                onClose={() => setIsPauseVotingModalOpen(false)}
-                onConfirm={handleConfirmPause}
-                issueTitle={currentVotingIssue?.issue || ""}
-            />
-
-            <VotingResultModal
-                isOpen={isVotingResultModalOpen}
-                onClose={() => setIsVotingResultModalOpen(false)}
-                issueTitle={currentVotingIssue?.issue || "Vấn đề biểu quyết"}
-                results={
-                    votingResultData?.results || {
-                        agree: 0,
-                        disagree: 0,
-                        other: 0,
-                        notVoted: 0,
-                    }
-                }
-                votedDelegates={votingResultData?.votedDelegates || []}
-                notVotedDelegates={votingResultData?.notVotedDelegates || []}
-            />
-        </>
-    );
+            }
+            votedDelegates={votingResultData?.votedDelegates || []}
+            notVotedDelegates={votingResultData?.notVotedDelegates || []}
+        />
+    </>
+);
 }
 
 

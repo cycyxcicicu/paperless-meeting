@@ -195,6 +195,14 @@ const PhongHopPage = () => {
         );
     }, [searchQuery]);
 
+    const totalItems = filteredData.length;
+    
+    const paginatedData = useMemo(() => {
+        const startIndex = (currentPage - 1) * pageSize;
+        const endIndex = startIndex + pageSize;
+        return filteredData.slice(startIndex, endIndex);
+    }, [filteredData, currentPage, pageSize]);
+
     const totalCapacity = mockLocations.reduce((acc, loc) => acc + loc.capacity, 0);
     const activeLocations = mockLocations.filter((loc) => loc.status === "active").length;
     const recentlyUsed = mockLocations.filter((loc) => loc.lastUsed).length;
@@ -236,11 +244,11 @@ const PhongHopPage = () => {
                 />
 
                 <DataTable
-                    data={filteredData}
+                    data={paginatedData}
                     config={tableConfig}
                     currentPage={currentPage}
                     pageSize={pageSize}
-                    totalItems={filteredData.length}
+                    totalItems={totalItems}
                     onPageChange={setCurrentPage}
                     onPageSizeChange={setPageSize}
                 />

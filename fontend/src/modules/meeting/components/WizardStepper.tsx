@@ -13,6 +13,7 @@ interface WizardStepperProps {
   currentStep: number;
   onStepClick: (stepId: number) => void;
   completedSteps: number[];
+  highestStepReached?: number;
 }
 
 const WizardStepper: React.FC<WizardStepperProps> = ({
@@ -20,14 +21,15 @@ const WizardStepper: React.FC<WizardStepperProps> = ({
   currentStep,
   onStepClick,
   completedSteps,
+  highestStepReached,
 }) => {
   return (
     <div>
-      <div className="flex items-center justify-between max-w-4xl mx-auto">
+      <div className="flex items-center justify-between w-full">
           {steps.map((step, index) => {
             const isCompleted = completedSteps.includes(step.id);
             const isActive = currentStep === step.id;
-            const isClickable = isCompleted || isActive || step.id < currentStep;
+            const isClickable = highestStepReached ? step.id <= highestStepReached : (isCompleted || isActive || step.id < currentStep);
 
             return (
               <React.Fragment key={step.id}>
@@ -78,7 +80,7 @@ const WizardStepper: React.FC<WizardStepperProps> = ({
 
                 {/* Connector Line */}
                 {index < steps.length - 1 && (
-                  <div className="flex-1 max-w-[80px] h-[2px] mx-3">
+                  <div className="flex-1 min-w-[40px] h-[2px] mx-3">
                     <div
                       className={cn(
                         'h-full transition-all rounded-full',

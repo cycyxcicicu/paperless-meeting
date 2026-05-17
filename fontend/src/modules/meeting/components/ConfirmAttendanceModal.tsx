@@ -2,6 +2,9 @@ import React, { useState } from 'react';
 import { X, Plus } from 'lucide-react';
 import { Button } from '@/common/components/ui/button';
 import { CustomSelect } from '@/common/components/ui/custom-select';
+import { DynamicFormRenderer } from '@/common/components/form-engine/DynamicFormRenderer';
+import { FormFieldGroup } from '@/common/components/form-engine/form.types';
+import { useForm, FormProvider } from 'react-hook-form';
 
 interface ConfirmAttendanceModalProps {
   isOpen: boolean;
@@ -14,71 +17,151 @@ interface AbsentData {
   reason: string;
   contentIds: string[];
   substituteId?: string;
+  subName?: string;
+  subPosition?: string;
+  subAgency?: string;
+  subEmail?: string;
+  subPhone?: string;
 }
+
+const substituteFormGroups: FormFieldGroup[] = [
+  {
+    id: 'substitute-other-info',
+    className: 'grid-cols-2 gap-4 mt-4 animate-in fade-in slide-in-from-top-2 duration-200',
+    fields: [
+      {
+        key: 'subName',
+        type: 'text',
+        label: 'Họ và tên người đi thay',
+        required: true,
+        col: 'col-span-2',
+        showPlaceholder: false,
+      },
+      {
+        key: 'subPosition',
+        type: 'text',
+        label: 'Chức vụ',
+        required: true,
+        col: 'col-span-1',
+        showPlaceholder: false,
+      },
+      {
+        key: 'subAgency',
+        type: 'text',
+        label: 'Cơ quan/Đơn vị',
+        required: true,
+        col: 'col-span-1',
+        showPlaceholder: false,
+      },
+      {
+        key: 'subEmail',
+        type: 'text',
+        label: 'Email',
+        required: true,
+        col: 'col-span-1',
+        showPlaceholder: false,
+      },
+      {
+        key: 'subPhone',
+        type: 'text',
+        label: 'Số điện thoại',
+        col: 'col-span-1',
+        showPlaceholder: false,
+      },
+    ],
+  },
+];
 
 export const ConfirmAttendanceModal: React.FC<ConfirmAttendanceModalProps> = ({
   isOpen,
   onClose,
   onConfirm,
 }) => {
-  const [selectedOption, setSelectedOption] = useState<'attend' | 'absent'>('attend');
-  const [isFullSession, setIsFullSession] = useState(false);
-  const [reason, setReason] = useState('');
-  const [contentIds, setContentIds] = useState<string[]>(['']);
-  const [substituteId, setSubstituteId] = useState('');
+  const methods = useForm({
+    defaultValues: {
+      attendance: 'attend',
+      isFullSession: false,
+      reason: '',
+      contentIds: [''],
+      substituteId: '',
+      subName: '',
+      subPosition: '',
+      subAgency: '',
+      subEmail: '',
+      subPhone: '',
+    }
+  });
 
-  const resetForm = () => {
-    setSelectedOption('attend');
-    setIsFullSession(false);
-    setReason('');
-    setContentIds(['']);
-    setSubstituteId('');
-  };
+  const { watch, setValue, handleSubmit, reset } = methods;
+  const selectedOption = watch('attendance');
+  const isFullSession = watch('isFullSession');
+  const substituteId = watch('substituteId');
+  const contentIds = watch('contentIds');
 
   const handleClose = () => {
-    resetForm();
+    reset();
     onClose();
   };
 
-  const handleConfirm = () => {
-    if (selectedOption === 'attend') {
+  const onSubmit = (data: any) => {
+    if (data.attendance === 'attend') {
       onConfirm('attend');
       handleClose();
     } else {
-      if (!reason.trim()) {
+      if (!data.reason.trim()) {
         alert('Vui lòng nhập lý do vắng mặt');
         return;
       }
-      if (!isFullSession && !contentIds[0]) {
+      if (!data.isFullSession && !data.contentIds[0]) {
         alert('Vui lòng chọn ít nhất một nội dung vắng mặt');
         return;
       }
+
+      if (data.substituteId === 'other') {
+        if (!data.subName || !data.subPosition || !data.subAgency) {
+          alert('Vui lòng nhập đầy đủ thông tin người đi thay');
+          return;
+        }
+      }
+
       onConfirm('absent', {
-        isFullSession,
-        reason,
-        contentIds: contentIds.filter((id) => id),
-        substituteId,
+        isFullSession: data.isFullSession,
+        reason: data.reason,
+        contentIds: data.contentIds.filter((id: string) => id),
+        substituteId: data.substituteId,
+        subName: data.subName,
+        subPosition: data.subPosition,
+        subAgency: data.subAgency,
+        subEmail: data.subEmail,
+        subPhone: data.subPhone,
       });
       handleClose();
     }
   };
 
   const handleAddContent = () => {
-    setContentIds([...contentIds, '']);
+    setValue('contentIds', [...contentIds, '']);
   };
 
   const handleRemoveContent = (index: number) => {
-    setContentIds(contentIds.filter((_, i) => i !== index));
+    setValue('contentIds', contentIds.filter((_, i) => i !== index));
   };
 
   const handleOptionChange = (option: 'attend' | 'absent') => {
-    setSelectedOption(option);
+    setValue('attendance', option);
     if (option === 'attend') {
-      // Reset các trường khi chọn "Tham gia"
-      setIsFullSession(false);
-      setReason('');
-      setContentIds(['']);
-      setSubstituteId('');
+      reset({
+        attendance: 'attend',
+        isFullSession: false,
+        reason: '',
+        contentIds: [''],
+        substituteId: '',
+        subName: '',
+        subPosition: '',
+        subAgency: '',
+        subEmail: '',
+        subPhone: '',
+      });
     }
   };
 
@@ -107,6 +190,8 @@ export const ConfirmAttendanceModal: React.FC<ConfirmAttendanceModalProps> = ({
 
         {/* Body - Scrollable */}
         <div className="px-6 py-6 flex-1 overflow-y-auto">
+          <FormProvider {...methods}>
+            <form id="attendance-form" onSubmit={handleSubmit(onSubmit)}>
           <div className="space-y-4">
             {/* Radio: Tham gia */}
             <label className="flex items-center gap-3 cursor-pointer group">
@@ -177,9 +262,9 @@ export const ConfirmAttendanceModal: React.FC<ConfirmAttendanceModalProps> = ({
                     type="checkbox"
                     checked={isFullSession}
                     onChange={(e) => {
-                      setIsFullSession(e.target.checked);
+                      setValue('isFullSession', e.target.checked);
                       if (e.target.checked) {
-                        setContentIds(['']);
+                        setValue('contentIds', ['']);
                       }
                     }}
                     className="w-4 h-4 text-[#C8102E] border-2 border-gray-300 rounded focus:ring-2 focus:ring-[#C8102E] cursor-pointer transition-all checked:bg-[#C8102E] checked:border-[#C8102E] hover:border-gray-400 accent-[#C8102E]"
@@ -195,8 +280,7 @@ export const ConfirmAttendanceModal: React.FC<ConfirmAttendanceModalProps> = ({
                     Lý do vắng mặt <span className="text-red-500">*</span>
                   </label>
                   <textarea
-                    value={reason}
-                    onChange={(e) => setReason(e.target.value)}
+                    {...methods.register('reason')}
                     rows={3}
                     className="w-full px-3.5 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#C8102E] focus:border-[#C8102E] resize-none text-sm text-gray-900 placeholder:text-gray-400 transition-all hover:border-gray-400"
                     placeholder="Nhập lý do vắng mặt"
@@ -206,19 +290,33 @@ export const ConfirmAttendanceModal: React.FC<ConfirmAttendanceModalProps> = ({
                 {/* Nội dung vắng mặt */}
                 {!isFullSession && (
                   <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-sm body text-gray-700">
+                        Nội dung vắng mặt <span className="text-red-500">*</span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={handleAddContent}
+                        className="text-xs text-[#C8102E] hover:underline font-medium flex items-center gap-1"
+                      >
+                        <Plus className="w-3 h-3" />
+                        Thêm nội dung
+                      </button>
+                    </div>
                     {contentIds.map((contentId, index) => (
                       <div key={index}>
-                        <label className="block text-sm body text-gray-700 mb-2">
-                          Nội dung vắng mặt {index + 1}{' '}
-                          {index === 0 && <span className="text-red-500">*</span>}
-                        </label>
+                        {index > 0 && (
+                          <label className="block text-sm body text-gray-700 mb-2">
+                            Nội dung vắng mặt {index + 1}
+                          </label>
+                        )}
                         <div className="flex gap-2">
                           <CustomSelect
                             value={contentId}
                             onChange={(value) => {
                               const newIds = [...contentIds];
                               newIds[index] = value;
-                              setContentIds(newIds);
+                              setValue('contentIds', newIds);
                             }}
                             options={[
                               { value: '1', label: 'Nội dung 1: Báo cáo tình hình KT-XH' },
@@ -249,31 +347,39 @@ export const ConfirmAttendanceModal: React.FC<ConfirmAttendanceModalProps> = ({
                   </label>
                   <CustomSelect
                     value={substituteId}
-                    onChange={setSubstituteId}
+                    onChange={(val) => setValue('substituteId', val)}
+                    showSearch
                     options={[
+                      { value: 'other', label: 'Khác (Nhập thông tin mới)' },
                       { value: '1', label: 'Nguyễn Văn A - Phó Giám đốc' },
                       { value: '2', label: 'Trần Thị B - Trưởng phòng' },
                       { value: '3', label: 'Lê Văn C - Chuyên viên' },
+                      { value: '4', label: 'Phạm Văn D - Kế toán trưởng' },
+                      { value: '5', label: 'Hoàng Thị E - Nhân sự' },
+                      { value: '6', label: 'Đặng Văn F - Kỹ thuật' },
+                      { value: '7', label: 'Bùi Thị G - Kinh doanh' },
+                      { value: '8', label: 'Lý Văn H - Bảo vệ' },
+                      { value: '9', label: 'Vũ Thị I - Thư ký' },
+                      { value: '10', label: 'Đỗ Văn K - Giám sát' },
+                      { value: '11', label: 'Hồ Thị L - Tiếp tân' },
+                      { value: '12', label: 'Ngô Văn M - Lái xe' },
+                      { value: '13', label: 'Dương Thị N - Tạp vụ' },
+                      { value: '14', label: 'Lương Văn P - Thủ kho' },
+                      { value: '15', label: 'Trương Thị Q - Truyền thông' },
                     ]}
                     placeholder="Chọn người đi thay"
                     allowClear
                   />
-                </div>
 
-                {/* Nút thêm nội dung vắng mặt */}
-                {!isFullSession && (
-                  <Button
-                    variant="outline"
-                    onClick={handleAddContent}
-                    className="w-full border-[#C8102E] text-[#C8102E] hover:bg-red-50 rounded-lg h-10 body"
-                  >
-                    <Plus className="w-4 h-4 mr-2" />
-                    Thêm nội dung vắng mặt
-                  </Button>
-                )}
+                  {substituteId === 'other' && (
+                    <DynamicFormRenderer groups={substituteFormGroups} mode="create" />
+                  )}
+                </div>
               </div>
             )}
           </div>
+          </form>
+          </FormProvider>
         </div>
 
         {/* Footer */}
@@ -287,7 +393,8 @@ export const ConfirmAttendanceModal: React.FC<ConfirmAttendanceModalProps> = ({
           </Button>
           <Button
             variant="primary"
-            onClick={handleConfirm}
+            type="submit"
+            form="attendance-form"
             className="px-6 py-2.5 bg-[#C8102E] hover:bg-[#a80d26] text-white rounded-lg h-10 body transition-all"
           >
             Xác nhận

@@ -16,6 +16,7 @@ interface Member {
   unit: string;
   unitId: string;
   email: string;
+  isChair?: boolean;
 }
 
 interface SelectUnitModalProps {
@@ -354,7 +355,9 @@ const SelectUnitModal: React.FC<SelectUnitModalProps> = ({
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl max-h-[85vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-          <h2 className="text-lg btn-primary text-gray-900">{title}</h2>
+          <h2 className="text-lg btn-primary text-gray-900">
+            {selectedUnitName || title}
+          </h2>
           <button
             onClick={onClose}
             className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
@@ -363,22 +366,34 @@ const SelectUnitModal: React.FC<SelectUnitModalProps> = ({
           </button>
         </div>
 
+        {/* Global Search Bars on the same line */}
+        <div className="flex gap-4 px-6 py-3 border-b border-gray-200 bg-gray-50/50">
+          <div className="relative w-1/3">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Tìm kiếm đơn vị..."
+              className="w-full h-10 pl-10 pr-4 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-[#C8102E] focus:border-[#C8102E] bg-white"
+            />
+          </div>
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <input
+              type="text"
+              value={memberSearchQuery}
+              onChange={(e) => setMemberSearchQuery(e.target.value)}
+              placeholder="Tìm kiếm nhân viên..."
+              className="w-full h-10 pl-10 pr-4 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-[#C8102E] focus:border-[#C8102E] bg-white"
+            />
+          </div>
+        </div>
+
         {/* Body */}
         <div className="flex-1 flex overflow-hidden">
           {/* Left Panel: Unit Tree */}
           <div className="w-1/3 border-r border-gray-200 flex flex-col">
-            <div className="p-4 border-b border-gray-200">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Tìm kiếm đơn vị..."
-                  className="w-full h-10 pl-10 pr-4 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-[#C8102E] focus:border-[#C8102E]"
-                />
-              </div>
-            </div>
 
             <div className="flex-1 overflow-y-auto p-2">
               {mockUnits.map((unit) => (
@@ -396,10 +411,10 @@ const SelectUnitModal: React.FC<SelectUnitModalProps> = ({
           {/* Right Panel: Members List */}
           <div className="flex-1 flex flex-col">
             <div className="p-4 border-b border-gray-200">
-              <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-sm btn-primary text-gray-700">
-                    {selectedUnitName || 'Danh sách đại biểu'}
+                    Danh sách nhân viên {selectedUnitName && `- ${selectedUnitName}`}
                   </h3>
                   <p className="text-xs text-gray-500 mt-0.5">
                     {searchFilteredMembers.length} thành viên
@@ -421,16 +436,6 @@ const SelectUnitModal: React.FC<SelectUnitModalProps> = ({
                     Bỏ chọn tất cả
                   </button>
                 )}
-              </div>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <input
-                  type="text"
-                  value={memberSearchQuery}
-                  onChange={(e) => setMemberSearchQuery(e.target.value)}
-                  placeholder="Tìm kiếm đại biểu..."
-                  className="w-full h-10 pl-10 pr-4 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-[#C8102E] focus:border-[#C8102E]"
-                />
               </div>
             </div>
 

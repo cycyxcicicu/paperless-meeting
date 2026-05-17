@@ -1,6 +1,6 @@
 import { ArrowLeft } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router";
+import { useNavigate, useParams, useLocation } from "react-router";
 import { toast } from '@/lib/toast';
 import { Sidebar } from '@/common/components/layout/Sidebar';
 import {
@@ -15,8 +15,10 @@ import {
     ThanhPhanThamDuData,
     ThanhPhanThamDuStep,
 } from '@/modules/meeting/components/ThanhPhanThamDuStep';
+import { ThongBaoGiayMoiStep, ThongBaoGiayMoiData } from '@/modules/meeting/components/ThongBaoGiayMoiStep';
 import { WizardFooter } from '@/modules/meeting/components/WizardFooter';
 import { WizardStepper } from '@/modules/meeting/components/WizardStepper';
+import { chiTietHopSchema, noiDungHopSchema, thongBaoGiayMoiSchema } from '../form/meeting.validation';
 
 import { PHIEN_HOP_SIDEBAR_ITEMS } from '@/app/constants/sidebar';
 const STEPS = [
@@ -28,10 +30,15 @@ const STEPS = [
     {
         id: 2,
         title: "Thành phần tham dự",
-        description: "Đơn vị và cá nhân",
+        description: "Đơn vị và khách mời",
     },
     {
         id: 3,
+        title: "Thông báo và giấy mời",
+        description: "Biểu mẫu thư mời",
+    },
+    {
+        id: 4,
         title: "Nội dung họp",
         description: "Chi tiết và tài liệu",
     },
@@ -41,14 +48,24 @@ type ApprovalStatus = "draft" | "pending" | "approved" | "sent";
 
 const TaoPhienHopPage = () => {
     const navigate = useNavigate();
+    const location = useLocation();
     const { id } = useParams();
     const isUpdateMode = !!id; // Nếu có id thì là mode update
+    const copyFromId = location.state?.copyFromId;
+    const isCopyMode = !!copyFromId;
 
     const [currentStep, setCurrentStep] = useState(1);
     const [completedSteps, setCompletedSteps] = useState<number[]>([]);
     const [approvalStatus, setApprovalStatus] =
         useState<ApprovalStatus>("draft");
-    const [isLoadingData, setIsLoadingData] = useState(false);
+    const [isLoadingData, setIsLoadingData] = useState(isUpdateMode || isCopyMode);
+    const [highestStepReached, setHighestStepReached] = useState(1);
+
+    useEffect(() => {
+        if (currentStep > highestStepReached) {
+            setHighestStepReached(currentStep);
+        }
+    }, [currentStep, highestStepReached]);
 
     // Step 1 data
     const [chiTietData, setChiTietData] = useState<ChiTietHopData>({
@@ -56,11 +73,10 @@ const TaoPhienHopPage = () => {
         thoiGianBatDau: "",
         thoiGianKetThuc: "",
         diaDiem: "",
+        linkHopTrucTuyen: "",
+        soPhutDenMuon: 0,
         noiDungChuongTrinh: "text",
         noiDungChuongTrinhText: "",
-        giayMoiFile: null,
-        loaiPhienHop: "",
-        linkHopTrucTuyen: "",
     });
 
     const [chiTietErrors, setChiTietErrors] = useState<Record<string, string>>(
@@ -77,6 +93,15 @@ const TaoPhienHopPage = () => {
     });
 
     // Step 3 data
+    const [thongBaoData, setThongBaoData] = useState<ThongBaoGiayMoiData>({
+        mauGiayMoi: 'mau-1',
+        tieuDe: 'GIẤY MỜI HỌP',
+        noiDung: 'Trân trọng kính mời đồng chí tới tham dự cuộc họp...',
+        trangThaiKy: 'co-ky',
+    });
+    const [thongBaoErrors, setThongBaoErrors] = useState<Record<string, string>>({});
+
+    // Step 4 data
     const [noiDungData, setNoiDungData] = useState<NoiDungHopData>({
         contents: [
             {
@@ -197,8 +222,8 @@ const TaoPhienHopPage = () => {
     };
 
     // Map meeting detail to form state
-    const loadMeetingData = (meetingId: string) => {
-        console.log("🔄 Start loading meeting data for ID:", meetingId);
+    const loadMeetingData = (meetingId: string, isCopy = false) => {
+        console.log("🔄 Start loading meeting data for ID:", meetingId, "isCopy:", isCopy);
         setIsLoadingData(true);
 
         try {
@@ -207,15 +232,14 @@ const TaoPhienHopPage = () => {
 
             // Map to Step 1 data
             const step1Data: ChiTietHopData = {
-                tenPhienHop: meeting.tenPhienHop,
+                tenPhienHop: isCopy ? `${meeting.tenPhienHop} - Bản sao` : meeting.tenPhienHop,
                 thoiGianBatDau: meeting.thoiGianBatDau,
                 thoiGianKetThuc: meeting.thoiGianKetThuc,
                 diaDiem: meeting.diaDiem,
+                linkHopTrucTuyen: meeting.linkHopTrucTuyen,
+                soPhutDenMuon: 0,
                 noiDungChuongTrinh: meeting.noiDungChuongTrinh as "text" | "upload",
                 noiDungChuongTrinhText: meeting.noiDungChuongTrinhText,
-                giayMoiFile: meeting.giayMoiFile,
-                loaiPhienHop: meeting.loaiPhienHop,
-                linkHopTrucTuyen: meeting.linkHopTrucTuyen,
             };
             console.log("📋 Setting Step 1 data:", step1Data);
             setChiTietData(step1Data);
@@ -231,34 +255,74 @@ const TaoPhienHopPage = () => {
             console.log("👥 Setting Step 2 data:", step2Data);
             setThanhPhanData(step2Data);
 
-            // Map to Step 3 data
-            const step3Data: NoiDungHopData = {
-                contents: meeting.contents.map(c => ({
-                    id: c.id,
-                    noiDungChiTiet: c.noiDungChiTiet,
-                    thoiGianBatDau: c.thoiGianBatDau,
-                    thoiGianKetThuc: c.thoiGianKetThuc,
-                    nguoiChuanBi: c.nguoiChuanBi,
-                    nguoiDuyet: c.nguoiDuyet,
-                    taiLieu: [] as File[],
-                    bieuQuyetIssues: c.bieuQuyetIssues.map(b => ({
-                        id: b.id,
-                        ten: b.title,
-                        moTa: b.description
-                    })),
-                    thanhPhanThamDu: {
-                        donVi: c.thanhPhanThamDu.donVi.map(id => ({ id, name: 'Đơn vị', position: '', unit: '', unitId: id, email: '' })),
-                        caNhan: c.thanhPhanThamDu.caNhan.map(id => ({ id, name: 'Cá nhân', position: '', unit: '', unitId: '', email: '' })),
-                        khachMoi: c.thanhPhanThamDu.khachMoi,
-                        nhomThanhVien: c.thanhPhanThamDu.nhomThanhVien.map(id => ({ id, name: 'Nhóm', soLuong: 0 }))
-                    }
-                }))
+            // Map to Step 3 data (Thong bao)
+            const step3Data: ThongBaoGiayMoiData = {
+                mauGiayMoi: 'mau-1',
+                tieuDe: meeting.tenPhienHop,
+                noiDung: 'Trân trọng kính mời đồng chí tới tham dự cuộc họp...',
+                trangThaiKy: 'co-ky',
             };
-            console.log("📝 Setting Step 3 data:", step3Data);
-            setNoiDungData(step3Data);
+            setThongBaoData(step3Data);
 
-            // Mark all steps as completed in update mode
-            setCompletedSteps([1, 2]);
+            // Map to Step 4 data
+            let step4Data: NoiDungHopData;
+            
+            if (isCopy) {
+                // If copying, leave contents empty
+                step4Data = {
+                    contents: [
+                        {
+                            id: "content-1",
+                            noiDungChiTiet: "",
+                            thoiGianBatDau: "",
+                            thoiGianKetThuc: "",
+                            nguoiChuanBi: "",
+                            nguoiDuyet: "",
+                            taiLieu: [],
+                            bieuQuyetIssues: [],
+                            thanhPhanThamDu: {
+                                donVi: [],
+                                caNhan: [],
+                                khachMoi: [],
+                                nhomThanhVien: [],
+                            },
+                        },
+                    ],
+                };
+            } else {
+                step4Data = {
+                    contents: meeting.contents.map(c => ({
+                        id: c.id,
+                        noiDungChiTiet: c.noiDungChiTiet,
+                        thoiGianBatDau: c.thoiGianBatDau,
+                        thoiGianKetThuc: c.thoiGianKetThuc,
+                        nguoiChuanBi: c.nguoiChuanBi,
+                        nguoiDuyet: c.nguoiDuyet,
+                        taiLieu: [] as File[],
+                        bieuQuyetIssues: c.bieuQuyetIssues.map(b => ({
+                            id: b.id,
+                            ten: b.title,
+                            moTa: b.description
+                        })),
+                        thanhPhanThamDu: {
+                            donVi: c.thanhPhanThamDu.donVi.map(id => ({ id, name: 'Đơn vị', position: '', unit: '', unitId: id, email: '' })),
+                            caNhan: c.thanhPhanThamDu.caNhan.map(id => ({ id, name: 'Cá nhân', position: '', unit: '', unitId: '', email: '' })),
+                            khachMoi: c.thanhPhanThamDu.khachMoi,
+                            nhomThanhVien: c.thanhPhanThamDu.nhomThanhVien.map(id => ({ id, name: 'Nhóm', soLuong: 0 }))
+                        }
+                    }))
+                };
+            }
+            console.log("📝 Setting Step 4 data:", step4Data);
+            setNoiDungData(step4Data);
+
+            // Mark all steps as completed in update mode or copy mode
+            setCompletedSteps([1, 2, 3]); // Do not mark step 4 as completed for copy mode
+            if (!isCopy) setCompletedSteps([1, 2, 3, 4]);
+
+            // Cho phép click qua lại tất cả các bước đã có dữ liệu
+            setHighestStepReached(4);
+
             console.log("✨ Data loading complete!");
         } catch (error) {
             console.error("❌ Error loading meeting data:", error);
@@ -271,58 +335,113 @@ const TaoPhienHopPage = () => {
         }
     };
 
-    // Load data when in update mode
+    // Load data when in update mode or copy mode
     useEffect(() => {
         if (id) {
             console.log("Loading meeting data for id:", id);
-            loadMeetingData(id);
+            loadMeetingData(id, false);
+        } else if (copyFromId) {
+            console.log("Loading meeting data for copy from id:", copyFromId);
+            loadMeetingData(copyFromId, true);
         } else {
             console.log("Create mode - not loading data");
         }
-    }, [id]);
+    }, [id, copyFromId]);
 
     // Validation
     const validateStep1 = (): boolean => {
-        const errors: Record<string, string> = {};
-
-        if (!chiTietData.tenPhienHop.trim()) {
-            errors.tenPhienHop = "Vui lòng nhập tên phiên họp";
+        const result = chiTietHopSchema.safeParse(chiTietData);
+        if (!result.success) {
+            const formattedErrors: Record<string, string> = {};
+            result.error.issues.forEach(issue => {
+                const path = issue.path[0] as string;
+                if (!formattedErrors[path]) {
+                    formattedErrors[path] = issue.message;
+                }
+            });
+            setChiTietErrors(formattedErrors);
+            return false;
         }
-
-        if (!chiTietData.thoiGianBatDau) {
-            errors.thoiGianBatDau = "Vui lòng chọn thời gian bắt đầu";
-        }
-
-        if (!chiTietData.thoiGianKetThuc) {
-            errors.thoiGianKetThuc = "Vui lòng chọn thời gian kết thúc";
-        }
-
-        if (!chiTietData.diaDiem.trim()) {
-            errors.diaDiem = "Vui lòng nhập địa điểm";
-        }
-
-        if (
-            chiTietData.thoiGianBatDau &&
-            chiTietData.thoiGianKetThuc &&
-            new Date(chiTietData.thoiGianBatDau) >=
-                new Date(chiTietData.thoiGianKetThuc)
-        ) {
-            errors.thoiGianKetThuc =
-                "Thời gian kết thúc phải sau thời gian bắt đầu";
-        }
-
-        setChiTietErrors(errors);
-        return Object.keys(errors).length === 0;
+        setChiTietErrors({});
+        return true;
     };
 
     const validateStep3 = (): boolean => {
+        const result = thongBaoGiayMoiSchema.safeParse(thongBaoData);
+        if (!result.success) {
+            const formattedErrors: Record<string, string> = {};
+            result.error.issues.forEach(issue => {
+                const path = issue.path[0] as string;
+                if (!formattedErrors[path]) {
+                    formattedErrors[path] = issue.message;
+                }
+            });
+            setThongBaoErrors(formattedErrors);
+            return false;
+        }
+        setThongBaoErrors({});
+        return true;
+    };
+
+    const validateStep4 = (): boolean => {
         const errors: Record<string, any> = {};
 
-        noiDungData.contents.forEach((content) => {
-            if (!content.noiDungChiTiet.trim()) {
-                errors[content.id] = {
-                    noiDungChiTiet: "Vui lòng nhập nội dung chi tiết",
-                };
+        // Gọi Zod Schema để validate (sẽ check require, và logic kết thúc sau bắt đầu)
+        const result = noiDungHopSchema.safeParse(noiDungData);
+        
+        if (!result.success) {
+            result.error.issues.forEach(issue => {
+                const index = issue.path[1] as number; // contents[1]
+                const field = issue.path[2] as string; // thoiGianBatDau
+                const contentId = noiDungData.contents[index].id;
+                
+                if (!errors[contentId]) errors[contentId] = {};
+                errors[contentId][field] = issue.message;
+            });
+        }
+
+        // Validate logic nghiệp vụ chuyên sâu (liên kết với Step 1 và tính tuần tự)
+        const phienHopStart = chiTietData.thoiGianBatDau ? new Date(chiTietData.thoiGianBatDau).getTime() : 0;
+        const phienHopEnd = chiTietData.thoiGianKetThuc ? new Date(chiTietData.thoiGianKetThuc).getTime() : Infinity;
+
+        let previousContentEnd: number | null = null;
+
+        noiDungData.contents.forEach((content, index) => {
+            if (!errors[content.id]) errors[content.id] = {};
+            
+            let currentStart: number | null = null;
+            let currentEnd: number | null = null;
+
+            if (content.thoiGianBatDau) {
+                currentStart = new Date(content.thoiGianBatDau).getTime();
+                if (phienHopStart && currentStart < phienHopStart) {
+                    errors[content.id].thoiGianBatDau = "Bắt đầu không được trước thời gian phiên họp";
+                }
+                if (phienHopEnd && currentStart > phienHopEnd) {
+                    errors[content.id].thoiGianBatDau = "Bắt đầu không được sau thời gian phiên họp";
+                }
+                if (previousContentEnd && currentStart < previousContentEnd) {
+                    errors[content.id].thoiGianBatDau = `Phải bắt đầu sau khi Nội dung trước kết thúc`;
+                }
+            }
+            
+            if (content.thoiGianKetThuc) {
+                currentEnd = new Date(content.thoiGianKetThuc).getTime();
+                if (phienHopStart && currentEnd < phienHopStart) {
+                    errors[content.id].thoiGianKetThuc = "Kết thúc không được trước thời gian phiên họp";
+                }
+                if (phienHopEnd && currentEnd > phienHopEnd) {
+                    errors[content.id].thoiGianKetThuc = "Kết thúc không được vượt quá thời gian phiên họp";
+                }
+                
+                // Track this end time for the next content block only if there are no errors in this block's time
+                if (!errors[content.id].thoiGianKetThuc && !errors[content.id].thoiGianBatDau) {
+                    previousContentEnd = currentEnd;
+                }
+            }
+
+            if (Object.keys(errors[content.id]).length === 0) {
+                delete errors[content.id];
             }
         });
 
@@ -332,21 +451,8 @@ const TaoPhienHopPage = () => {
 
     // Step click handler
     const handleStepClick = (stepId: number) => {
-        // Allow going back to any previous step
-        if (stepId < currentStep) {
-            setCurrentStep(stepId);
-            window.scrollTo({ top: 0, behavior: "smooth" });
-            return;
-        }
-
-        // Allow going to next step only if current step is valid
-        if (stepId === currentStep + 1) {
-            handleNext();
-            return;
-        }
-
-        // Allow going to completed steps
-        if (completedSteps.includes(stepId)) {
+        // Allow navigating freely up to highest step reached
+        if (stepId <= highestStepReached) {
             setCurrentStep(stepId);
             window.scrollTo({ top: 0, behavior: "smooth" });
         }
@@ -375,6 +481,18 @@ const TaoPhienHopPage = () => {
             if (!validateStep3()) {
                 return;
             }
+            if (!completedSteps.includes(3)) {
+                setCompletedSteps([...completedSteps, 3]);
+            }
+        }
+
+        if (currentStep === 4) {
+            if (!validateStep4()) {
+                return;
+            }
+            if (!completedSteps.includes(4)) {
+                setCompletedSteps([...completedSteps, 4]);
+            }
         }
 
         if (currentStep < STEPS.length) {
@@ -394,6 +512,7 @@ const TaoPhienHopPage = () => {
         console.log("Save draft:", {
             chiTietData,
             thanhPhanData,
+            thongBaoData,
             noiDungData,
         });
         toast.success(
@@ -403,13 +522,14 @@ const TaoPhienHopPage = () => {
     };
 
     const handleSubmitForApproval = () => {
-        if (!validateStep3()) {
+        if (!validateStep4()) {
             return;
         }
 
         console.log("Submit for approval:", {
             chiTietData,
             thanhPhanData,
+            thongBaoData,
             noiDungData,
         });
 
@@ -439,13 +559,14 @@ const TaoPhienHopPage = () => {
             return;
         }
 
-        if (!validateStep3()) {
+        if (!validateStep4()) {
             return;
         }
 
         const payload = {
             chiTietData,
             thanhPhanData,
+            thongBaoData,
             noiDungData,
         };
 
@@ -509,6 +630,7 @@ const TaoPhienHopPage = () => {
                                 currentStep={currentStep}
                                 onStepClick={handleStepClick}
                                 completedSteps={completedSteps}
+                                highestStepReached={highestStepReached}
                             />
                         </div>
 
@@ -544,6 +666,15 @@ const TaoPhienHopPage = () => {
                                     )}
 
                                     {currentStep === 3 && (
+                                        <ThongBaoGiayMoiStep
+                                            data={thongBaoData}
+                                            onChange={setThongBaoData}
+                                            thanhPhanData={thanhPhanData}
+                                            errors={thongBaoErrors}
+                                        />
+                                    )}
+
+                                    {currentStep === 4 && (
                                         <NoiDungHopStep
                                             data={noiDungData}
                                             onChange={setNoiDungData}

@@ -27,6 +27,10 @@ interface DataTableProps<T> {
   
   // Custom row key
   getRowId?: (row: T) => number | string;
+
+  // Custom Rendering
+  renderCustomRow?: (row: T, index: number) => React.ReactNode;
+  containerClassName?: string;
 }
 
 export function DataTable<T>({
@@ -46,11 +50,54 @@ export function DataTable<T>({
   isLoading = false,
   emptyMessage = "Không có dữ liệu",
   getRowId = (row: any) => row.id,
+  renderCustomRow,
+  containerClassName,
 }: DataTableProps<T>) {
   
   const showSelection = selectedIds !== undefined && onToggleSelectAll && onToggleSelectRow;
   const showPagination = onPageChange && onPageSizeChange && totalItems > 0;
   const allSelected = data.length > 0 && selectedIds?.length === data.length;
+  
+  const calculatedTotalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+
+  const renderPagination = () => (
+    showPagination && (
+      <Pagination
+        currentPage={currentPage}
+        totalPages={calculatedTotalPages}
+        pageSize={pageSize}
+        totalItems={totalItems}
+        onPageChange={onPageChange!}
+        onPageSizeChange={onPageSizeChange!}
+        pageSizeOptions={pageSizeOptions}
+        itemLabel={itemLabel}
+      />
+    )
+  );
+
+  if (renderCustomRow) {
+    return (
+      <div className="flex flex-col">
+        {isLoading ? (
+          <div className="px-6 py-10 text-center">
+            <div className="flex flex-col items-center justify-center space-y-3">
+              <div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+              <p className="text-sm text-gray-500">Đang tải dữ liệu...</p>
+            </div>
+          </div>
+        ) : data.length === 0 ? (
+          <div className="px-6 py-10 text-center text-gray-500">
+            {emptyMessage}
+          </div>
+        ) : (
+          <div className={containerClassName}>
+            {data.map((row, index) => renderCustomRow(row, index))}
+          </div>
+        )}
+        {renderPagination()}
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col">
@@ -179,18 +226,7 @@ export function DataTable<T>({
         </table>
       </div>
 
-      {showPagination && (
-        <Pagination
-          currentPage={currentPage}
-          totalPages={totalPages}
-          pageSize={pageSize}
-          totalItems={totalItems}
-          onPageChange={onPageChange!}
-          onPageSizeChange={onPageSizeChange!}
-          pageSizeOptions={pageSizeOptions}
-          itemLabel={itemLabel}
-        />
-      )}
+      {renderPagination()}
     </div>
   );
 }

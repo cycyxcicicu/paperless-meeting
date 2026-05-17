@@ -1,11 +1,15 @@
 import React, { useState, useMemo } from 'react';
-import { X, Search, Eye, ChevronLeft, ChevronRight } from 'lucide-react';
+import { X, Search, Eye, Users as UsersIcon } from 'lucide-react';
 import { Button } from '@/common/components/ui/button';
 import { Badge } from '@/common/components/ui/badge';
-import { Card, CardContent  } from '@/common/components/ui/card';
+import { Card, CardContent } from '@/common/components/ui/card';
+import { DataTable } from '@/common/components/table-engine/DataTable';
+import { DataToolbar } from '@/common/components/table-engine/DataToolbar';
+import { TableEngineConfig, ColumnDef } from '@/common/components/table-engine/table.types';
+import { cn } from '@/common/utils/cn';
 import { AttendanceDetailModal, AttendanceDetailRecord } from './AttendanceDetailModal';
 
-type TabType = 'individual' | 'unit' | 'guest' | 'absent';
+type TabType = 'donvi' | 'khachmoi';
 
 interface AttendanceRecord {
   id: number;
@@ -19,6 +23,8 @@ interface AttendanceRecord {
     position: string;
     unit: string;
   };
+  type: 'individual' | 'unit' | 'guest';
+  isChair?: boolean;
 }
 
 interface AttendanceModalProps {
@@ -30,119 +36,54 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({
   isOpen,
   onClose,
 }) => {
-  const [activeTab, setActiveTab] = useState<TabType>('individual');
+  const [activeTab, setActiveTab] = useState<TabType>('donvi');
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<AttendanceDetailRecord | null>(null);
   const pageSize = 10;
 
-  // Mock data
+  // Mock data mở rộng để hỗ trợ 2 tab
   const mockData: AttendanceRecord[] = [
-    {
-      id: 1,
-      unit: 'Sở Kế hoạch và Đầu tư',
-      name: 'Nguyễn Văn A',
-      position: 'Phó Chủ tịch UBND',
-      status: 'present',
-    },
-    {
-      id: 2,
-      unit: 'Sở Tài chính',
-      name: 'Trần Thị B',
-      position: 'Trưởng phòng',
-      status: 'present',
-    },
-    {
-      id: 3,
-      unit: 'Sở Giáo dục và Đào tạo',
-      name: 'Lê Văn C',
-      position: 'Phó giám đốc',
-      status: 'pending',
-    },
-    {
-      id: 4,
-      unit: 'Sở Y tế',
-      name: 'Phạm Thị D',
-      position: 'Giám đốc',
-      status: 'absent',
-      reasonAbsent: 'Đi công tác nước ngoài theo lịch trình đã được phê duyệt từ trước',
-      replacementPerson: {
-        name: 'Nguyễn Văn X',
-        position: 'Phó Giám đốc',
-        unit: 'Sở Y tế',
-      },
-    },
-    {
-      id: 5,
-      unit: 'Sở Công Thương',
-      name: 'Hoàng Văn E',
-      position: 'Chuyên viên',
-      status: 'present',
-    },
-    {
-      id: 6,
-      unit: 'Sở Nội vụ',
-      name: 'Ngô Thị F',
-      position: 'Trưởng phòng',
-      status: 'present',
-    },
-    {
-      id: 7,
-      unit: 'Sở Xây dựng',
-      name: 'Đặng Văn G',
-      position: 'Phó giám đốc',
-      status: 'pending',
-    },
-    {
-      id: 8,
-      unit: 'Sở Nông nghiệp và Phát triển nông thôn',
-      name: 'Vũ Thị H',
-      position: 'Giám đốc',
-      status: 'present',
-    },
-    {
-      id: 9,
-      unit: 'Sở Văn hóa và Thể thao',
-      name: 'Bùi Văn I',
-      position: 'Trưởng phòng',
-      status: 'absent',
-      reasonAbsent: 'Lý do sức khỏe, cần nghỉ dưỡng theo chỉ định của bác sĩ',
-    },
-    {
-      id: 10,
-      unit: 'Sở Khoa học và Công nghệ',
-      name: 'Đinh Thị K',
-      position: 'Chuyên viên',
-      status: 'present',
-    },
+    { id: 1, unit: 'Sở Kế hoạch và Đầu tư', name: 'Nguyễn Văn A', position: 'Phó Chủ tịch UBND', status: 'present', type: 'individual', isChair: true },
+    { id: 2, unit: 'Sở Tài chính', name: 'Trần Thị B', position: 'Trưởng phòng', status: 'present', type: 'unit' },
+    { id: 3, unit: 'Sở Giáo dục và Đào tạo', name: 'Lê Văn C', position: 'Phó giám đốc', status: 'pending', type: 'unit' },
+    { id: 4, unit: 'Sở Y tế', name: 'Phạm Thị D', position: 'Giám đốc', status: 'absent', type: 'unit', reasonAbsent: 'Đi công tác', replacementPerson: { name: 'Nguyễn Văn X', position: 'Phó Giám đốc', unit: 'Sở Y tế' } },
+    { id: 5, unit: 'Sở Công Thương', name: 'Hoàng Văn E', position: 'Chuyên viên', status: 'present', type: 'individual' },
+    { id: 20, unit: 'Công ty ABC', name: 'Ông Nguyễn Văn Khách', position: 'Giám đốc', status: 'present', type: 'guest' },
+    { id: 21, unit: 'Tập đoàn XYZ', name: 'Bà Trần Thị Mời', position: 'Chuyên gia', status: 'pending', type: 'guest' },
+    { id: 22, unit: 'Tổng công ty 123', name: 'Ông Lê Hoàng Nam', position: 'Phó Tổng Giám đốc', status: 'absent', type: 'guest', reasonAbsent: 'Trùng lịch công tác', replacementPerson: { name: 'Bà Phạm Minh Thư', position: 'Trưởng phòng Đối ngoại', unit: 'Tổng công ty 123' } }
   ];
 
-  // Statistics
   const stats = useMemo(() => {
-    const total = mockData.length;
-    const present = mockData.filter((r) => r.status === 'present').length;
-    const pending = mockData.filter((r) => r.status === 'pending').length;
-    const absent = mockData.filter((r) => r.status === 'absent').length;
-
-    return { total, present, pending, absent };
+    return {
+      total: mockData.length,
+      present: mockData.filter((r) => r.status === 'present').length,
+      pending: mockData.filter((r) => r.status === 'pending').length,
+      absent: mockData.filter((r) => r.status === 'absent').length,
+      donViCount: mockData.filter(r => r.type !== 'guest').length,
+      khachMoiCount: mockData.filter(r => r.type === 'guest').length,
+    };
   }, []);
 
-  // Filtered data
   const filteredData = useMemo(() => {
-    if (!searchQuery.trim()) return mockData;
+    let data = mockData;
+    
+    // Filter by tab
+    if (activeTab === 'donvi') {
+      data = data.filter(r => r.type !== 'guest');
+    } else {
+      data = data.filter(r => r.type === 'guest');
+    }
+
+    if (!searchQuery.trim()) return data;
 
     const query = searchQuery.toLowerCase();
-    return mockData.filter(
-      (record) =>
-        record.name.toLowerCase().includes(query) ||
-        record.unit.toLowerCase().includes(query) ||
-        record.position.toLowerCase().includes(query)
+    return data.filter(
+      (record) => record.name.toLowerCase().includes(query)
     );
-  }, [searchQuery]);
+  }, [searchQuery, activeTab]);
 
-  // Pagination
-  const totalPages = Math.ceil(filteredData.length / pageSize);
   const paginatedData = useMemo(() => {
     const startIndex = (currentPage - 1) * pageSize;
     return filteredData.slice(startIndex, startIndex + pageSize);
@@ -151,291 +92,185 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({
   const getStatusBadge = (status: AttendanceRecord['status']) => {
     switch (status) {
       case 'present':
-        return (
-          <Badge className="bg-green-100 text-green-700 hover:bg-green-100 px-3 py-1 text-xs rounded-full border-none">
-            Có tham gia
-          </Badge>
-        );
+        return <Badge className="bg-green-100 text-green-700 hover:bg-green-100 px-3 py-1 text-xs rounded-full border-none">Có tham gia</Badge>;
       case 'pending':
-        return (
-          <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100 px-3 py-1 text-xs rounded-full border-none">
-            Chưa xác nhận
-          </Badge>
-        );
+        return <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100 px-3 py-1 text-xs rounded-full border-none">Chưa xác nhận</Badge>;
       case 'absent':
-        return (
-          <Badge className="bg-red-100 text-red-700 hover:bg-red-100 px-3 py-1 text-xs rounded-full border-none">
-            Báo vắng
-          </Badge>
-        );
+        return <Badge className="bg-red-100 text-red-700 hover:bg-red-100 px-3 py-1 text-xs rounded-full border-none">Báo vắng</Badge>;
     }
   };
 
-  const getTabLabel = (tab: TabType) => {
-    switch (tab) {
-      case 'individual':
-        return 'Cá nhân';
-      case 'unit':
-        return 'Đơn vị';
-      case 'guest':
-        return 'Khách mời';
-      case 'absent':
-        return 'Báo vắng';
+  const tableConfig: TableEngineConfig<AttendanceRecord> = useMemo(() => {
+    const baseColumns: ColumnDef<AttendanceRecord>[] = [
+      { key: 'unit', header: 'Đơn vị' },
+      { key: 'name', header: 'Họ và tên', className: 'font-medium' },
+      { key: 'position', header: 'Chức vụ' },
+    ];
+
+    if (activeTab === 'donvi') {
+      baseColumns.push({
+        key: 'isChair',
+        header: 'Chủ trì',
+        width: '120px',
+        align: 'center',
+        render: (row) => row.isChair ? (
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-[#C8102E]">
+            Chủ trì
+          </span>
+        ) : (
+          <span className="text-gray-400 text-xs">-</span>
+        )
+      });
     }
-  };
 
-  const getSearchPlaceholder = () => {
-    switch (activeTab) {
-      case 'individual':
-        return 'Tìm kiếm cá nhân';
-      case 'unit':
-        return 'Tìm kiếm đơn vị';
-      case 'guest':
-        return 'Tìm kiếm khách mời';
-      case 'absent':
-        return 'Tìm kiếm người báo vắng';
-    }
-  };
+    // Thêm cột "Đại biểu đi thay" được thiết kế hợp lý, đẹp mắt
+    baseColumns.push({
+      key: 'replacementPerson',
+      header: 'Đại biểu đi thay',
+      width: '150px',
+      className: 'whitespace-nowrap',
+      render: (row) => {
+        if (row.status === 'absent' && row.replacementPerson) {
+          return (
+            <div className="flex flex-col py-1 whitespace-nowrap">
+              <span className="font-semibold text-gray-900 text-sm leading-tight whitespace-nowrap">
+                {row.replacementPerson.name}
+              </span>
+              <span className="text-xs text-gray-500 mt-0.5 whitespace-nowrap">
+                {row.replacementPerson.position}
+              </span>
+            </div>
+          );
+        }
+        return <span className="text-gray-400 text-xs">-</span>;
+      }
+    });
 
-  const handleViewDetail = (record: AttendanceRecord) => {
-    setSelectedRecord(record);
-    setIsDetailModalOpen(true);
-  };
+    // Thêm cột "Trạng thái"
+    baseColumns.push({
+      key: 'status',
+      header: 'Trạng thái',
+      render: (row) => getStatusBadge(row.status)
+    });
 
-  const handleCloseDetailModal = () => {
-    setIsDetailModalOpen(false);
-    setSelectedRecord(null);
-  };
+    return {
+      columns: baseColumns,
+      rowActions: [], // Bỏ hoàn toàn cột thao tác theo yêu cầu
+    };
+  }, [activeTab]);
 
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-        onClick={onClose}
-      />
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
 
-      {/* Modal */}
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] flex flex-col animate-in fade-in-0 zoom-in-95">
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] flex flex-col animate-in fade-in-0 zoom-in-95 overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 flex-shrink-0">
-          <h2 className="text-xl heading text-gray-900">Điểm danh</h2>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
-          >
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-white z-10">
+          <h2 className="text-xl heading text-gray-900">Danh sách điểm danh</h2>
+          <button onClick={onClose} className="p-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-all">
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        {/* Body - Scrollable */}
-        <div className="flex-1 overflow-y-auto px-6 py-5">
-          {/* Tabs */}
-          <div className="flex items-center gap-8 border-b border-gray-200 mb-6">
-            {(['individual', 'unit', 'guest', 'absent'] as TabType[]).map(
-              (tab) => (
-                <button
-                  key={tab}
-                  onClick={() => {
-                    setActiveTab(tab);
-                    setCurrentPage(1);
-                    setSearchQuery('');
-                  }}
-                  className={`pb-3 body text-[15px] border-b-2 transition-colors ${
-                    activeTab === tab
-                      ? 'border-[#C8102E] text-[#C8102E]'
-                      : 'border-transparent text-gray-500 hover:text-gray-700'
-                  }`}
-                >
-                  {getTabLabel(tab)}
-                </button>
-              )
-            )}
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          {/* Statistics */}
+          <div className="grid grid-cols-4 gap-4">
+            {[
+              { label: 'Tổng số', value: stats.total, color: 'from-gray-50 to-gray-100', text: 'text-gray-700' },
+              { label: 'Có mặt', value: stats.present, color: 'from-green-50 to-green-100/50', text: 'text-green-700' },
+              { label: 'Chưa xác nhận', value: stats.pending, color: 'from-amber-50 to-amber-100/50', text: 'text-amber-700' },
+              { label: 'Báo vắng', value: stats.absent, color: 'from-red-50 to-red-100/50', text: 'text-red-700' },
+            ].map((stat, i) => (
+              <Card key={i} className={cn("border-none shadow-none bg-gradient-to-br", stat.color)}>
+                <CardContent className="p-4">
+                  <p className={cn("text-xs uppercase tracking-wider font-semibold mb-1", stat.text)}>{stat.label}</p>
+                  <p className="text-3xl heading text-gray-900">{stat.value}</p>
+                </CardContent>
+              </Card>
+            ))}
           </div>
 
-          {/* Statistics Cards */}
-          <div className="grid grid-cols-4 gap-4 mb-6">
-            <Card className="bg-gradient-to-br from-green-50 to-green-100/50 border-green-200 rounded-xl">
-              <CardContent className="p-4">
-                <p className="text-sm body text-green-700 mb-1">Tổng</p>
-                <p className="text-3xl heading text-green-900">
-                  {stats.total}
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-gradient-to-br from-blue-50 to-blue-100/50 border-blue-200 rounded-xl">
-              <CardContent className="p-4">
-                <p className="text-sm body text-blue-700 mb-1">
-                  Xác nhận tham gia
-                </p>
-                <p className="text-3xl heading text-blue-900">
-                  {stats.present}
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-gradient-to-br from-amber-50 to-amber-100/50 border-amber-200 rounded-xl">
-              <CardContent className="p-4">
-                <p className="text-sm body text-amber-700 mb-1">
-                  Chưa xác nhận
-                </p>
-                <p className="text-3xl heading text-amber-900">
-                  {stats.pending}
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-gradient-to-br from-red-50 to-red-100/50 border-red-200 rounded-xl">
-              <CardContent className="p-4">
-                <p className="text-sm body text-red-700 mb-1">
-                  Báo vắng
-                </p>
-                <p className="text-3xl heading text-red-900">
-                  {stats.absent}
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Search */}
-          <div className="relative mb-6">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                setCurrentPage(1);
-              }}
-              placeholder={getSearchPlaceholder()}
-              className="w-full h-10 pl-10 pr-4 rounded-xl border border-gray-300 bg-white text-sm text-gray-900 placeholder:text-gray-400 hover:border-[#C8102E]/30 focus:outline-none focus:ring-2 focus:ring-[#C8102E] focus:border-[#C8102E] transition-all"
-            />
-          </div>
-
-          {/* Table */}
-          <div className="border border-gray-200 rounded-xl overflow-hidden">
-            <table className="w-full text-left border-collapse text-sm">
-              <thead>
-                <tr className="bg-gray-50 border-b border-gray-200">
-                  <th className="py-3 px-4 btn-primary text-gray-600 w-16 text-center">
-                    STT
-                  </th>
-                  <th className="py-3 px-4 btn-primary text-gray-600">
-                    Tên đơn vị
-                  </th>
-                  <th className="py-3 px-4 btn-primary text-gray-600">
-                    Tên đại biểu
-                  </th>
-                  <th className="py-3 px-4 btn-primary text-gray-600">
-                    Chức vụ
-                  </th>
-                  <th className="py-3 px-4 btn-primary text-gray-600">
-                    Trạng thái
-                  </th>
-                  <th className="py-3 px-4 btn-primary text-gray-600 w-24 text-center">
-                    Xem
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {paginatedData.length > 0 ? (
-                  paginatedData.map((record, index) => (
-                    <tr
-                      key={record.id}
-                      className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
-                    >
-                      <td className="py-3 px-4 text-center text-gray-700">
-                        {(currentPage - 1) * pageSize + index + 1}
-                      </td>
-                      <td className="py-3 px-4 text-gray-700">{record.unit}</td>
-                      <td className="py-3 px-4 text-gray-900 body">
-                        {record.name}
-                      </td>
-                      <td className="py-3 px-4 text-gray-700">
-                        {record.position}
-                      </td>
-                      <td className="py-3 px-4">{getStatusBadge(record.status)}</td>
-                      <td className="py-3 px-4 text-center">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="text-gray-500 hover:text-[#C8102E]"
-                          onClick={() => handleViewDetail(record)}
-                        >
-                          <Eye className="w-4 h-4" />
-                        </Button>
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={6} className="py-12 text-center">
-                      <p className="text-gray-400">Không tìm thấy dữ liệu</p>
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Pagination */}
-          {filteredData.length > 0 && (
-            <div className="flex items-center justify-end gap-4 mt-4">
-              <span className="text-sm text-gray-600">
-                {(currentPage - 1) * pageSize + 1}-
-                {Math.min(currentPage * pageSize, filteredData.length)} của{' '}
-                {filteredData.length}
-              </span>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                  disabled={currentPage === 1}
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-                <span className="text-sm body text-gray-700">
-                  {currentPage} / {totalPages}
-                </span>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={() =>
-                    setCurrentPage((p) => Math.min(totalPages, p + 1))
-                  }
-                  disabled={currentPage === totalPages}
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
+          {/* Sliding Tabs Pattern */}
+          <div className="border border-gray-200 rounded-xl overflow-hidden bg-white">
+            <div className="bg-gray-50 p-1 border-b border-gray-200">
+              <div className="relative flex w-full">
+                <div 
+                  className="absolute top-0 bottom-0 w-1/2 bg-white rounded-lg shadow-sm transition-transform duration-300 ease-in-out"
+                  style={{ transform: activeTab === 'donvi' ? 'translateX(0%)' : 'translateX(100%)' }}
+                />
+                {[
+                  { id: 'donvi', label: 'Đơn vị', count: stats.donViCount },
+                  { id: 'khachmoi', label: 'Khách mời', count: stats.khachMoiCount }
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => { setActiveTab(tab.id as TabType); setCurrentPage(1); }}
+                    className={cn(
+                      'relative w-1/2 py-2.5 text-sm font-medium transition-colors z-10',
+                      activeTab === tab.id ? 'text-[#C8102E]' : 'text-gray-500 hover:text-gray-700'
+                    )}
+                  >
+                    <div className="flex items-center justify-center gap-2">
+                      {tab.label}
+                      <span className={cn(
+                        'px-2 py-0.5 rounded-full text-xs transition-colors',
+                        activeTab === tab.id ? 'bg-red-50 text-[#C8102E]' : 'bg-gray-200 text-gray-600'
+                      )}>
+                        {tab.count}
+                      </span>
+                    </div>
+                  </button>
+                ))}
               </div>
             </div>
-          )}
+
+            <div className="p-0 space-y-0">
+              {/* DataToolbar for Search */}
+              <DataToolbar
+                searchQuery={searchQuery}
+                onSearchChange={(val) => { setSearchQuery(val); setCurrentPage(1); }}
+                searchPlaceholder={`Tìm kiếm trong danh sách ${activeTab === 'donvi' ? 'đơn vị' : 'khách mời'}...`}
+              />
+
+              <div className="p-6 pt-2">
+                {/* Table Engine Implementation */}
+                <div className="border border-gray-100 rounded-xl overflow-hidden shadow-sm">
+                  <DataTable
+                    data={paginatedData}
+                    config={tableConfig}
+                    currentPage={currentPage}
+                    pageSize={pageSize}
+                    totalItems={filteredData.length}
+                    onPageChange={setCurrentPage}
+                    onPageSizeChange={() => {}}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-center px-6 py-4 border-t border-gray-200 flex-shrink-0">
+        <div className="px-6 py-4 border-t border-gray-200 flex justify-center bg-gray-50/50">
           <Button
             variant="primary"
             onClick={onClose}
-            className="bg-[#C8102E] hover:bg-[#a80d26] px-8 rounded-full"
+            className="bg-[#C8102E] hover:bg-[#a80d26] px-12 rounded-full h-[44px]"
           >
             Đóng
           </Button>
         </div>
       </div>
 
-      {/* Attendance Detail Modal */}
       <AttendanceDetailModal
         isOpen={isDetailModalOpen}
-        onClose={handleCloseDetailModal}
+        onClose={() => setIsDetailModalOpen(false)}
         record={selectedRecord}
       />
     </div>
   );
 };
+

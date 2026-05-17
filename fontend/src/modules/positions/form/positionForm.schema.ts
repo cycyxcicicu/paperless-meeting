@@ -7,6 +7,7 @@ export const positionFormSchema: FormFieldConfig[] = [
     type: 'text',
     required: true,
     col: 'col-span-1',
+    showPlaceholder: false,
     allowedChars: 'letters',
   },
   {
@@ -15,8 +16,28 @@ export const positionFormSchema: FormFieldConfig[] = [
     type: 'text',
     required: true,
     col: 'col-span-1',
+    showPlaceholder: false,
     allowedChars: 'alphanumeric',
     uppercase: true,
+  },
+  {
+    key: 'ordinal',
+    label: 'Thứ tự cấp bậc',
+    type: 'number',
+    required: true,
+    col: 'col-span-1',
+    showPlaceholder: false,
+  },
+  {
+    key: 'leader',
+    label: 'Lãnh đạo',
+    type: 'select',
+    required: true,
+    col: 'col-span-1',
+    options: [
+      { value: 'yes', label: 'Có' },
+      { value: 'no', label: 'Không' },
+    ],
   },
   {
     key: 'description',
@@ -25,6 +46,6 @@ export const positionFormSchema: FormFieldConfig[] = [
     rows: 3,
     required: false,
     col: 'col-span-2',
-    showPlaceholder: true,
+    showPlaceholder: false,
   },
 ];
