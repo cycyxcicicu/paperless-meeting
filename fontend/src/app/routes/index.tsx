@@ -17,6 +17,7 @@ import PhienHopPage from '@/modules/meeting/pages/PhienHopPage';
 
 import PhongHopPage from '@/modules/meeting-rooms/pages/PhongHopPage';
 import PhongHopTaiLieuPage from '@/modules/meeting/pages/PhongHopTaiLieuPage';
+import MauThuMoiPage from '@/modules/meeting/pages/MauThuMoiPage';
 import TaoPhienHopPage from '@/modules/meeting/pages/TaoPhienHopPage';
 import VaiTroPage from '@/modules/role/pages/VaiTroPage';
 
@@ -46,6 +47,7 @@ export const router = createBrowserRouter([
             { path: "phong-hop/dia-diem", Component: PhongHopPage },
             { path: "phong-hop/tai-lieu", Component: PhongHopTaiLieuPage },
             { path: "phong-hop/tai-lieu/:type", Component: PhongHopTaiLieuPage },
+            { path: "phien-hop/mau-thu-moi", Component: MauThuMoiPage },
             { path: "phien-hop", Component: PhienHopPage },
             { path: "phien-hop/tao-moi", Component: TaoPhienHopPage },
             { path: "phien-hop/:id/cap-nhat", Component: TaoPhienHopPage },

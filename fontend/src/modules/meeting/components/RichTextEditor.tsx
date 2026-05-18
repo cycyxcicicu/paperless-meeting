@@ -1,4 +1,4 @@
-import React, { useMemo, useRef } from 'react';
+import React, { useMemo, useRef, useImperativeHandle, forwardRef } from 'react';
 import ReactQuill, { Quill } from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
 
@@ -9,7 +9,7 @@ Quill.register(Font, true);
 
 // Register sizes
 const Size = Quill.import('formats/size') as any;
-Size.whitelist = ['small', 'normal', 'large', 'huge'];
+Size.whitelist = ['10pt', '12pt', '13pt', '14pt', '16pt', '18pt', '20pt', '24pt'];
 Quill.register(Size, true);
 
 interface RichTextEditorProps {
@@ -19,13 +19,61 @@ interface RichTextEditorProps {
   minHeight?: string;
 }
 
-const RichTextEditor: React.FC<RichTextEditorProps> = ({
-  value,
-  onChange,
-  placeholder = 'Nhập nội dung chương trình họp...',
-  minHeight = '350px',
-}) => {
+export interface RichTextEditorRef {
+  insertText: (text: string) => void;
+}
+
+const formats = [
+  'font',
+  'size',
+  'header',
+  'bold',
+  'italic',
+  'underline',
+  'strike',
+  'color',
+  'background',
+  'list',
+  'bullet',
+  'align',
+  'indent',
+  'blockquote',
+  'code-block',
+  'link',
+  'image',
+];
+
+const RichTextEditor = React.forwardRef((
+  {
+    value,
+    onChange,
+    placeholder = 'Nhập nội dung chương trình họp...',
+    minHeight = '350px',
+  }: RichTextEditorProps,
+  ref: React.ForwardedRef<RichTextEditorRef>
+) => {
   const quillRef = useRef<ReactQuill>(null);
+  const lastRangeRef = useRef<{ index: number; length: number } | null>(null);
+
+  useImperativeHandle(ref, () => ({
+    insertText: (text: string) => {
+      const quill = quillRef.current?.getEditor();
+      if (quill) {
+        quill.focus();
+        const range = lastRangeRef.current || quill.getSelection();
+        if (range) {
+          quill.insertText(range.index, text);
+          quill.setSelection(range.index + text.length, 0);
+          lastRangeRef.current = { index: range.index + text.length, length: 0 };
+        } else {
+          const length = quill.getLength();
+          quill.insertText(length - 1, text);
+          quill.setSelection(length - 1 + text.length, 0);
+          lastRangeRef.current = { index: length - 1 + text.length, length: 0 };
+        }
+      }
+    }
+  }));
 
   // Full-featured toolbar configuration
   const modules = useMemo(
@@ -68,26 +116,6 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
     []
   );
 
-  const formats = [
-    'font',
-    'size',
-    'header',
-    'bold',
-    'italic',
-    'underline',
-    'strike',
-    'color',
-    'background',
-    'list',
-    'bullet',
-    'align',
-    'indent',
-    'blockquote',
-    'code-block',
-    'link',
-    'image',
-  ];
-
   return (
     <div className="rich-text-editor-wrapper">
       <ReactQuill
@@ -95,6 +123,11 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
         theme="snow"
         value={value}
         onChange={onChange}
+        onChangeSelection={(range) => {
+          if (range) {
+            lastRangeRef.current = range;
+          }
+        }}
         modules={modules}
         formats={formats}
         placeholder={placeholder}
@@ -236,7 +269,7 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
         .rich-text-editor-wrapper .ql-container {
           border: none;
           font-size: 14px;
-          font-family: 'Be Vietnam Pro', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+          font-family: 'Times New Roman', Times, serif;
         }
 
         .rich-text-editor-wrapper .ql-editor {
@@ -335,47 +368,40 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
         }
 
         /* Font families */
-        .rich-text-editor-wrapper .ql-font-be-vietnam {
+        .ql-font-be-vietnam {
           font-family: 'Be Vietnam Pro', sans-serif;
         }
 
-        .rich-text-editor-wrapper .ql-font-arial {
+        .ql-font-arial {
           font-family: Arial, sans-serif;
         }
 
-        .rich-text-editor-wrapper .ql-font-times {
+        .ql-font-times {
           font-family: 'Times New Roman', serif;
         }
 
-        .rich-text-editor-wrapper .ql-font-courier {
+        .ql-font-courier {
           font-family: 'Courier New', monospace;
         }
 
-        .rich-text-editor-wrapper .ql-font-georgia {
+        .ql-font-georgia {
           font-family: Georgia, serif;
         }
 
         /* Font sizes */
-        .rich-text-editor-wrapper .ql-size-small {
-          font-size: 0.85em;
-        }
+        .ql-size-10pt { font-size: 10pt; }
+        .ql-size-12pt { font-size: 12pt; }
+        .ql-size-13pt { font-size: 13pt; }
+        .ql-size-14pt { font-size: 14pt; }
+        .ql-size-16pt { font-size: 16pt; }
+        .ql-size-18pt { font-size: 18pt; }
+        .ql-size-20pt { font-size: 20pt; }
+        .ql-size-24pt { font-size: 24pt; }
 
-        .rich-text-editor-wrapper .ql-size-normal {
-          font-size: 1em;
-        }
-
-        .rich-text-editor-wrapper .ql-size-large {
-          font-size: 1.25em;
-        }
-
-        .rich-text-editor-wrapper .ql-size-huge {
-          font-size: 1.5em;
-        }
-
-        /* Picker labels */
         .rich-text-editor-wrapper .ql-snow .ql-picker.ql-font .ql-picker-label::before,
         .rich-text-editor-wrapper .ql-snow .ql-picker.ql-font .ql-picker-item::before {
-          content: 'Be Vietnam Pro';
+          content: 'Times New Roman';
+          font-family: 'Times New Roman', Times, serif;
         }
 
         .rich-text-editor-wrapper .ql-snow .ql-picker.ql-font .ql-picker-label[data-value=arial]::before,
@@ -400,22 +426,47 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
 
         .rich-text-editor-wrapper .ql-snow .ql-picker.ql-size .ql-picker-label::before,
         .rich-text-editor-wrapper .ql-snow .ql-picker.ql-size .ql-picker-item::before {
-          content: 'Bình thường';
+          content: '14pt';
         }
 
-        .rich-text-editor-wrapper .ql-snow .ql-picker.ql-size .ql-picker-label[data-value=small]::before,
-        .rich-text-editor-wrapper .ql-snow .ql-picker.ql-size .ql-picker-item[data-value=small]::before {
-          content: 'Nhỏ';
+        .rich-text-editor-wrapper .ql-snow .ql-picker.ql-size .ql-picker-label[data-value="10pt"]::before,
+        .rich-text-editor-wrapper .ql-snow .ql-picker.ql-size .ql-picker-item[data-value="10pt"]::before {
+          content: '10pt';
         }
 
-        .rich-text-editor-wrapper .ql-snow .ql-picker.ql-size .ql-picker-label[data-value=large]::before,
-        .rich-text-editor-wrapper .ql-snow .ql-picker.ql-size .ql-picker-item[data-value=large]::before {
-          content: 'Lớn';
+        .rich-text-editor-wrapper .ql-snow .ql-picker.ql-size .ql-picker-label[data-value="12pt"]::before,
+        .rich-text-editor-wrapper .ql-snow .ql-picker.ql-size .ql-picker-item[data-value="12pt"]::before {
+          content: '12pt';
         }
 
-        .rich-text-editor-wrapper .ql-snow .ql-picker.ql-size .ql-picker-label[data-value=huge]::before,
-        .rich-text-editor-wrapper .ql-snow .ql-picker.ql-size .ql-picker-item[data-value=huge]::before {
-          content: 'Rất lớn';
+        .rich-text-editor-wrapper .ql-snow .ql-picker.ql-size .ql-picker-label[data-value="13pt"]::before,
+        .rich-text-editor-wrapper .ql-snow .ql-picker.ql-size .ql-picker-item[data-value="13pt"]::before {
+          content: '13pt';
+        }
+
+        .rich-text-editor-wrapper .ql-snow .ql-picker.ql-size .ql-picker-label[data-value="14pt"]::before,
+        .rich-text-editor-wrapper .ql-snow .ql-picker.ql-size .ql-picker-item[data-value="14pt"]::before {
+          content: '14pt';
+        }
+
+        .rich-text-editor-wrapper .ql-snow .ql-picker.ql-size .ql-picker-label[data-value="16pt"]::before,
+        .rich-text-editor-wrapper .ql-snow .ql-picker.ql-size .ql-picker-item[data-value="16pt"]::before {
+          content: '16pt';
+        }
+
+        .rich-text-editor-wrapper .ql-snow .ql-picker.ql-size .ql-picker-label[data-value="18pt"]::before,
+        .rich-text-editor-wrapper .ql-snow .ql-picker.ql-size .ql-picker-item[data-value="18pt"]::before {
+          content: '18pt';
+        }
+
+        .rich-text-editor-wrapper .ql-snow .ql-picker.ql-size .ql-picker-label[data-value="20pt"]::before,
+        .rich-text-editor-wrapper .ql-snow .ql-picker.ql-size .ql-picker-item[data-value="20pt"]::before {
+          content: '20pt';
+        }
+
+        .rich-text-editor-wrapper .ql-snow .ql-picker.ql-size .ql-picker-label[data-value="24pt"]::before,
+        .rich-text-editor-wrapper .ql-snow .ql-picker.ql-size .ql-picker-item[data-value="24pt"]::before {
+          content: '24pt';
         }
 
         .rich-text-editor-wrapper .ql-snow .ql-picker.ql-header .ql-picker-label::before,
@@ -481,6 +532,6 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
       `}</style>
     </div>
   );
-};
+});
 
 export { RichTextEditor };

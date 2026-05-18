@@ -1,1 +1,29 @@
 @import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@300;400;500;600;700&display=swap');
+
+/* Custom Quill Fonts */
+.ql-font-be-vietnam {
+  font-family: 'Be Vietnam Pro', sans-serif !important;
+}
+.ql-font-arial {
+  font-family: Arial, sans-serif !important;
+}
+.ql-font-times {
+  font-family: 'Times New Roman', Times, serif !important;
+}
+.ql-font-courier {
+  font-family: 'Courier New', Courier, monospace !important;
+}
+.ql-font-georgia {
+  font-family: Georgia, serif !important;
+}
+
+/* Custom Quill Sizes */
+.ql-size-10pt { font-size: 10pt !important; }
+.ql-size-12pt { font-size: 12pt !important; }
+.ql-size-13pt { font-size: 13pt !important; }
+.ql-size-14pt { font-size: 14pt !important; }
+.ql-size-16pt { font-size: 16pt !important; }
+.ql-size-18pt { font-size: 18pt !important; }
+.ql-size-20pt { font-size: 20pt !important; }
+.ql-size-24pt { font-size: 24pt !important; }
+

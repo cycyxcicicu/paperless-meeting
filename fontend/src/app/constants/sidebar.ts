@@ -7,6 +7,7 @@ import {
     History,
     LayoutDashboard,
     LucideIcon,
+    Mail,
     MapPin,
     Settings,
     Shield,
@@ -37,6 +38,11 @@ export const PHIEN_HOP_SIDEBAR_ITEMS: SidebarItem[] = [
       { name: 'Báo cáo', path: '/phien-hop/tai-lieu/bao-cao' },
       { name: 'Tờ trình', path: '/phien-hop/tai-lieu/to-trinh' },
     ],
+  },
+  {
+    name: 'Mẫu thư mời',
+    path: '/phien-hop/mau-thu-moi',
+    icon: Mail,
   }
 ];
 
