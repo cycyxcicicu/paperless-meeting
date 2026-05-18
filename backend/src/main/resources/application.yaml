@@ -32,6 +32,15 @@ spring:
     output:
         ansi:
             enabled: always
+    servlet:
+        multipart:
+            max-file-size: 20MB
+            max-request-size: 20MB
+minio:
+  url: http://localhost:9000
+  access-key: root
+  secret-key: root1234
+  bucket: uploads
 
 server:
     port: 8081

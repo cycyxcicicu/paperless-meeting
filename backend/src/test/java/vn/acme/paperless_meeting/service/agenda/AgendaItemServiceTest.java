@@ -275,4 +275,272 @@ public class AgendaItemServiceTest {
         assertEquals(AgendaItemStatus.REJECTED, response.getStatus());
         assertEquals("Tài liệu chưa đầy đủ", response.getRejectReason());
     }
+
+    // =====================================================================
+    // BỔ SUNG: submitDocs — validate trạng thái nhảy cóc
+    // =====================================================================
+
+    @Test
+    void submitDocs_WhenStatusDraft_ShouldThrowException() {
+        // Arrange — Nhảy cóc: DRAFT → submitDocs (phải ở PENDING_PREPARATION/REJECTED)
+        UUID agendaItemId = UUID.randomUUID();
+        AgendaItem agendaItem = new AgendaItem();
+        agendaItem.setId(agendaItemId);
+        agendaItem.setPreparedByUser(preparer);
+        agendaItem.setMeeting(meeting);
+        agendaItem.setStatus(AgendaItemStatus.DRAFT); // Sai trạng thái
+
+        when(agendaItemRepository.findById(agendaItemId)).thenReturn(Optional.of(agendaItem));
+        when(currentUserService.getCurrentActiveUser()).thenReturn(preparer);
+
+        // Act & Assert
+        AppException exception = assertThrows(AppException.class, () -> {
+            agendaItemService.submitDocs(agendaItemId, new ArrayList<>());
+        });
+        assertEquals(ErrorCode.MEETING_STATUS_TRANSITION_INVALID, exception.getErrorCode());
+    }
+
+    @Test
+    void submitDocs_WhenStatusApproved_ShouldThrowException() {
+        // Arrange — Trạng thái APPROVED → không submit lại được
+        UUID agendaItemId = UUID.randomUUID();
+        AgendaItem agendaItem = new AgendaItem();
+        agendaItem.setId(agendaItemId);
+        agendaItem.setPreparedByUser(preparer);
+        agendaItem.setMeeting(meeting);
+        agendaItem.setStatus(AgendaItemStatus.APPROVED);
+
+        when(agendaItemRepository.findById(agendaItemId)).thenReturn(Optional.of(agendaItem));
+        when(currentUserService.getCurrentActiveUser()).thenReturn(preparer);
+
+        // Act & Assert
+        AppException exception = assertThrows(AppException.class, () -> {
+            agendaItemService.submitDocs(agendaItemId, new ArrayList<>());
+        });
+        assertEquals(ErrorCode.MEETING_STATUS_TRANSITION_INVALID, exception.getErrorCode());
+    }
+
+    // =====================================================================
+    // BỔ SUNG: approveDocs — luồng thành công và validate
+    // =====================================================================
+
+    @Test
+    void approveDocs_Success() {
+        // Arrange
+        UUID agendaItemId = UUID.randomUUID();
+        AgendaItem agendaItem = new AgendaItem();
+        agendaItem.setId(agendaItemId);
+        agendaItem.setMeeting(meeting);
+        agendaItem.setStatus(AgendaItemStatus.PENDING_APPROVAL);
+
+        when(agendaItemRepository.findById(agendaItemId)).thenReturn(Optional.of(agendaItem));
+        when(currentUserService.getCurrentActiveUser()).thenReturn(creator);
+        when(agendaItemRepository.save(any(AgendaItem.class))).thenReturn(agendaItem);
+
+        AgendaItemResponse responseDto = AgendaItemResponse.builder()
+                .status(AgendaItemStatus.APPROVED)
+                .build();
+        when(agendaItemMapper.toResponse(any(AgendaItem.class))).thenReturn(responseDto);
+
+        // Act
+        AgendaItemResponse response = agendaItemService.approveDocs(agendaItemId);
+
+        // Assert
+        assertNotNull(response);
+        assertEquals(AgendaItemStatus.APPROVED, response.getStatus());
+    }
+
+    @Test
+    void approveDocs_WhenNotCreator_ShouldThrowForbidden() {
+        // Arrange — Không phải người tạo cuộc họp → không được phê duyệt
+        UUID agendaItemId = UUID.randomUUID();
+        AgendaItem agendaItem = new AgendaItem();
+        agendaItem.setId(agendaItemId);
+        agendaItem.setMeeting(meeting);
+        agendaItem.setStatus(AgendaItemStatus.PENDING_APPROVAL);
+
+        when(agendaItemRepository.findById(agendaItemId)).thenReturn(Optional.of(agendaItem));
+
+        User randomUser = new User();
+        randomUser.setId(UUID.randomUUID());
+        when(currentUserService.getCurrentActiveUser()).thenReturn(randomUser);
+
+        // Act & Assert
+        AppException exception = assertThrows(AppException.class, () -> {
+            agendaItemService.approveDocs(agendaItemId);
+        });
+        assertEquals(ErrorCode.AGENDA_APPROVE_FORBIDDEN, exception.getErrorCode());
+    }
+
+    @Test
+    void approveDocs_WhenStatusNotPendingApproval_ShouldThrowException() {
+        // Arrange — Nhảy cóc: DRAFT → approveDocs (phải ở PENDING_APPROVAL)
+        UUID agendaItemId = UUID.randomUUID();
+        AgendaItem agendaItem = new AgendaItem();
+        agendaItem.setId(agendaItemId);
+        agendaItem.setMeeting(meeting);
+        agendaItem.setStatus(AgendaItemStatus.DRAFT);
+
+        when(agendaItemRepository.findById(agendaItemId)).thenReturn(Optional.of(agendaItem));
+        when(currentUserService.getCurrentActiveUser()).thenReturn(creator);
+
+        // Act & Assert
+        AppException exception = assertThrows(AppException.class, () -> {
+            agendaItemService.approveDocs(agendaItemId);
+        });
+        assertEquals(ErrorCode.MEETING_STATUS_TRANSITION_INVALID, exception.getErrorCode());
+    }
+
+    // =====================================================================
+    // BỔ SUNG: rejectDocs — validate quyền và trạng thái
+    // =====================================================================
+
+    @Test
+    void rejectDocs_WhenNotCreator_ShouldThrowForbidden() {
+        // Arrange
+        UUID agendaItemId = UUID.randomUUID();
+        AgendaItem agendaItem = new AgendaItem();
+        agendaItem.setId(agendaItemId);
+        agendaItem.setMeeting(meeting);
+        agendaItem.setStatus(AgendaItemStatus.PENDING_APPROVAL);
+
+        when(agendaItemRepository.findById(agendaItemId)).thenReturn(Optional.of(agendaItem));
+
+        User randomUser = new User();
+        randomUser.setId(UUID.randomUUID());
+        when(currentUserService.getCurrentActiveUser()).thenReturn(randomUser);
+
+        // Act & Assert
+        AppException exception = assertThrows(AppException.class, () -> {
+            agendaItemService.rejectDocs(agendaItemId, "Reason");
+        });
+        assertEquals(ErrorCode.AGENDA_APPROVE_FORBIDDEN, exception.getErrorCode());
+    }
+
+    @Test
+    void rejectDocs_WhenStatusNotPendingApproval_ShouldThrowException() {
+        // Arrange — Nhảy cóc: DRAFT → rejectDocs
+        UUID agendaItemId = UUID.randomUUID();
+        AgendaItem agendaItem = new AgendaItem();
+        agendaItem.setId(agendaItemId);
+        agendaItem.setMeeting(meeting);
+        agendaItem.setStatus(AgendaItemStatus.DRAFT);
+
+        when(agendaItemRepository.findById(agendaItemId)).thenReturn(Optional.of(agendaItem));
+        when(currentUserService.getCurrentActiveUser()).thenReturn(creator);
+
+        // Act & Assert
+        AppException exception = assertThrows(AppException.class, () -> {
+            agendaItemService.rejectDocs(agendaItemId, "Reason");
+        });
+        assertEquals(ErrorCode.MEETING_STATUS_TRANSITION_INVALID, exception.getErrorCode());
+    }
+
+    // =====================================================================
+    // BỔ SUNG: sendPrepRequest — validate trạng thái và thiếu preparer
+    // =====================================================================
+
+    @Test
+    void sendPrepRequest_Success() {
+        // Arrange
+        UUID agendaItemId = UUID.randomUUID();
+        AgendaItem agendaItem = new AgendaItem();
+        agendaItem.setId(agendaItemId);
+        agendaItem.setMeeting(meeting);
+        agendaItem.setStatus(AgendaItemStatus.DRAFT);
+        agendaItem.setPreparedByUser(preparer);
+
+        when(agendaItemRepository.findById(agendaItemId)).thenReturn(Optional.of(agendaItem));
+        when(currentUserService.getCurrentActiveUser()).thenReturn(creator);
+        when(agendaItemRepository.save(any(AgendaItem.class))).thenReturn(agendaItem);
+
+        AgendaItemResponse responseDto = AgendaItemResponse.builder()
+                .status(AgendaItemStatus.PENDING_PREPARATION)
+                .build();
+        when(agendaItemMapper.toResponse(any(AgendaItem.class))).thenReturn(responseDto);
+
+        // Act
+        AgendaItemResponse response = agendaItemService.sendPrepRequest(meetingId, agendaItemId);
+
+        // Assert
+        assertNotNull(response);
+        assertEquals(AgendaItemStatus.PENDING_PREPARATION, response.getStatus());
+    }
+
+    @Test
+    void sendPrepRequest_WhenStatusNotDraftOrRejected_ShouldThrowException() {
+        // Arrange — Nhảy cóc: APPROVED → sendPrepRequest
+        UUID agendaItemId = UUID.randomUUID();
+        AgendaItem agendaItem = new AgendaItem();
+        agendaItem.setId(agendaItemId);
+        agendaItem.setMeeting(meeting);
+        agendaItem.setStatus(AgendaItemStatus.APPROVED);
+
+        when(agendaItemRepository.findById(agendaItemId)).thenReturn(Optional.of(agendaItem));
+        when(currentUserService.getCurrentActiveUser()).thenReturn(creator);
+
+        // Act & Assert
+        AppException exception = assertThrows(AppException.class, () -> {
+            agendaItemService.sendPrepRequest(meetingId, agendaItemId);
+        });
+        assertEquals(ErrorCode.MEETING_STATUS_TRANSITION_INVALID, exception.getErrorCode());
+    }
+
+    @Test
+    void sendPrepRequest_WhenNoPreparer_ShouldThrowException() {
+        // Arrange — Chưa gán người chuẩn bị
+        UUID agendaItemId = UUID.randomUUID();
+        AgendaItem agendaItem = new AgendaItem();
+        agendaItem.setId(agendaItemId);
+        agendaItem.setMeeting(meeting);
+        agendaItem.setStatus(AgendaItemStatus.DRAFT);
+        agendaItem.setPreparedByUser(null); // Không có preparer
+
+        when(agendaItemRepository.findById(agendaItemId)).thenReturn(Optional.of(agendaItem));
+        when(currentUserService.getCurrentActiveUser()).thenReturn(creator);
+
+        // Act & Assert
+        AppException exception = assertThrows(AppException.class, () -> {
+            agendaItemService.sendPrepRequest(meetingId, agendaItemId);
+        });
+        assertEquals(ErrorCode.USER_ID_REQUIRED, exception.getErrorCode());
+    }
+
+    // =====================================================================
+    // BỔ SUNG: createAgendaItem — validate quyền và trạng thái meeting
+    // =====================================================================
+
+    @Test
+    void createAgendaItem_WhenNotCreator_ShouldThrowForbidden() {
+        // Arrange — Không phải người tạo cuộc họp
+        User randomUser = new User();
+        randomUser.setId(UUID.randomUUID());
+        when(currentUserService.getCurrentActiveUser()).thenReturn(randomUser);
+
+        AgendaItemUpsertRequest request = new AgendaItemUpsertRequest();
+        request.setTitle("Agenda Title");
+
+        // Act & Assert
+        AppException exception = assertThrows(AppException.class, () -> {
+            agendaItemService.createAgendaItem(meetingId, request);
+        });
+        assertEquals(ErrorCode.AGENDA_MODIFICATION_FORBIDDEN, exception.getErrorCode());
+    }
+
+    @Test
+    void createAgendaItem_WhenMeetingApproved_ShouldThrowException() {
+        // Arrange — Meeting đã duyệt → không được thêm agenda
+        meeting.setStatus(vn.acme.paperless_meeting.entity.enums.MeetingStatus.APPROVED);
+        when(currentUserService.getCurrentActiveUser()).thenReturn(creator);
+
+        AgendaItemUpsertRequest request = new AgendaItemUpsertRequest();
+        request.setTitle("Agenda Title");
+
+        // Act & Assert
+        AppException exception = assertThrows(AppException.class, () -> {
+            agendaItemService.createAgendaItem(meetingId, request);
+        });
+        assertEquals(ErrorCode.MEETING_STATUS_TRANSITION_INVALID, exception.getErrorCode());
+    }
 }
+

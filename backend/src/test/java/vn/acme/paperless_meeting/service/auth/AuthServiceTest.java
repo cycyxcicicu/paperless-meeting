@@ -23,6 +23,7 @@ import vn.acme.paperless_meeting.entity.Department;
 import vn.acme.paperless_meeting.entity.Position;
 import vn.acme.paperless_meeting.entity.Role;
 import vn.acme.paperless_meeting.entity.User;
+import vn.acme.paperless_meeting.exceptions.AppException;
 import vn.acme.paperless_meeting.exceptions.AppValidationException;
 import vn.acme.paperless_meeting.exceptions.ErrorCode;
 import vn.acme.paperless_meeting.mapper.user.UserMapper;
@@ -129,5 +130,101 @@ class AuthServiceTest {
 
  
 
-    
+    // =====================================================================
+    // changePassword — validate mật khẩu cũ sai, luồng thành công
+    // =====================================================================
+
+    @Test
+    void changePassword_WhenOldPasswordWrong_ShouldThrowBadCredentials() {
+        // Arrange
+        String username = "user01";
+        org.springframework.security.core.Authentication auth = mock(org.springframework.security.core.Authentication.class);
+        when(auth.getName()).thenReturn(username);
+
+        User user = new User();
+        user.setUsername(username);
+        user.setPassword("encoded-correct-password");
+
+        when(userRepository.findWithRoleByUsernameAndStatus(username, vn.acme.paperless_meeting.entity.enums.UserStatus.ACTIVE))
+                .thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("wrong-old-password", "encoded-correct-password")).thenReturn(false);
+
+        vn.acme.paperless_meeting.dto.request.auth.ChangePasswordRequest req = new vn.acme.paperless_meeting.dto.request.auth.ChangePasswordRequest();
+        req.setOldPassword("wrong-old-password");
+        req.setNewPassword("NewPassword123");
+
+        // Act & Assert
+        assertThrows(org.springframework.security.authentication.BadCredentialsException.class, () -> {
+            authService.changePassword(auth, req);
+        });
+    }
+
+    @Test
+    void changePassword_WhenUserNotActive_ShouldThrowException() {
+        // Arrange
+        String username = "user01";
+        org.springframework.security.core.Authentication auth = mock(org.springframework.security.core.Authentication.class);
+        when(auth.getName()).thenReturn(username);
+
+        when(userRepository.findWithRoleByUsernameAndStatus(username, vn.acme.paperless_meeting.entity.enums.UserStatus.ACTIVE))
+                .thenReturn(Optional.empty()); // User không active
+
+        vn.acme.paperless_meeting.dto.request.auth.ChangePasswordRequest req = new vn.acme.paperless_meeting.dto.request.auth.ChangePasswordRequest();
+        req.setOldPassword("OldPass");
+        req.setNewPassword("NewPass");
+
+        // Act & Assert
+        AppException ex = assertThrows(AppException.class, () -> {
+            authService.changePassword(auth, req);
+        });
+        assertEquals(ErrorCode.USER_NOT_EXISTED, ex.getErrorCode());
+    }
+
+    @Test
+    void changePassword_Success_ShouldEncodeAndSaveNewPassword() {
+        // Arrange
+        String username = "user01";
+        org.springframework.security.core.Authentication auth = mock(org.springframework.security.core.Authentication.class);
+        when(auth.getName()).thenReturn(username);
+
+        User user = new User();
+        user.setUsername(username);
+        user.setPassword("encoded-old-password");
+
+        when(userRepository.findWithRoleByUsernameAndStatus(username, vn.acme.paperless_meeting.entity.enums.UserStatus.ACTIVE))
+                .thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("OldPassword", "encoded-old-password")).thenReturn(true);
+        when(passwordEncoder.encode("NewPassword123")).thenReturn("encoded-new-password");
+        when(userRepository.save(user)).thenReturn(user);
+
+        vn.acme.paperless_meeting.dto.request.auth.ChangePasswordRequest req = new vn.acme.paperless_meeting.dto.request.auth.ChangePasswordRequest();
+        req.setOldPassword("OldPassword");
+        req.setNewPassword("NewPassword123");
+
+        // Act
+        assertDoesNotThrow(() -> authService.changePassword(auth, req));
+
+        // Assert
+        assertEquals("encoded-new-password", user.getPassword());
+        assertFalse(user.getIsFirstLogin());
+        verify(userRepository, times(1)).save(user);
+    }
+
+    @Test
+    void refresh_WhenRefreshTokenNull_ShouldThrowException() {
+        // Arrange — refresh token null
+        AppException ex = assertThrows(AppException.class, () -> {
+            authService.refresh(null, null, null);
+        });
+        assertEquals(ErrorCode.INVALID_KEY, ex.getErrorCode());
+    }
+
+    @Test
+    void refresh_WhenRefreshTokenBlank_ShouldThrowException() {
+        // Arrange — refresh token rỗng
+        AppException ex = assertThrows(AppException.class, () -> {
+            authService.refresh("   ", null, null);
+        });
+        assertEquals(ErrorCode.INVALID_KEY, ex.getErrorCode());
+    }
 }

@@ -6,6 +6,7 @@ import vn.acme.paperless_meeting.entity.MeetingDocument;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 public interface MeetingDocumentRepository extends JpaRepository<MeetingDocument, UUID> {
@@ -18,4 +19,8 @@ public interface MeetingDocumentRepository extends JpaRepository<MeetingDocument
            "LEFT JOIN FETCH md.agendaItem a " +
            "WHERE md.meeting.id = :meetingId")
     List<MeetingDocument> findByMeetingIdWithDocsAndVersions(@Param("meetingId") UUID meetingId);
+
+    Optional<MeetingDocument> findByMeetingIdAndId(UUID meetingId, UUID id);
+
+    boolean existsByMeetingIdAndDocumentId(UUID meetingId, UUID documentId);
 }

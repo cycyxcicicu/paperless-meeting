@@ -170,7 +170,7 @@ public class MotionService {
     public List<MotionResponse> getMotions(UUID agendaItemId) {
         agendaItemRepository.findById(agendaItemId)
                 .orElseThrow(() -> new AppException(ErrorCode.AGENDA_ITEM_NOT_FOUND));
-        
+
         List<Motion> list = motionRepository.findByAgendaItemIdWithCreator(agendaItemId);
         return list.stream()
                 .map(motionMapper::toResponse)
@@ -255,16 +255,12 @@ public class MotionService {
                 .findFirst()
                 .orElseThrow(() -> new AppException(ErrorCode.BAD_REQUEST));
 
-        // Chủ trì chỉ dừng được khi chưa hết thời gian.
+        // Kiểm tra xem phiên biểu quyết có bị hết thời gian hay chưa
         if (activeSession.getOpenedAt() != null && activeSession.getDurationMinutes() != null) {
             LocalDateTime expireTime = activeSession.getOpenedAt().plusMinutes(activeSession.getDurationMinutes());
             if (LocalDateTime.now().isAfter(expireTime)) {
-                // Tự động đóng luôn và báo lỗi đã hết thời gian đóng
-                activeSession.setClosedAt(expireTime);
-                activeSession.setStatus(VoteSessionStatus.CLOSED);
-                voteSessionRepository.save(activeSession);
-                motion.setStatus(MotionStatus.CLOSED);
-                motionRepository.save(motion);
+                // Fix bug: Không save rồi throw (toàn bộ transaction sẽ bị rollback, save vô nghĩa).
+                // Chỉ throw — VoteStatusJob chạy mỗi 5 giây sẽ tự dọn và đóng phiên.
                 throw new AppException(ErrorCode.VOTE_SESSION_CLOSED);
             }
         }
@@ -295,13 +291,8 @@ public class MotionService {
         if (activeSession.getOpenedAt() != null && activeSession.getDurationMinutes() != null) {
             LocalDateTime expireTime = activeSession.getOpenedAt().plusMinutes(activeSession.getDurationMinutes());
             if (LocalDateTime.now().isAfter(expireTime)) {
-                // Tự động đóng phiên biểu quyết luôn nếu phát hiện hết giờ
-                activeSession.setStatus(VoteSessionStatus.CLOSED);
-                activeSession.setClosedAt(expireTime);
-                voteSessionRepository.save(activeSession);
-                motion.setStatus(MotionStatus.CLOSED);
-                motionRepository.save(motion);
-
+                // Fix bug: Không save rồi throw (toàn bộ transaction sẽ bị rollback, save vô nghĩa).
+                // Chỉ throw — VoteStatusJob chạy mỗi 5 giây sẽ tự dọn và đóng phiên.
                 throw new AppException(ErrorCode.VOTE_SESSION_CLOSED);
             }
         }
@@ -379,29 +370,23 @@ public class MotionService {
         int totalVoters = (int) meetingParticipantRepository.countByMeetingIdAndParticipantRole(
                 motion.getMeeting().getId(), ParticipantRole.PARTICIPANT);
 
-        // 2. Tính số lượng người đã bỏ phiếu hợp lệ (isValid = true)
-        int votedCount = (int) session.getVoteBallotList().stream()
-                .filter(b -> Boolean.TRUE.equals(b.getIsValid()))
-                .count();
+        // 2. Tính số lượng người đã bỏ phiếu hợp lệ — COUNT tại DB thay vì kéo toàn bộ list lên RAM
+        int votedCount = (int) voteBallotChoiceRepository.countValidBallotsBySession(session.getId());
 
         // 3. Tính số người chưa bỏ phiếu
         int notVotedCount = Math.max(0, totalVoters - votedCount);
 
-        // 4. Tính số phiếu Đồng ý (CÓ) và Không đồng ý (KHÔNG) hợp lệ
+        // 4. Tính số phiếu Đồng ý (CÓ) và Không đồng ý (KHÔNG) — COUNT tại DB theo từng option
+        //    Dựa tuyệt đối vào orderNo (1 = CÓ, 2 = KHÔNG) để tránh lỗi bảng mã ký tự tiếng Việt
         int yesCount = 0;
         int noCount = 0;
-
-        for (VoteOption option : session.getVoteOptionList()) {
-            int validChoices = (int) option.getVoteBallotChoiceList().stream()
-                    .filter(c -> c.getBallot() != null && Boolean.TRUE.equals(c.getBallot().getIsValid()))
-                    .count();
-            // Kết hợp check OrderNo (1 = CÓ/YES, 2 = KHÔNG/NO) để tuyệt đối tránh lỗi bảng mã ký tự tiếng Việt có dấu
-            if (Integer.valueOf(1).equals(option.getOrderNo())  
-                    || "YES".equalsIgnoreCase(option.getLabel())) {
-                yesCount = validChoices;
-            } else if (Integer.valueOf(2).equals(option.getOrderNo()) 
-                    || "NO".equalsIgnoreCase(option.getLabel())) {
-                noCount = validChoices;
+        List<VoteOption> options = voteOptionRepository.findByVoteSessionIdOrderByOrderNoAsc(session.getId());
+        for (VoteOption option : options) {
+            long count = voteBallotChoiceRepository.countValidChoicesByOption(option.getId());
+            if (Integer.valueOf(1).equals(option.getOrderNo())) {
+                yesCount = (int) count;
+            } else if (Integer.valueOf(2).equals(option.getOrderNo())) {
+                noCount = (int) count;
             }
         }
 

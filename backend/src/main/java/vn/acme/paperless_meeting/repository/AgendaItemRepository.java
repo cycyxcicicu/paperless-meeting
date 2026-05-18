@@ -16,5 +16,16 @@ public interface AgendaItemRepository extends JpaRepository<AgendaItem, UUID> {
 
     List<AgendaItem> findByPreparedByUserId(UUID preparedByUserId);
 
+    /**
+     * Load AgendaItem kèm Meeting (và createdBy, department) để tránh N+1 trong getAssignedPreparationMeetings.
+     */
+    @Query("SELECT a FROM AgendaItem a " +
+           "JOIN FETCH a.meeting m " +
+           "LEFT JOIN FETCH m.createdBy " +
+           "LEFT JOIN FETCH m.department " +
+           "LEFT JOIN FETCH m.location " +
+           "WHERE a.preparedByUser.id = :preparedByUserId")
+    List<AgendaItem> findByPreparedByUserIdWithMeeting(@Param("preparedByUserId") UUID preparedByUserId);
+
     boolean existsByMeetingIdAndPreparedByUserId(UUID meetingId, UUID preparedByUserId);
 }

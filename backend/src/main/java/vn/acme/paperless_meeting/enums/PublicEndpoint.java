@@ -10,7 +10,13 @@ public enum PublicEndpoint {
     LOGOUT(HttpMethod.POST, "/auth/logout"),
     HEALTH(HttpMethod.GET, "/actuator/health"),
     SWAGGER(HttpMethod.GET, "/swagger-ui/**"),
-    API_DOCS(HttpMethod.GET, "/v3/api-docs/**");
+    API_DOCS(HttpMethod.GET, "/v3/api-docs/**"),
+
+    // Khách mời không cần đăng nhập
+    PUBLIC_INVITE(HttpMethod.GET, "/meetings/public/invite"),
+    PUBLIC_RSVP(HttpMethod.PUT, "/meetings/public/rsvp"),
+    PUBLIC_MEETING(HttpMethod.GET, "/meetings/public");
+
 
     private final HttpMethod method;
     private final String path;

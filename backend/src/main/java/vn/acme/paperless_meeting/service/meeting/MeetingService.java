@@ -24,6 +24,7 @@ import vn.acme.paperless_meeting.entity.User;
 import vn.acme.paperless_meeting.entity.enums.MeetingStatus;
 import vn.acme.paperless_meeting.entity.enums.AgendaItemStatus;
 import vn.acme.paperless_meeting.entity.enums.ParticipantRole;
+import vn.acme.paperless_meeting.entity.enums.ResourceType;
 import vn.acme.paperless_meeting.entity.enums.RoleName;
 import vn.acme.paperless_meeting.exceptions.AppException;
 import vn.acme.paperless_meeting.exceptions.ErrorCode;
@@ -37,6 +38,7 @@ import vn.acme.paperless_meeting.repository.MeetingParticipantRepository;
 import vn.acme.paperless_meeting.repository.MeetingRepository;
 import vn.acme.paperless_meeting.repository.UserRepository;
 import vn.acme.paperless_meeting.repository.AgendaItemRepository;
+import vn.acme.paperless_meeting.service.approval.ApprovalService;
 import vn.acme.paperless_meeting.service.auth.CurrentUserService;
 import vn.acme.paperless_meeting.service.department.DepartmentService;
 import vn.acme.paperless_meeting.specification.meeting.MeetingSpecification;
@@ -56,6 +58,7 @@ public class MeetingService {
     UserRepository userRepository;
     MeetingParticipantRepository meetingParticipantRepository;
     AgendaItemRepository agendaItemRepository;
+    ApprovalService approvalService;
 
     /**
      * Tìm kiếm và phân trang danh sách cuộc họp theo bộ lọc (từ khóa, trạng thái, thời gian).
@@ -206,7 +209,6 @@ public class MeetingService {
             throw new AppException(ErrorCode.MEETING_STATUS_TRANSITION_INVALID);
         }
 
-        // Kiểm tra xem tất cả các nội dung cuộc họp đã được phê duyệt tài liệu chưa
         if (meeting.getAgendaItemList() != null && !meeting.getAgendaItemList().isEmpty()) {
             boolean hasUnapprovedAgenda = meeting.getAgendaItemList().stream()
                     .anyMatch(agenda -> agenda.getStatus() != AgendaItemStatus.APPROVED);
@@ -228,8 +230,7 @@ public class MeetingService {
             throw new AppException(ErrorCode.MEETING_SECRETARY_REQUIRED);
         }
 
-        meeting.setStatus(MeetingStatus.PENDING_APPROVAL);
-        meetingRepository.save(meeting);
+        approvalService.submitResource(ResourceType.MEETING, id, null);
     }
 
     /**
@@ -237,20 +238,7 @@ public class MeetingService {
      */
     @Transactional
     public void approve(UUID id) {
-        Meeting meeting = getMeeting(id);
-        
-        // Kiểm tra quyền phê duyệt
-        requireApprovePermission(meeting);
-
-        if (meeting.getStatus() != MeetingStatus.PENDING_APPROVAL) {
-            throw new AppException(ErrorCode.MEETING_STATUS_TRANSITION_INVALID);
-        }
-
-        User caller = currentUserService.getCurrentActiveUser();
-        meeting.setStatus(MeetingStatus.APPROVED);
-        meeting.setApprovedBy(caller);
-        meeting.setApprovedAt(LocalDateTime.now());
-        meetingRepository.save(meeting);
+        approvalService.approveResource(ResourceType.MEETING, id, null);
     }
 
     /**
@@ -276,24 +264,7 @@ public class MeetingService {
      */
     @Transactional
     public void reject(UUID id, String rejectReason) {
-        Meeting meeting = getMeeting(id);
-        
-        requireApprovePermission(meeting);
-
-        if (meeting.getStatus() != MeetingStatus.PENDING_APPROVAL) {
-            throw new AppException(ErrorCode.MEETING_STATUS_TRANSITION_INVALID);
-        }
-
-        if (rejectReason == null || rejectReason.trim().isEmpty()) {
-            throw new AppException(ErrorCode.BAD_REQUEST);
-        }
-
-        User caller = currentUserService.getCurrentActiveUser();
-        meeting.setStatus(MeetingStatus.REJECTED);
-        meeting.setApprovedBy(caller);
-        meeting.setApprovedAt(LocalDateTime.now());
-        meeting.setRejectReason(rejectReason);
-        meetingRepository.save(meeting);
+        approvalService.rejectResource(ResourceType.MEETING, id, rejectReason);
     }
 
     /**

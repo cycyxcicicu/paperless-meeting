@@ -262,4 +262,109 @@ class MeetingParticipantServiceTest {
         assertEquals(1, stats.getTotalDeclined()); // p2 declined
         assertEquals(1, stats.getTotalPending()); // guest pending
     }
+
+    // =====================================================================
+    // BỔ SUNG: addParticipants — validate meeting đã đóng/hủy
+    // =====================================================================
+
+    @Test
+    void addParticipants_WhenMeetingClosed_ShouldThrowException() {
+        // Arrange
+        meeting.setStatus(MeetingStatus.CLOSED);
+        when(meetingRepository.findById(meetingId)).thenReturn(Optional.of(meeting));
+        when(currentUserService.getCurrentActiveUser()).thenReturn(caller);
+
+        AddParticipantRequest req = new AddParticipantRequest();
+        req.setUserId(userId);
+        req.setParticipantRole(ParticipantRole.PARTICIPANT);
+
+        // Act & Assert
+        AppException ex = assertThrows(AppException.class, () -> {
+            meetingParticipantService.addParticipants(meetingId, List.of(req));
+        });
+        assertEquals(ErrorCode.MEETING_ALREADY_CLOSED_OR_CANCELLED, ex.getErrorCode());
+    }
+
+    @Test
+    void addParticipants_WhenMeetingCancelled_ShouldThrowException() {
+        // Arrange
+        meeting.setStatus(MeetingStatus.CANCELLED);
+        when(meetingRepository.findById(meetingId)).thenReturn(Optional.of(meeting));
+        when(currentUserService.getCurrentActiveUser()).thenReturn(caller);
+
+        AddParticipantRequest req = new AddParticipantRequest();
+        req.setUserId(userId);
+        req.setParticipantRole(ParticipantRole.PARTICIPANT);
+
+        // Act & Assert
+        AppException ex = assertThrows(AppException.class, () -> {
+            meetingParticipantService.addParticipants(meetingId, List.of(req));
+        });
+        assertEquals(ErrorCode.MEETING_ALREADY_CLOSED_OR_CANCELLED, ex.getErrorCode());
+    }
+
+    // =====================================================================
+    // BỔ SUNG: updateAttendanceStatus — invite chưa ACCEPTED
+    // =====================================================================
+
+    @Test
+    void updateAttendanceStatus_WhenInviteNotAccepted_ShouldThrowException() {
+        // Arrange — Đại biểu chưa ACCEPTED → không được điểm danh
+        UUID attendeeId = participant.getId();
+        UpdateAttendanceStatusRequest req = new UpdateAttendanceStatusRequest();
+        req.setAttendanceStatus(AttendanceStatus.PRESENT);
+
+        participant.setInviteStatus(InviteStatus.PENDING); // Chưa chấp nhận
+
+        when(meetingRepository.findById(meetingId)).thenReturn(Optional.of(meeting));
+        when(meetingParticipantRepository.findById(attendeeId)).thenReturn(Optional.of(participant));
+        when(currentUserService.getCurrentActiveUser()).thenReturn(caller);
+
+        // Act & Assert
+        AppException ex = assertThrows(AppException.class, () -> {
+            meetingParticipantService.updateAttendanceStatus(meetingId, attendeeId, "INTERNAL", req);
+        });
+        assertEquals(ErrorCode.PARTICIPANT_STATUS_INCONSISTENT, ex.getErrorCode());
+    }
+
+    // =====================================================================
+    // BỔ SUNG: addExternalGuests — validate meeting đã đóng
+    // =====================================================================
+
+    @Test
+    void addExternalGuests_WhenMeetingClosed_ShouldThrowException() {
+        // Arrange
+        meeting.setStatus(MeetingStatus.CLOSED);
+        when(meetingRepository.findById(meetingId)).thenReturn(Optional.of(meeting));
+        when(currentUserService.getCurrentActiveUser()).thenReturn(caller);
+
+        AddGuestRequest req = new AddGuestRequest();
+        req.setEmail("new-guest@example.com");
+        req.setFullName("New Guest");
+
+        // Act & Assert
+        AppException ex = assertThrows(AppException.class, () -> {
+            meetingParticipantService.addExternalGuests(meetingId, List.of(req));
+        });
+        assertEquals(ErrorCode.MEETING_ALREADY_CLOSED_OR_CANCELLED, ex.getErrorCode());
+    }
+
+    // =====================================================================
+    // BỔ SUNG: removeAttendee — validate meeting đã đóng
+    // =====================================================================
+
+    @Test
+    void removeAttendee_WhenMeetingClosed_ShouldThrowException() {
+        // Arrange
+        meeting.setStatus(MeetingStatus.CLOSED);
+        when(meetingRepository.findById(meetingId)).thenReturn(Optional.of(meeting));
+        when(currentUserService.getCurrentActiveUser()).thenReturn(caller);
+
+        // Act & Assert
+        AppException ex = assertThrows(AppException.class, () -> {
+            meetingParticipantService.removeAttendee(meetingId, participant.getId(), "INTERNAL");
+        });
+        assertEquals(ErrorCode.MEETING_ALREADY_CLOSED_OR_CANCELLED, ex.getErrorCode());
+    }
 }
+

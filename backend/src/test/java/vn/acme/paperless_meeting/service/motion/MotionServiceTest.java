@@ -197,4 +197,130 @@ public class MotionServiceTest {
         assertEquals(0, response.getTotalVoters());
         assertEquals(0, response.getVotedCount());
     }
+
+    // =====================================================================
+    // BỔ SUNG: startVote — validate quyền và trạng thái cuộc họp
+    // =====================================================================
+
+    @Test
+    void startVote_WhenNotChair_ShouldThrowUnauthorized() {
+        // Arrange — Không phải chủ tọa
+        participant.setParticipantRole(ParticipantRole.PARTICIPANT);
+        when(meetingParticipantRepository.findByMeetingIdAndUserId(meetingId, userId))
+                .thenReturn(Optional.of(participant));
+
+        // Act & Assert
+        AppException exception = assertThrows(AppException.class, () -> {
+            motionService.startVote(motionId, 10);
+        });
+        assertEquals(ErrorCode.UNAUTHOZIZED, exception.getErrorCode());
+    }
+
+    @Test
+    void startVote_WhenMeetingNotInProgress_ShouldThrowException() {
+        // Arrange — Meeting không ở trạng thái IN_PROGRESS
+        meeting.setStatus(MeetingStatus.UPCOMING);
+        // participant là CHAIR
+        when(meetingParticipantRepository.findByMeetingIdAndUserId(meetingId, userId))
+                .thenReturn(Optional.of(participant));
+
+        // Act & Assert
+        AppException exception = assertThrows(AppException.class, () -> {
+            motionService.startVote(motionId, 10);
+        });
+        assertEquals(ErrorCode.MEETING_STATUS_TRANSITION_INVALID, exception.getErrorCode());
+    }
+
+    // =====================================================================
+    // BỔ SUNG: stopVote — validate quyền
+    // =====================================================================
+
+    @Test
+    void stopVote_WhenNotChair_ShouldThrowUnauthorized() {
+        // Arrange — Người dùng là PARTICIPANT, không được dừng biểu quyết
+        participant.setParticipantRole(ParticipantRole.PARTICIPANT);
+        when(meetingParticipantRepository.findByMeetingIdAndUserId(meetingId, userId))
+                .thenReturn(Optional.of(participant));
+
+        VoteSession session = new VoteSession();
+        session.setStatus(VoteSessionStatus.OPEN);
+        session.setOpenedAt(LocalDateTime.now());
+        session.setDurationMinutes(10);
+        session.setMotion(motion);
+        motion.getVoteSessionList().add(session);
+
+        // Act & Assert
+        AppException exception = assertThrows(AppException.class, () -> {
+            motionService.stopVote(motionId);
+        });
+        assertEquals(ErrorCode.UNAUTHOZIZED, exception.getErrorCode());
+    }
+
+    // =====================================================================
+    // BỔ SUNG: castVote — validate vai trò không được vote
+    // =====================================================================
+
+    @Test
+    void castVote_WhenParticipantRoleIsChair_ShouldThrowException() {
+        // Arrange — CHAIR không được vote (chỉ PARTICIPANT mới được)
+        VoteSession session = new VoteSession();
+        session.setStatus(VoteSessionStatus.OPEN);
+        session.setOpenedAt(LocalDateTime.now());
+        session.setDurationMinutes(10);
+        session.setMotion(motion);
+        motion.getVoteSessionList().add(session);
+
+        participant.setAttendanceStatus(AttendanceStatus.PRESENT);
+        participant.setParticipantRole(ParticipantRole.CHAIR); // Chủ tọa không vote
+
+        // Act & Assert
+        AppException exception = assertThrows(AppException.class, () -> {
+            motionService.castVote(motionId, UUID.randomUUID());
+        });
+        assertEquals(ErrorCode.VOTE_ROLE_NOT_ALLOWED, exception.getErrorCode());
+    }
+
+    @Test
+    void castVote_WhenAlreadyVoted_ShouldThrowException() {
+        // Arrange — Đã vote rồi
+        VoteSession session = new VoteSession();
+        session.setId(UUID.randomUUID());
+        session.setStatus(VoteSessionStatus.OPEN);
+        session.setOpenedAt(LocalDateTime.now());
+        session.setDurationMinutes(10);
+        session.setMotion(motion);
+        motion.getVoteSessionList().add(session);
+
+        participant.setAttendanceStatus(AttendanceStatus.PRESENT);
+        participant.setParticipantRole(ParticipantRole.PARTICIPANT);
+
+        when(voteBallotRepository.existsByVoteSessionIdAndUserId(session.getId(), userId)).thenReturn(true);
+
+        // Act & Assert
+        AppException exception = assertThrows(AppException.class, () -> {
+            motionService.castVote(motionId, UUID.randomUUID());
+        });
+        assertEquals(ErrorCode.VOTE_ALREADY_CAST, exception.getErrorCode());
+    }
+
+    // =====================================================================
+    // BỔ SUNG: createMotion — validate quyền theo trạng thái meeting
+    // =====================================================================
+
+    @Test
+    void createMotion_WhenMeetingPendingApproval_ShouldThrowException() {
+        // Arrange — Meeting ở PENDING_APPROVAL → không được tạo motion (startVote)
+        // startVote kiểm tra meeting.status == IN_PROGRESS
+        meeting.setStatus(MeetingStatus.PENDING_APPROVAL);
+
+        // Vẫn để participant là CHAIR (qua được kiểm tra quyền)
+        when(meetingParticipantRepository.findByMeetingIdAndUserId(meetingId, userId))
+                .thenReturn(Optional.of(participant));
+
+        // Act & Assert — startVote khi meeting không IN_PROGRESS
+        AppException exception = assertThrows(AppException.class, () -> {
+            motionService.startVote(motionId, 5);
+        });
+        assertEquals(ErrorCode.MEETING_STATUS_TRANSITION_INVALID, exception.getErrorCode());
+    }
 }

@@ -150,6 +150,20 @@
 		<version>${bytebuddy.version}</version>
 		<scope>test</scope>
 	</dependency>
+	<!-- Source: https://mvnrepository.com/artifact/io.minio/minio -->
+	<dependency>
+		<groupId>io.minio</groupId>
+		<artifactId>minio</artifactId>
+		<version>9.0.0</version>
+	</dependency>
+
+	<!-- okhttp3 required by MinIO 9.x SDK -->
+	<dependency>
+		<groupId>com.squareup.okhttp3</groupId>
+		<artifactId>okhttp</artifactId>
+		<version>4.12.0</version>
+	</dependency>
+
 </dependencies>
 
 	 <build>
@@ -196,7 +210,7 @@
 			<artifactId>maven-surefire-plugin</artifactId>
 			<version>3.5.2</version>
 			<configuration>
-				<argLine>-Xmx256m -Djdk.net.URLClassPath.disableClassPathURLCheck=true -javaagent:${settings.localRepository}/net/bytebuddy/byte-buddy-agent/${bytebuddy.version}/byte-buddy-agent-${bytebuddy.version}.jar</argLine>
+				<argLine>-Xmx256m -Djdk.net.URLClassPath.disableClassPathURLCheck=true -javaagent:"${settings.localRepository}/net/bytebuddy/byte-buddy-agent/${bytebuddy.version}/byte-buddy-agent-${bytebuddy.version}.jar"</argLine>
 			</configuration>
 		</plugin>
 		</plugins>

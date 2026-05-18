@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -178,42 +179,55 @@ public class MeetingParticipantService {
 
     @Transactional(readOnly = true)
     public MeetingAttendeesResponse getAttendees(UUID meetingId) {
-        Meeting meeting = meetingRepository.findById(meetingId)
+        meetingRepository.findById(meetingId)
                 .orElseThrow(() -> new AppException(ErrorCode.MEETING_NOT_EXIST));
 
         List<MeetingParticipant> participants = meetingParticipantRepository.findByMeetingId(meetingId);
         List<MeetingGuest> guests = meetingGuestRepository.findByMeetingId(meetingId);
 
+        // O(N): Xây dựng Map lookup để tìm người thật mà mỗi substitute đang đại diện cho,
+        // thay vì lồng 2 vòng for (O(N²)) cho mỗi participant/guest.
+        // Key: substituteUserId -> participant gốc
+        Map<UUID, MeetingParticipant> substituteUserIdToOriginal = participants.stream()
+                .filter(p -> p.getSubstituteUser() != null)
+                .collect(java.util.stream.Collectors.toMap(
+                        p -> p.getSubstituteUser().getId(),
+                        p -> p,
+                        (existing, duplicate) -> existing // giữ bản ghi đầu nếu trùng key
+                ));
+        // Key: substituteEmail lowercase -> participant gốc
+        Map<String, MeetingParticipant> substituteEmailToOriginal = participants.stream()
+                .filter(p -> p.getSubstituteEmail() != null)
+                .collect(java.util.stream.Collectors.toMap(
+                        p -> p.getSubstituteEmail().toLowerCase(),
+                        p -> p,
+                        (existing, duplicate) -> existing
+                ));
+
         List<ParticipantResponse> participantResponses = new ArrayList<>();
         List<GuestResponse> guestResponses = new ArrayList<>();
 
-        // 1. Map thành viên nội bộ
+        // 1. Map thành viên nội bộ với O(1) lookup
         for (MeetingParticipant p : participants) {
             ParticipantResponse resp = meetingParticipantMapper.toResponse(p);
-            
-            // Tìm xem người này có đi thay cho ai không
-            for (MeetingParticipant org : participants) {
-                if (org.getSubstituteUser() != null && org.getSubstituteUser().getId().equals(p.getUser().getId())) {
-                    resp.setSubstitutedForUserName(org.getUser().getFullName());
-                    resp.setSubstitutedForUserPosition(org.getUser().getPosition() != null ? org.getUser().getPosition().getPositionName() : "");
-                    break;
-                }
+            MeetingParticipant original = substituteUserIdToOriginal.get(p.getUser().getId());
+            if (original != null) {
+                resp.setSubstitutedForUserName(original.getUser().getFullName());
+                resp.setSubstitutedForUserPosition(original.getUser().getPosition() != null
+                        ? original.getUser().getPosition().getPositionName() : "");
             }
             participantResponses.add(resp);
         }
 
-        // 3. Map khách ngoài
+        // 2. Map khách ngoài với O(1) lookup
         for (MeetingGuest g : guests) {
             GuestResponse resp = meetingGuestMapper.toResponse(g);
-            
-            // Tìm xem khách này có đi thay cho ai không
             if (g.getEmail() != null) {
-                for (MeetingParticipant org : participants) {
-                    if (org.getSubstituteEmail() != null && org.getSubstituteEmail().equalsIgnoreCase(g.getEmail())) {
-                        resp.setSubstitutedForUserName(org.getUser().getFullName());
-                        resp.setSubstitutedForUserPosition(org.getUser().getPosition() != null ? org.getUser().getPosition().getPositionName() : "");
-                        break;
-                    }
+                MeetingParticipant original = substituteEmailToOriginal.get(g.getEmail().toLowerCase());
+                if (original != null) {
+                    resp.setSubstitutedForUserName(original.getUser().getFullName());
+                    resp.setSubstitutedForUserPosition(original.getUser().getPosition() != null
+                            ? original.getUser().getPosition().getPositionName() : "");
                 }
             }
             guestResponses.add(resp);

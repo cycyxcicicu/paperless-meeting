@@ -196,17 +196,21 @@ public class AgendaItemService {
         }
 
         // Tạo liên kết đính kèm tài liệu vào AgendaItem
-        if (documentIds != null) {
-            for (UUID docId : documentIds) {
-                Document doc = documentRepository.findById(docId)
-                        .orElseThrow(() -> new AppException(ErrorCode.PRODUCT_NOT_FOUND)); // Mượn tạm mã lỗi của doc hoặc ném lỗi ko tìm thấy
-                
+        if (documentIds != null && !documentIds.isEmpty()) {
+            // Dùng findAllById + saveAll để tránh N query SELECT + N query INSERT riêng lẻ trong vòng lặp
+            List<Document> docs = documentRepository.findAllById(documentIds);
+            if (docs.size() != documentIds.size()) {
+                throw new AppException(ErrorCode.PRODUCT_NOT_FOUND);
+            }
+            List<MeetingDocument> meetingDocs = new ArrayList<>();
+            for (Document doc : docs) {
                 MeetingDocument meetingDoc = new MeetingDocument();
                 meetingDoc.setMeeting(agendaItem.getMeeting());
                 meetingDoc.setDocument(doc);
                 meetingDoc.setAgendaItem(agendaItem);
-                meetingDocumentRepository.save(meetingDoc);
+                meetingDocs.add(meetingDoc);
             }
+            meetingDocumentRepository.saveAll(meetingDocs);
         }
 
         agendaItem.setStatus(AgendaItemStatus.PENDING_APPROVAL);
@@ -264,8 +268,9 @@ public class AgendaItemService {
      */
     public List<MeetingResponse> getAssignedPreparationMeetings() {
         User caller = currentUserService.getCurrentActiveUser();
-        List<AgendaItem> assignedAgendas = agendaItemRepository.findByPreparedByUserId(caller.getId());
-        
+        // Dùng JOIN FETCH để load Meeting (và createdBy, department) cùng lúc, tránh N+1 query
+        List<AgendaItem> assignedAgendas = agendaItemRepository.findByPreparedByUserIdWithMeeting(caller.getId());
+
         return assignedAgendas.stream()
                 .map(AgendaItem::getMeeting)
                 .distinct()

@@ -3,6 +3,8 @@ package vn.acme.paperless_meeting.controller.meeting;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.data.domain.Pageable;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
@@ -32,10 +34,13 @@ import vn.acme.paperless_meeting.service.meeting.MeetingService;
 @RequestMapping("/meetings")
 @RequiredArgsConstructor
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
+@Tag(name = "Meeting", description = "Quản lý cuộc họp — tạo, cập nhật, duyệt, công bố và kết thúc")
 public class MeetingController {
 
     MeetingService meetingService;
 
+    @Operation(summary = "Danh sách cuộc họp (có phân trang, lọc)",
+               description = "Lọc theo từ khóa tiêu đề, trạng thái (DRAFT/PENDING_APPROVAL/...) và khoảng thời gian. Hỗ trợ phân trang qua ?page=&size=&sort=.")
     @GetMapping
     public ResponseEntity<ApiResponse<PageResponse<MeetingResponse>>> findAll(
             @RequestParam(required = false) String keyword,
@@ -50,6 +55,7 @@ public class MeetingController {
                 .build());
     }
 
+    @Operation(summary = "Chi tiết cuộc họp theo ID")
     @GetMapping("/{id}")
     public ResponseEntity<ApiResponse<MeetingResponse>> findById(@PathVariable UUID id) {
         MeetingResponse response = meetingService.findById(id);
@@ -58,6 +64,8 @@ public class MeetingController {
                 .build());
     }
 
+    @Operation(summary = "Tạo cuộc họp mới",
+               description = "Tạo cuộc họp ở trạng thái DRAFT. Người tạo tự động trở thành chủ tọa. Cần điền đầy đủ tiêu đề, địa điểm, thời gian bắt đầu/kết thúc.")
     @PostMapping
     public ResponseEntity<ApiResponse<MeetingResponse>> create(@RequestBody @Valid MeetingUpsertRequest request) {
         MeetingResponse response = meetingService.create(request);
@@ -66,6 +74,8 @@ public class MeetingController {
                 .build());
     }
 
+    @Operation(summary = "Cập nhật thông tin cuộc họp",
+               description = "Chỉ cho phép khi cuộc họp đang ở trạng thái DRAFT hoặc REJECTED. Chỉ người tạo hoặc admin mới được sửa.")
     @PutMapping("/{id}")
     public ResponseEntity<ApiResponse<MeetingResponse>> update(@PathVariable UUID id, @RequestBody @Valid MeetingUpsertRequest request) {
         MeetingResponse response = meetingService.update(id, request);
@@ -74,6 +84,8 @@ public class MeetingController {
                 .build());
     }
 
+    @Operation(summary = "Trình duyệt cuộc họp",
+               description = "Chuyển cuộc họp từ DRAFT → PENDING_APPROVAL để ban thư ký xét duyệt. Yêu cầu tất cả nội dung nghị sự phải được phê duyệt tài liệu trước.")
     @PostMapping("/{id}/submit-approval")
     public ResponseEntity<ApiResponse<Void>> submitForApproval(@PathVariable UUID id) {
         meetingService.submitForApproval(id);
@@ -82,6 +94,8 @@ public class MeetingController {
                 .build());
     }
 
+    @Operation(summary = "Phê duyệt cuộc họp",
+               description = "Chuyển từ PENDING_APPROVAL → APPROVED. Chỉ người có quyền phê duyệt (ban thư ký / admin) mới thực hiện được.")
     @PostMapping("/{id}/approve")
     public ResponseEntity<ApiResponse<Void>> approve(@PathVariable UUID id) {
         meetingService.approve(id);
@@ -90,6 +104,8 @@ public class MeetingController {
                 .build());
     }
 
+    @Operation(summary = "Công bố cuộc họp (gửi thư mời)",
+               description = "Chuyển từ APPROVED → PUBLISHED. Hệ thống sẽ gửi email mời đến toàn bộ người tham dự.")
     @PostMapping("/{id}/publish")
     public ResponseEntity<ApiResponse<Void>> publish(@PathVariable UUID id) {
         meetingService.publish(id);
@@ -98,6 +114,8 @@ public class MeetingController {
                 .build());
     }
 
+    @Operation(summary = "Từ chối cuộc họp",
+               description = "Chuyển từ PENDING_APPROVAL → REJECTED kèm lý do. Người tạo có thể chỉnh sửa và trình duyệt lại.")
     @PostMapping("/{id}/reject")
     public ResponseEntity<ApiResponse<Void>> reject(@PathVariable UUID id, @RequestParam String rejectReason) {
         meetingService.reject(id, rejectReason);
@@ -106,6 +124,8 @@ public class MeetingController {
                 .build());
     }
 
+    @Operation(summary = "Hủy cuộc họp",
+               description = "Chuyển sang CANCELLED kèm lý do hủy. Chỉ người tạo hoặc admin thực hiện được. Không thể hoàn tác.")
     @PostMapping("/{id}/cancel")
     public ResponseEntity<ApiResponse<Void>> cancel(@PathVariable UUID id, @RequestParam String cancelReason) {
         meetingService.cancel(id, cancelReason);
@@ -114,6 +134,8 @@ public class MeetingController {
                 .build());
     }
 
+    @Operation(summary = "Kết thúc cuộc họp",
+               description = "Chuyển sang CLOSED. Sau khi kết thúc, cuộc họp chỉ được xem, không chỉnh sửa thêm.")
     @PostMapping("/{id}/close")
     public ResponseEntity<ApiResponse<Void>> close(@PathVariable UUID id) {
         meetingService.close(id);

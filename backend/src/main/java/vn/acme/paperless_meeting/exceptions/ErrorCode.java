@@ -136,7 +136,24 @@ public enum ErrorCode implements BaseErrorCode {
         VOTE_SESSION_CLOSED(2012, "Phiên biểu quyết đã kết thúc hoặc hết thời gian", HttpStatus.BAD_REQUEST),
         VOTE_ALREADY_CAST(2013, "Bạn đã thực hiện biểu quyết trước đó", HttpStatus.BAD_REQUEST),
         PARTICIPANT_NOT_PRESENT(2014, "Đại biểu chưa điểm danh, không thể thực hiện biểu quyết", HttpStatus.BAD_REQUEST),
-        VOTE_ROLE_NOT_ALLOWED(2015, "Chỉ đại biểu tham dự mới có quyền biểu quyết", HttpStatus.FORBIDDEN);
+        VOTE_ROLE_NOT_ALLOWED(2015, "Chỉ đại biểu tham dự mới có quyền biểu quyết", HttpStatus.FORBIDDEN),
+        // APPROVAL
+        APPROVAL_REQUEST_NOT_FOUND(2051, "Yêu cầu phê duyệt không tồn tại", HttpStatus.NOT_FOUND),
+        APPROVAL_STEP_NOT_FOUND(2052, "Bước phê duyệt không tồn tại", HttpStatus.NOT_FOUND),
+        APPROVAL_REQUEST_ALREADY_PENDING(2053, "Tài nguyên đã có yêu cầu phê duyệt đang chờ xử lý", HttpStatus.CONFLICT),
+        APPROVAL_STATUS_TRANSITION_INVALID(2054, "Trạng thái phê duyệt không hợp lệ", HttpStatus.BAD_REQUEST),
+        APPROVAL_RESOURCE_TYPE_UNSUPPORTED(2055, "Loại tài nguyên chưa hỗ trợ phê duyệt", HttpStatus.BAD_REQUEST),
+        APPROVAL_RESOURCE_NOT_FOUND(2056, "Không tìm thấy tài nguyên cần phê duyệt", HttpStatus.NOT_FOUND),
+        // DOCUMENT
+        DOCUMENT_NOT_FOUND(2101, "Tài liệu không tồn tại", HttpStatus.NOT_FOUND),
+        DOCUMENT_ALREADY_ATTACHED(2102, "Tài liệu đã được gắn vào cuộc họp này", HttpStatus.CONFLICT),
+        DOCUMENT_DETACH_FORBIDDEN(2103, "Bạn không có quyền gỡ tài liệu khỏi cuộc họp", HttpStatus.FORBIDDEN),
+        DOCUMENT_DELETE_FORBIDDEN(2104, "Bạn không có quyền xóa tài liệu này", HttpStatus.FORBIDDEN),
+        DOCUMENT_CANNOT_DELETE_NON_DRAFT(2105, "Chỉ có thể xóa tài liệu ở trạng thái DRAFT", HttpStatus.BAD_REQUEST),
+        DOCUMENT_MEETING_NOT_FOUND(2106, "Tài liệu không thuộc cuộc họp này", HttpStatus.NOT_FOUND),
+        FILE_UPLOAD_FAILED(2107, "Upload file thất bại", HttpStatus.INTERNAL_SERVER_ERROR),
+        FILE_TYPE_NOT_ALLOWED(2108, "Loại file không được hỗ trợ. Chỉ chấp nhận PDF, DOCX, XLSX, PPTX, PNG, JPG, ZIP", HttpStatus.BAD_REQUEST),
+        FILE_SIZE_EXCEEDED(2109, "Kích thước file vượt quá giới hạn 50MB", HttpStatus.BAD_REQUEST);
 
         int code;
         String message;

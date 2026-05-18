@@ -17,11 +17,13 @@ import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 
 import vn.acme.paperless_meeting.dto.request.meeting.MeetingUpsertRequest;
+import vn.acme.paperless_meeting.dto.response.approval.ApprovalRequestResponse;
 import vn.acme.paperless_meeting.dto.response.meeting.MeetingResponse;
 import vn.acme.paperless_meeting.entity.*;
 import vn.acme.paperless_meeting.entity.enums.InviteStatus;
 import vn.acme.paperless_meeting.entity.enums.MeetingStatus;
 import vn.acme.paperless_meeting.entity.enums.ParticipantRole;
+import vn.acme.paperless_meeting.entity.enums.ResourceType;
 import vn.acme.paperless_meeting.entity.enums.RoleName;
 import vn.acme.paperless_meeting.exceptions.AppException;
 import vn.acme.paperless_meeting.exceptions.ErrorCode;
@@ -31,6 +33,7 @@ import vn.acme.paperless_meeting.repository.LocationRepository;
 import vn.acme.paperless_meeting.repository.MeetingParticipantRepository;
 import vn.acme.paperless_meeting.repository.MeetingRepository;
 import vn.acme.paperless_meeting.repository.UserRepository;
+import vn.acme.paperless_meeting.service.approval.ApprovalService;
 import vn.acme.paperless_meeting.service.auth.CurrentUserService;
 import vn.acme.paperless_meeting.service.department.DepartmentService;
 
@@ -54,6 +57,8 @@ class MeetingServiceTest {
     UserRepository userRepository;
     @Mock
     MeetingParticipantRepository meetingParticipantRepository;
+    @Mock
+    ApprovalService approvalService;
 
     @InjectMocks
     MeetingService meetingService;
@@ -213,48 +218,45 @@ class MeetingServiceTest {
     }
 
     @Test
-    void submitForApproval_Successful_ShouldTransitionToPendingApproval() {
+    void submitForApproval_Successful_ShouldDelegateToApprovalService() {
         // Arrange
         when(meetingRepository.findById(meetingId)).thenReturn(Optional.of(meeting));
         when(currentUserService.getCurrentActiveUser()).thenReturn(caller);
         when(meetingParticipantRepository.countByMeetingIdAndParticipantRole(meetingId, ParticipantRole.CHAIR)).thenReturn(2L);
         when(meetingParticipantRepository.countByMeetingIdAndParticipantRole(meetingId, ParticipantRole.SECRETARY)).thenReturn(1L);
+        when(approvalService.submitResource(ResourceType.MEETING, meetingId, null))
+                .thenReturn(ApprovalRequestResponse.builder().build());
 
         // Act
         meetingService.submitForApproval(meetingId);
 
         // Assert
-        assertEquals(MeetingStatus.PENDING_APPROVAL, meeting.getStatus());
-        verify(meetingRepository, times(1)).save(meeting);
+        verify(approvalService, times(1)).submitResource(ResourceType.MEETING, meetingId, null);
     }
 
     @Test
-    void approve_Successful_ShouldTransitionToApproved() {
+    void approve_Successful_ShouldDelegateToApprovalService() {
         // Arrange
         meeting.setStatus(MeetingStatus.PENDING_APPROVAL);
         when(meetingRepository.findById(meetingId)).thenReturn(Optional.of(meeting));
         when(currentUserService.hasRole(RoleName.DEPARTMENT_ADMIN)).thenReturn(true);
         when(currentUserService.getCurrentActiveUser()).thenReturn(caller);
         when(departmentService.getAllSubDepartmentIds(departmentId)).thenReturn(List.of(departmentId));
+        when(approvalService.approveResource(ResourceType.MEETING, meetingId, null))
+                .thenReturn(ApprovalRequestResponse.builder().build());
 
         // Act
         meetingService.approve(meetingId);
 
         // Assert
-        assertEquals(MeetingStatus.APPROVED, meeting.getStatus());
-        assertEquals(caller, meeting.getApprovedBy());
-        assertNotNull(meeting.getApprovedAt());
-        verify(meetingRepository, times(1)).save(meeting);
+        verify(approvalService, times(1)).approveResource(ResourceType.MEETING, meetingId, null);
     }
 
     @Test
     void reject_WhenReasonEmpty_ShouldThrowException() {
         // Arrange
-        meeting.setStatus(MeetingStatus.PENDING_APPROVAL);
-        when(meetingRepository.findById(meetingId)).thenReturn(Optional.of(meeting));
-        when(currentUserService.hasRole(RoleName.DEPARTMENT_ADMIN)).thenReturn(true);
-        when(currentUserService.getCurrentActiveUser()).thenReturn(caller);
-        when(departmentService.getAllSubDepartmentIds(departmentId)).thenReturn(List.of(departmentId));
+        when(approvalService.rejectResource(ResourceType.MEETING, meetingId, ""))
+                .thenThrow(new AppException(ErrorCode.BAD_REQUEST));
 
         // Act & Assert
         AppException ex = assertThrows(AppException.class, () -> {
@@ -275,5 +277,319 @@ class MeetingServiceTest {
             meetingService.cancel(meetingId, "Reason");
         });
         assertEquals(ErrorCode.MEETING_STATUS_TRANSITION_INVALID, ex.getErrorCode());
+    }
+
+    // =====================================================================
+    // BỔ SUNG: create — trường hợp thiếu quyền, thiếu department/location
+    // =====================================================================
+
+    @Test
+    void create_WhenNoAuthority_ShouldThrowUnauthorized() {
+        // Arrange
+        when(currentUserService.hasAuthority("MEETING_CREATE")).thenReturn(false);
+
+        // Act & Assert
+        AppException ex = assertThrows(AppException.class, () -> {
+            meetingService.create(request);
+        });
+        assertEquals(ErrorCode.UNAUTHOZIZED, ex.getErrorCode());
+    }
+
+    @Test
+    void create_WhenDepartmentNotExist_ShouldThrowException() {
+        // Arrange
+        when(currentUserService.hasAuthority("MEETING_CREATE")).thenReturn(true);
+        when(meetingRepository.existsRoomConflict(any(), any(), any(), any(), any())).thenReturn(false);
+        when(currentUserService.getCurrentActiveUser()).thenReturn(caller);
+        when(departmentRepository.findById(departmentId)).thenReturn(Optional.empty());
+
+        // Act & Assert
+        AppException ex = assertThrows(AppException.class, () -> {
+            meetingService.create(request);
+        });
+        assertEquals(ErrorCode.DEPARTMENT_NOT_EXIST, ex.getErrorCode());
+    }
+
+    @Test
+    void create_WhenLocationNotExist_ShouldThrowException() {
+        // Arrange
+        when(currentUserService.hasAuthority("MEETING_CREATE")).thenReturn(true);
+        when(meetingRepository.existsRoomConflict(any(), any(), any(), any(), any())).thenReturn(false);
+        when(currentUserService.getCurrentActiveUser()).thenReturn(caller);
+        when(departmentRepository.findById(departmentId)).thenReturn(Optional.of(department));
+        when(locationRepository.findById(locationId)).thenReturn(Optional.empty());
+
+        // Act & Assert
+        AppException ex = assertThrows(AppException.class, () -> {
+            meetingService.create(request);
+        });
+        assertEquals(ErrorCode.LOCATION_NOT_EXIST, ex.getErrorCode());
+    }
+
+    // =====================================================================
+    // BỔ SUNG: update — validate status, luồng thành công
+    // =====================================================================
+
+    @Test
+    void update_WhenStatusNotDraftOrRejected_ShouldThrowException() {
+        // Arrange — Meeting đang ở APPROVED → không được sửa
+        meeting.setStatus(MeetingStatus.APPROVED);
+        when(meetingRepository.findById(meetingId)).thenReturn(Optional.of(meeting));
+        when(currentUserService.getCurrentActiveUser()).thenReturn(caller);
+        when(currentUserService.hasRole(RoleName.SUPER_ADMIN)).thenReturn(false);
+
+        // Act & Assert
+        AppException ex = assertThrows(AppException.class, () -> {
+            meetingService.update(meetingId, request);
+        });
+        assertEquals(ErrorCode.MEETING_STATUS_TRANSITION_INVALID, ex.getErrorCode());
+    }
+
+    @Test
+    void update_WhenStatusPendingApproval_ShouldThrowException() {
+        // Arrange — Meeting đang chờ duyệt → không được sửa
+        meeting.setStatus(MeetingStatus.PENDING_APPROVAL);
+        when(meetingRepository.findById(meetingId)).thenReturn(Optional.of(meeting));
+        when(currentUserService.getCurrentActiveUser()).thenReturn(caller);
+        when(currentUserService.hasRole(RoleName.SUPER_ADMIN)).thenReturn(false);
+
+        // Act & Assert
+        AppException ex = assertThrows(AppException.class, () -> {
+            meetingService.update(meetingId, request);
+        });
+        assertEquals(ErrorCode.MEETING_STATUS_TRANSITION_INVALID, ex.getErrorCode());
+    }
+
+    // =====================================================================
+    // BỔ SUNG: submitForApproval — validate trạng thái nhảy cóc
+    // =====================================================================
+
+    @Test
+    void submitForApproval_WhenStatusApproved_ShouldThrowException() {
+        // Arrange — Nhảy cóc: APPROVED → submitForApproval (phải chỉ DRAFT/REJECTED)
+        meeting.setStatus(MeetingStatus.APPROVED);
+        when(meetingRepository.findById(meetingId)).thenReturn(Optional.of(meeting));
+        when(currentUserService.getCurrentActiveUser()).thenReturn(caller);
+        when(currentUserService.hasRole(RoleName.SUPER_ADMIN)).thenReturn(false);
+
+        // Act & Assert
+        AppException ex = assertThrows(AppException.class, () -> {
+            meetingService.submitForApproval(meetingId);
+        });
+        assertEquals(ErrorCode.MEETING_STATUS_TRANSITION_INVALID, ex.getErrorCode());
+    }
+
+    @Test
+    void submitForApproval_WhenStatusUpcoming_ShouldThrowException() {
+        // Arrange — Nhảy cóc: UPCOMING → submitForApproval
+        meeting.setStatus(MeetingStatus.UPCOMING);
+        when(meetingRepository.findById(meetingId)).thenReturn(Optional.of(meeting));
+        when(currentUserService.getCurrentActiveUser()).thenReturn(caller);
+        when(currentUserService.hasRole(RoleName.SUPER_ADMIN)).thenReturn(false);
+
+        // Act & Assert
+        AppException ex = assertThrows(AppException.class, () -> {
+            meetingService.submitForApproval(meetingId);
+        });
+        assertEquals(ErrorCode.MEETING_STATUS_TRANSITION_INVALID, ex.getErrorCode());
+    }
+
+    // =====================================================================
+    // BỔ SUNG: approve — validate trạng thái, quyền
+    // =====================================================================
+
+    @Test
+    void approve_WhenStatusDraft_ShouldThrowException() {
+        when(approvalService.approveResource(ResourceType.MEETING, meetingId, null))
+                .thenThrow(new AppException(ErrorCode.MEETING_STATUS_TRANSITION_INVALID));
+
+        // Act & Assert
+        AppException ex = assertThrows(AppException.class, () -> {
+            meetingService.approve(meetingId);
+        });
+        assertEquals(ErrorCode.MEETING_STATUS_TRANSITION_INVALID, ex.getErrorCode());
+    }
+
+    @Test
+    void approve_WhenNotDepartmentAdmin_ShouldThrowUnauthorized() {
+        when(approvalService.approveResource(ResourceType.MEETING, meetingId, null))
+                .thenThrow(new AppException(ErrorCode.UNAUTHOZIZED));
+
+        // Act & Assert
+        AppException ex = assertThrows(AppException.class, () -> {
+            meetingService.approve(meetingId);
+        });
+        assertEquals(ErrorCode.UNAUTHOZIZED, ex.getErrorCode());
+    }
+
+    // =====================================================================
+    // BỔ SUNG: reject — validate trạng thái, luồng thành công
+    // =====================================================================
+
+    @Test
+    void reject_WhenStatusNotPendingApproval_ShouldThrowException() {
+        when(approvalService.rejectResource(ResourceType.MEETING, meetingId, "Reason"))
+                .thenThrow(new AppException(ErrorCode.MEETING_STATUS_TRANSITION_INVALID));
+
+        // Act & Assert
+        AppException ex = assertThrows(AppException.class, () -> {
+            meetingService.reject(meetingId, "Reason");
+        });
+        assertEquals(ErrorCode.MEETING_STATUS_TRANSITION_INVALID, ex.getErrorCode());
+    }
+
+    @Test
+    void reject_Successful_ShouldDelegateToApprovalService() {
+        // Arrange
+        meeting.setStatus(MeetingStatus.PENDING_APPROVAL);
+        when(meetingRepository.findById(meetingId)).thenReturn(Optional.of(meeting));
+        when(currentUserService.hasRole(RoleName.DEPARTMENT_ADMIN)).thenReturn(true);
+        when(currentUserService.hasRole(RoleName.SUPER_ADMIN)).thenReturn(false);
+        when(currentUserService.getCurrentActiveUser()).thenReturn(caller);
+        when(departmentService.getAllSubDepartmentIds(any())).thenReturn(List.of(departmentId));
+        when(approvalService.rejectResource(ResourceType.MEETING, meetingId, "Tài liệu chưa đầy đủ"))
+                .thenReturn(ApprovalRequestResponse.builder().build());
+
+        // Act
+        meetingService.reject(meetingId, "Tài liệu chưa đầy đủ");
+
+        // Assert
+        verify(approvalService, times(1)).rejectResource(ResourceType.MEETING, meetingId, "Tài liệu chưa đầy đủ");
+    }
+
+    // =====================================================================
+    // BỔ SUNG: publish — validate trạng thái
+    // =====================================================================
+
+    @Test
+    void publish_WhenStatusNotApproved_ShouldThrowException() {
+        // Arrange — Nhảy cóc: DRAFT → publish (phải APPROVED trước)
+        meeting.setStatus(MeetingStatus.DRAFT);
+        when(meetingRepository.findById(meetingId)).thenReturn(Optional.of(meeting));
+        when(currentUserService.getCurrentActiveUser()).thenReturn(caller);
+        when(currentUserService.hasRole(RoleName.SUPER_ADMIN)).thenReturn(false);
+
+        // Act & Assert
+        AppException ex = assertThrows(AppException.class, () -> {
+            meetingService.publish(meetingId);
+        });
+        assertEquals(ErrorCode.MEETING_STATUS_TRANSITION_INVALID, ex.getErrorCode());
+    }
+
+    @Test
+    void publish_Successful_ShouldTransitionToUpcoming() {
+        // Arrange
+        meeting.setStatus(MeetingStatus.APPROVED);
+        when(meetingRepository.findById(meetingId)).thenReturn(Optional.of(meeting));
+        when(currentUserService.getCurrentActiveUser()).thenReturn(caller);
+        when(currentUserService.hasRole(RoleName.SUPER_ADMIN)).thenReturn(false);
+
+        // Act
+        meetingService.publish(meetingId);
+
+        // Assert
+        assertEquals(MeetingStatus.UPCOMING, meeting.getStatus());
+        verify(meetingRepository, times(1)).save(meeting);
+    }
+
+    // =====================================================================
+    // BỔ SUNG: cancel — validate lý do rỗng, validate trạng thái, luồng thành công
+    // =====================================================================
+
+    @Test
+    void cancel_WhenReasonEmpty_ShouldThrowException() {
+        // Arrange
+        meeting.setStatus(MeetingStatus.UPCOMING);
+        when(meetingRepository.findById(meetingId)).thenReturn(Optional.of(meeting));
+        when(currentUserService.getCurrentActiveUser()).thenReturn(caller);
+        when(currentUserService.hasRole(RoleName.SUPER_ADMIN)).thenReturn(false);
+
+        // Act & Assert
+        AppException ex = assertThrows(AppException.class, () -> {
+            meetingService.cancel(meetingId, "");
+        });
+        assertEquals(ErrorCode.BAD_REQUEST, ex.getErrorCode());
+    }
+
+    @Test
+    void cancel_WhenReasonNull_ShouldThrowException() {
+        // Arrange
+        meeting.setStatus(MeetingStatus.UPCOMING);
+        when(meetingRepository.findById(meetingId)).thenReturn(Optional.of(meeting));
+        when(currentUserService.getCurrentActiveUser()).thenReturn(caller);
+        when(currentUserService.hasRole(RoleName.SUPER_ADMIN)).thenReturn(false);
+
+        // Act & Assert
+        AppException ex = assertThrows(AppException.class, () -> {
+            meetingService.cancel(meetingId, null);
+        });
+        assertEquals(ErrorCode.BAD_REQUEST, ex.getErrorCode());
+    }
+
+    @Test
+    void cancel_WhenStatusDraft_ShouldThrowException() {
+        // Arrange — DRAFT không cancel được (chỉ UPCOMING/PENDING_APPROVAL/APPROVED)
+        meeting.setStatus(MeetingStatus.DRAFT);
+        when(meetingRepository.findById(meetingId)).thenReturn(Optional.of(meeting));
+        when(currentUserService.getCurrentActiveUser()).thenReturn(caller);
+        when(currentUserService.hasRole(RoleName.SUPER_ADMIN)).thenReturn(false);
+
+        // Act & Assert
+        AppException ex = assertThrows(AppException.class, () -> {
+            meetingService.cancel(meetingId, "Reason");
+        });
+        assertEquals(ErrorCode.MEETING_STATUS_TRANSITION_INVALID, ex.getErrorCode());
+    }
+
+    @Test
+    void cancel_Successful_ShouldTransitionToCancelled() {
+        // Arrange
+        meeting.setStatus(MeetingStatus.UPCOMING);
+        when(meetingRepository.findById(meetingId)).thenReturn(Optional.of(meeting));
+        when(currentUserService.getCurrentActiveUser()).thenReturn(caller);
+        when(currentUserService.hasRole(RoleName.SUPER_ADMIN)).thenReturn(false);
+
+        // Act
+        meetingService.cancel(meetingId, "Cuộc họp không cần thiết");
+
+        // Assert
+        assertEquals(MeetingStatus.CANCELLED, meeting.getStatus());
+        assertEquals("Cuộc họp không cần thiết", meeting.getCancelReason());
+        verify(meetingRepository, times(1)).save(meeting);
+    }
+
+    // =====================================================================
+    // BỔ SUNG: close — validate trạng thái, luồng thành công
+    // =====================================================================
+
+    @Test
+    void close_WhenStatusNotInProgress_ShouldThrowException() {
+        // Arrange — Nhảy cóc: DRAFT → close
+        meeting.setStatus(MeetingStatus.DRAFT);
+        when(meetingRepository.findById(meetingId)).thenReturn(Optional.of(meeting));
+        when(currentUserService.getCurrentActiveUser()).thenReturn(caller);
+        when(currentUserService.hasRole(RoleName.SUPER_ADMIN)).thenReturn(false);
+
+        // Act & Assert
+        AppException ex = assertThrows(AppException.class, () -> {
+            meetingService.close(meetingId);
+        });
+        assertEquals(ErrorCode.MEETING_STATUS_TRANSITION_INVALID, ex.getErrorCode());
+    }
+
+    @Test
+    void close_Successful_ShouldTransitionToClosed() {
+        // Arrange
+        meeting.setStatus(MeetingStatus.IN_PROGRESS);
+        when(meetingRepository.findById(meetingId)).thenReturn(Optional.of(meeting));
+        when(currentUserService.getCurrentActiveUser()).thenReturn(caller);
+        when(currentUserService.hasRole(RoleName.SUPER_ADMIN)).thenReturn(false);
+
+        // Act
+        meetingService.close(meetingId);
+
+        // Assert
+        assertEquals(MeetingStatus.CLOSED, meeting.getStatus());
+        verify(meetingRepository, times(1)).save(meeting);
     }
 }
