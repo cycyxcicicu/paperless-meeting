@@ -36,6 +36,8 @@ interface UserFormModalProps {
   userId?: number;
   defaultUnitId?: string;
   isSelfProfile?: boolean;
+  /** Khi truyền vào, field Đơn vị sẽ bị khóa cứng (không thể chỉnh sửa) ở cả create lẫn edit */
+  lockedUnit?: { value: string; label: string };
 }
 
 export const UserFormModal: React.FC<UserFormModalProps> = ({
@@ -46,6 +48,7 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
   initialData,
   defaultUnitId,
   isSelfProfile = false,
+  lockedUnit,
 }) => {
   const isViewMode = mode === 'view';
   const isCreateMode = mode === 'create';
@@ -128,6 +131,24 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
   };
 
   // Options data (Dependencies for schema)
+  const baseDepartmentOptions = [
+    { value: '1', label: 'Văn phòng UBND thành phố Hải Phòng' },
+    { value: '2', label: 'Sở Tài chính' },
+    { value: '3', label: 'Sở Kế hoạch và Đầu tư' },
+    { value: '4', label: 'Sở Xây dựng' },
+    { value: '5', label: 'Sở Giao thông vận tải' },
+    { value: '6', label: 'Sở Nông nghiệp và Phát triển nông thôn' },
+    { value: '7', label: 'Sở Công Thương' },
+    { value: '8', label: 'Sở Giáo dục và Đào tạo' },
+    { value: '9', label: 'Sở Y tế' },
+    { value: '10', label: 'Sở Văn hóa và Thể thao' },
+  ];
+
+  // Nếu có lockedUnit, chèn nó vào đầu danh sách để select hiển thị đúng label
+  const departmentOptions = lockedUnit
+    ? [lockedUnit, ...baseDepartmentOptions.filter(o => o.value !== lockedUnit.value)]
+    : baseDepartmentOptions;
+
   const deps = {
     positionOptions: [
       { value: 'giam-doc', label: 'Giám đốc' },
@@ -137,23 +158,13 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
       { value: 'chuyen-vien', label: 'Chuyên viên' },
       { value: 'nhan-vien', label: 'Nhân viên' },
     ],
-    departmentOptions: [
-      { value: '1', label: 'Văn phòng UBND thành phố Hải Phòng' },
-      { value: '2', label: 'Sở Tài chính' },
-      { value: '3', label: 'Sở Kế hoạch và Đầu tư' },
-      { value: '4', label: 'Sở Xây dựng' },
-      { value: '5', label: 'Sở Giao thông vận tải' },
-      { value: '6', label: 'Sở Nông nghiệp và Phát triển nông thôn' },
-      { value: '7', label: 'Sở Công Thương' },
-      { value: '8', label: 'Sở Giáo dục và Đào tạo' },
-      { value: '9', label: 'Sở Y tế' },
-      { value: '10', label: 'Sở Văn hóa và Thể thao' },
-    ],
+    departmentOptions,
     statusOptions: [
       { value: 'active', label: 'Hoạt động' },
       { value: 'inactive', label: 'Ngừng hoạt động' },
     ],
-    isSelfProfile
+    isSelfProfile,
+    lockDepartment: !!lockedUnit,
   };
 
   const groups = createUserFormSchema(deps);

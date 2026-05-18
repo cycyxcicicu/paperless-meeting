@@ -5,8 +5,10 @@ export const createUserFormSchema = (deps: {
   positionOptions: { value: string; label: string }[];
   statusOptions: { value: string; label: string }[];
   isSelfProfile?: boolean;
+  /** Khóa field đơn vị ở cả create lẫn edit, chỉ hiển thị */
+  lockDepartment?: boolean;
 }): FormFieldGroup[] => {
-  const { isSelfProfile = false } = deps;
+  const { isSelfProfile = false, lockDepartment = false } = deps;
   
   return [
     {
@@ -66,7 +68,7 @@ export const createUserFormSchema = (deps: {
           options: deps.departmentOptions,
           placeholder: 'Chọn đơn vị',
           required: true,
-          disabled: ({ mode }) => mode === 'view' || isSelfProfile, // Khóa khi là hồ sơ cá nhân
+          disabled: ({ mode }) => mode === 'view' || isSelfProfile || lockDepartment, // Khóa khi là hồ sơ cá nhân hoặc khi được mở từ cây đơn vị
           col: 'col-span-1',
         },
         {

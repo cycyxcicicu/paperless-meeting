@@ -86,8 +86,6 @@ const TaoPhienHopPage = () => {
     // Step 2 data
     const [thanhPhanData, setThanhPhanData] = useState<ThanhPhanThamDuData>({
         donVi: [],
-        caNhan: [],
-        nhomThanhVien: [],
         khachMoi: [],
         chuTriId: null,
     });
@@ -115,9 +113,7 @@ const TaoPhienHopPage = () => {
                 bieuQuyetIssues: [],
                 thanhPhanThamDu: {
                     donVi: [],
-                    caNhan: [],
                     khachMoi: [],
-                    nhomThanhVien: [],
                 },
             },
         ],
@@ -166,9 +162,6 @@ const TaoPhienHopPage = () => {
                     donVi: "Công ty ABC",
                     email: "levanc@abc.com",
                 },
-            ],
-            nhomThanhVien: [
-                { id: "group-1", name: "Ban Thường vụ Thành ủy", soLuong: 15 },
             ],
             contents: [
                 {
@@ -247,8 +240,6 @@ const TaoPhienHopPage = () => {
             // Map to Step 2 data
             const step2Data: ThanhPhanThamDuData = {
                 donVi: meeting.donVi.map(d => ({ id: d.id, name: d.name, position: '', unit: d.name, unitId: d.id, email: '' })),
-                caNhan: meeting.caNhan.map(c => ({ id: c.id, name: c.name, position: c.chucVu, unit: c.donVi, unitId: '', email: '' })),
-                nhomThanhVien: meeting.nhomThanhVien,
                 khachMoi: meeting.khachMoi,
                 chuTriId: meeting.chuTriId,
             };
@@ -282,9 +273,7 @@ const TaoPhienHopPage = () => {
                             bieuQuyetIssues: [],
                             thanhPhanThamDu: {
                                 donVi: [],
-                                caNhan: [],
                                 khachMoi: [],
-                                nhomThanhVien: [],
                             },
                         },
                     ],
@@ -306,9 +295,7 @@ const TaoPhienHopPage = () => {
                         })),
                         thanhPhanThamDu: {
                             donVi: c.thanhPhanThamDu.donVi.map(id => ({ id, name: 'Đơn vị', position: '', unit: '', unitId: id, email: '' })),
-                            caNhan: c.thanhPhanThamDu.caNhan.map(id => ({ id, name: 'Cá nhân', position: '', unit: '', unitId: '', email: '' })),
                             khachMoi: c.thanhPhanThamDu.khachMoi,
-                            nhomThanhVien: c.thanhPhanThamDu.nhomThanhVien.map(id => ({ id, name: 'Nhóm', soLuong: 0 }))
                         }
                     }))
                 };

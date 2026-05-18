@@ -204,15 +204,17 @@ export default function PhienHopChiTietPage() {
                                     Xác nhận tham gia
                                 </Button>
                             )}
-                            <Button
-                                variant="outline"
-                                className="border-[#C8102E] text-[#C8102E] hover:bg-red-50"
-                                onClick={() =>
-                                    navigate(`/phien-hop/${id}/cap-nhat`)
-                                }
-                            >
-                                Cập nhật
-                            </Button>
+                            {status !== "Đã kết thúc" && (
+                                <Button
+                                    variant="outline"
+                                    className="border-[#C8102E] text-[#C8102E] hover:bg-red-50"
+                                    onClick={() =>
+                                        navigate(`/phien-hop/${id}/cap-nhat`)
+                                    }
+                                >
+                                    Cập nhật
+                                </Button>
+                            )}
                             {status !== "Đã kết thúc" && status !== "Nháp" && (
                                 <Button
                                     variant="primary"

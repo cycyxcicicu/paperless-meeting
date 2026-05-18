@@ -30,9 +30,7 @@ interface NoiDungItem {
   bieuQuyetIssues: BieuQuyetIssue[];
   thanhPhanThamDu: {
     donVi: Member[];
-    caNhan: Member[];
     khachMoi: any[];
-    nhomThanhVien: any[];
   };
 }
 
@@ -42,8 +40,6 @@ interface NoiDungHopData {
 
 interface ThanhPhanThamDuData {
   donVi: Member[];
-  caNhan: Member[];
-  nhomThanhVien: any[];
   khachMoi: any[];
   chuTriId: string | null;
 }
@@ -72,18 +68,14 @@ const NoiDungHopStep: React.FC<NoiDungHopStepProps> = ({
     if (inheritedParticipants && data.contents.length > 0) {
       const hasInheritedData =
         inheritedParticipants.donVi.length > 0 ||
-        inheritedParticipants.caNhan.length > 0 ||
-        inheritedParticipants.khachMoi.length > 0 ||
-        inheritedParticipants.nhomThanhVien.length > 0;
+        inheritedParticipants.khachMoi.length > 0;
 
       if (hasInheritedData) {
         const updatedContents = data.contents.map((content) => ({
           ...content,
           thanhPhanThamDu: {
             donVi: inheritedParticipants.donVi,
-            caNhan: inheritedParticipants.caNhan,
             khachMoi: inheritedParticipants.khachMoi,
-            nhomThanhVien: inheritedParticipants.nhomThanhVien,
           },
         }));
 
@@ -97,16 +89,6 @@ const NoiDungHopStep: React.FC<NoiDungHopStepProps> = ({
     if (!inheritedParticipants) return [];
 
     const options: { value: string; label: string }[] = [];
-
-    // Add individuals from "Cá nhân"
-    inheritedParticipants.caNhan.forEach((person) => {
-      options.push({
-        value: person.id,
-        label: person.position
-          ? `${person.name} - ${person.position}`
-          : person.name,
-      });
-    });
 
     // Add individuals from "Đơn vị" (members selected from units)
     inheritedParticipants.donVi.forEach((person) => {
@@ -133,9 +115,7 @@ const NoiDungHopStep: React.FC<NoiDungHopStepProps> = ({
       bieuQuyetIssues: [],
       thanhPhanThamDu: {
         donVi: [],
-        caNhan: [],
         khachMoi: [],
-        nhomThanhVien: [],
       },
     };
 
@@ -203,7 +183,7 @@ const NoiDungHopStep: React.FC<NoiDungHopStepProps> = ({
 
 
 
-  const handleRemoveParticipant = (type: 'caNhan' | 'donVi' | 'khachMoi' | 'nhomThanhVien', id: string) => {
+  const handleRemoveParticipant = (type: 'donVi' | 'khachMoi', id: string) => {
     const content = data.contents.find((c) => c.id === activeContentId);
     if (!content) return;
 
@@ -502,57 +482,6 @@ const NoiDungHopStep: React.FC<NoiDungHopStepProps> = ({
                   </div>
                 )}
 
-                {/* Cá nhân */}
-                {activeContent.thanhPhanThamDu.caNhan.length > 0 && (
-                  <div>
-                    <label className="text-xs btn-primary text-gray-600 uppercase mb-2 block">
-                      Cá nhân ({activeContent.thanhPhanThamDu.caNhan.length})
-                    </label>
-                    <div className="flex flex-wrap gap-2">
-                      {activeContent.thanhPhanThamDu.caNhan.map((member) => (
-                        <div
-                          key={member.id}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-400 rounded-lg text-sm"
-                        >
-                          <span className="body text-gray-900">{member.name}</span>
-                          <span className="text-gray-500">•</span>
-                          <span className="text-gray-600 text-xs">{member.position}</span>
-                          <button
-                            onClick={() => handleRemoveParticipant('caNhan', member.id)}
-                            className="ml-1 p-0.5 hover:bg-red-50 rounded transition-colors"
-                          >
-                            <X className="h-3.5 w-3.5 text-gray-400 hover:text-red-600" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Nhóm thành viên */}
-                {activeContent.thanhPhanThamDu.nhomThanhVien.length > 0 && (
-                  <div>
-                    <label className="text-xs btn-primary text-gray-600 uppercase mb-2 block">
-                      Nhóm thành viên ({activeContent.thanhPhanThamDu.nhomThanhVien.length})
-                    </label>
-                    <div className="flex flex-wrap gap-2">
-                      {activeContent.thanhPhanThamDu.nhomThanhVien.map((group) => (
-                        <div
-                          key={group.id}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-400 rounded-lg text-sm"
-                        >
-                          <span className="body text-gray-900">{group.name}</span>
-                          <button
-                            onClick={() => handleRemoveParticipant('nhomThanhVien', group.id)}
-                            className="ml-1 p-0.5 hover:bg-red-50 rounded transition-colors"
-                          >
-                            <X className="h-3.5 w-3.5 text-gray-400 hover:text-red-600" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
 
                 {/* Khách mời */}
                 {activeContent.thanhPhanThamDu.khachMoi.length > 0 && (
@@ -580,10 +509,8 @@ const NoiDungHopStep: React.FC<NoiDungHopStepProps> = ({
                 )}
 
                 {/* Empty state */}
-                {activeContent.thanhPhanThamDu.caNhan.length === 0 &&
-                  activeContent.thanhPhanThamDu.donVi.length === 0 &&
-                  activeContent.thanhPhanThamDu.khachMoi.length === 0 &&
-                  activeContent.thanhPhanThamDu.nhomThanhVien.length === 0 && (
+                {activeContent.thanhPhanThamDu.donVi.length === 0 &&
+                  activeContent.thanhPhanThamDu.khachMoi.length === 0 && (
                     <div className="text-center py-6">
                       <p className="text-sm text-gray-500">
                         Chưa có thành phần tham dự. Vui lòng chọn ở bước 2.
