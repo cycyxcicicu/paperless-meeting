@@ -1,5 +1,6 @@
 package vn.acme.paperless_meeting.service.User;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -48,13 +49,14 @@ public class UserService {
     DepartmentRepository departmentRepository;
     PositionRepository positionRepository;
     CurrentUserService currentUserService;
+
     private record CreateUserValidatedData(
             Department department,
             Position position,
-            Role role
-        ) {}
+            Role role) {
+    }
 
-     @Transactional
+    @Transactional
     public UserResponse create(UserCreateRequest request) {
         CreateUserValidatedData validatedData = validateCreateFields(request.getUsername(), request.getEmail(),
                 request.getPhone(), request.getDepartmentId(), request.getPositionId(), request.getRoleId());
@@ -67,35 +69,25 @@ public class UserService {
 
         return userMapper.toResponse(userRepository.save(user));
     }
-  
 
     private CreateUserValidatedData validateCreateFields(String username, String email, String phone,
             UUID departmentId, UUID positionId, UUID roleId) {
         Map<String, String> errors = new HashMap<>();
-        
-        User currentUser = currentUserService.getCurrentActiveUser();
-        String currentUserRole = currentUserService.getCurrentUserRole();
-        
-        if (currentUserRole.equals(RoleName.USER.getAuthority())) {
+
+        User caller = currentUserService.getCurrentActiveUser();
+
+        if (currentUserService.hasRole(RoleName.USER)) {
             throw new AppException(ErrorCode.UNAUTHOZIZED);
-        } else if (currentUserRole.equals(RoleName.DEPARTMENT_ADMIN.getAuthority())) {
-            if (currentUser.getDepartment() == null) {
-                throw new AppException(ErrorCode.UNAUTHOZIZED);
+        } else if (currentUserService.hasRole(RoleName.DEPARTMENT_ADMIN)) {
+            if (departmentId == null) {
+                if (caller.getDepartment() == null)
+                    throw new AppException(ErrorCode.UNAUTHOZIZED);
+                departmentId = caller.getDepartment().getId();
+            } else {
+                requireAdminAccessToDepartment(caller, departmentId);
             }
-            departmentId = currentUser.getDepartment().getId();
         }
-
-        if (userRepository.existsByUsername(username)) {
-            errors.put("username", ErrorCode.USER_EXISTED.getMessage());
-        }
-
-        if (userRepository.existsByEmail(email)) {
-            errors.put("email", ErrorCode.EMAIL_EXISTED.getMessage());
-        }
-
-        if (userRepository.existsByPhone(phone)) {
-            errors.put("phone", ErrorCode.PHONE_EXISTED.getMessage());
-        }
+        validateDuplicatedFields(username, email, phone, null);
 
         Department department = null;
         if (departmentId == null) {
@@ -125,8 +117,8 @@ public class UserService {
             if (role == null) {
                 errors.put("roleId", ErrorCode.ROLE_NOT_EXIST.getMessage());
             } else {
-                if (currentUserRole.equals(RoleName.DEPARTMENT_ADMIN.getAuthority()) &&
-                    !role.getRoleName().equals(RoleName.USER.name())) {
+                if (currentUserService.hasRole(RoleName.DEPARTMENT_ADMIN) &&
+                        !role.getRoleName().equals(RoleName.USER.name())) {
                     errors.put("roleId", "Department Admin chỉ có thể tạo người dùng với vai trò USER");
                 }
             }
@@ -145,22 +137,37 @@ public class UserService {
 
         return new CreateUserValidatedData(department, position, role);
     }
-    
+
     @Transactional(readOnly = true)
     public PageResponse<UserResponse> findAll(String keyword, String statusStr, String role, UUID departmentId,
             Pageable pageable) {
 
-        User user = currentUserService.getCurrentActiveUser();
+        User caller = currentUserService.getCurrentActiveUser();
 
-        if (currentUserService.hasRole(RoleName.SUPER_ADMIN)) {
-            // super admin can query all users (no department restriction)
-        } else if (currentUserService.hasRole(RoleName.DEPARTMENT_ADMIN)) {
-            // department admin can only query users within their primary department
-            departmentId = getPrimaryDepartmentOrThrow(user).getId();
-        } else {
+        if (currentUserService.hasRole(RoleName.USER)) {
             throw new AppException(ErrorCode.UNAUTHOZIZED);
         }
-        // parse status
+
+        List<UUID> searchDeptIds = null;
+
+        if (currentUserService.hasRole(RoleName.DEPARTMENT_ADMIN)) {
+            UUID adminDeptId = caller.getDepartment() != null ? caller.getDepartment().getId() : null;
+            if (adminDeptId == null)
+                throw new AppException(ErrorCode.DEPARTMENT_NOT_EXIST);
+
+            if (departmentId == null) {
+                searchDeptIds = getAllSubDepartmentIds(adminDeptId);
+            } else {
+                requireAdminAccessToDepartment(caller, departmentId);
+                searchDeptIds = List.of(departmentId);
+            }
+        } else {
+            // SUPER_ADMIN
+            if (departmentId != null) {
+                searchDeptIds = List.of(departmentId);
+            }
+        }
+
         UserStatus status = null;
         if (statusStr != null && !statusStr.isBlank()) {
             try {
@@ -170,11 +177,10 @@ public class UserService {
             }
         }
 
-        Specification<User> spec = UserSpecification.build(keyword, status, role, departmentId);
+        Specification<User> spec = UserSpecification.build(keyword, status, role, searchDeptIds);
 
         Page<User> page = userRepository.findAll(spec, pageable);
 
-        // two-step fetch: load collections for users returned in the page to avoid N+1
         List<UUID> ids = page.getContent().stream().map(User::getId).toList();
         List<User> usersWithDeps = ids.isEmpty() ? List.of() : userRepository.findByIdIn(ids);
         var userById = usersWithDeps.stream().collect(Collectors.toMap(User::getId, u -> u));
@@ -197,49 +203,75 @@ public class UserService {
 
     @Transactional(readOnly = true)
     public UserResponse findById(UUID id) {
-        return userMapper.toResponse(getUser(id));
+        User user = getUser(id);
+        User caller = currentUserService.getCurrentActiveUser();
+
+        if (!caller.getId().equals(id)) {
+            if (currentUserService.hasRole(RoleName.USER)) {
+                // USER thường chỉ được xem thông tin người cùng phòng ban
+                if (caller.getDepartment() == null || user.getDepartment() == null ||
+                        !caller.getDepartment().getId().equals(user.getDepartment().getId())) {
+                    throw new AppException(ErrorCode.UNAUTHOZIZED);
+                }
+            } else {
+                // Admin thì được xem user theo phân cấp quản lý
+                requireAdminAccessToDepartment(caller,
+                        user.getDepartment() != null ? user.getDepartment().getId() : null);
+            }
+        }
+
+        return userMapper.toResponse(user);
     }
 
     @Transactional
     public UserResponse update(UUID id, UserUpdateRequest request) {
         User user = getUser(id);
-
-        // Authorization: SUPER_ADMIN can update any user;
-        // DEPARTMENT_ADMIN can update users in their primary department;
-        // others only update their own account
         User caller = currentUserService.getCurrentActiveUser();
-        if (currentUserService.hasRole(RoleName.SUPER_ADMIN)) {
-            // allowed
-        } else if (currentUserService.hasRole(RoleName.DEPARTMENT_ADMIN)) {
-            UUID adminDeptId = getPrimaryDepartmentOrThrow(caller).getId();
 
-            if (!isUserInDepartment(user, adminDeptId)) {
+        boolean isRegularUser = currentUserService.hasRole(RoleName.USER);
+        boolean isSelfUpdate = caller.getId().equals(id);
+
+        if (isRegularUser && !isSelfUpdate) {
+            throw new AppException(ErrorCode.UNAUTHOZIZED);
+        }
+
+        if (!isRegularUser) {
+            // Chặn Admin cấp dưới thao tác lên SUPER_ADMIN
+            if (currentUserService.hasRole(RoleName.DEPARTMENT_ADMIN) &&
+                    user.getRole() != null && user.getRole().getRoleName().equals(RoleName.SUPER_ADMIN.name())) {
                 throw new AppException(ErrorCode.UNAUTHOZIZED);
             }
-        } else {
-            // regular user: only update own account
-            if (!caller.getId().equals(id)) {
+
+            // Tối ưu N+1: Lấy danh sách cây phòng ban 1 lần và check
+            if (currentUserService.hasRole(RoleName.DEPARTMENT_ADMIN)) {
+                if (caller.getDepartment() == null) {
+                    throw new AppException(ErrorCode.UNAUTHOZIZED);
+                }
+                List<UUID> allowedDeptIds = getAllSubDepartmentIds(caller.getDepartment().getId());
+                UUID currentDeptId = user.getDepartment() != null ? user.getDepartment().getId() : null;
+
+                // Phải có quyền trên cả phòng ban hiện tại của User VÀ phòng ban mới muốn
+                // chuyển tới
+                if (!allowedDeptIds.contains(currentDeptId) || !allowedDeptIds.contains(request.getDepartmentId())) {
+                    throw new AppException(ErrorCode.UNAUTHOZIZED);
+                }
+            }
+        }
+
+        if (isRegularUser) {
+            if (user.getDepartment() == null || !request.getDepartmentId().equals(user.getDepartment().getId()) ||
+                    user.getPosition() == null || !request.getPositionId().equals(user.getPosition().getId()) ||
+                    user.getRole() == null || !request.getRoleId().equals(user.getRole().getId()) ||
+                    !request.getStatus().equals(user.getStatus())) {
                 throw new AppException(ErrorCode.UNAUTHOZIZED);
             }
         }
+
+        // Tối ưu: Đã qua các bước gác cổng an ninh, giờ mới gọi Database
+        Department department = departmentRepository.findById(request.getDepartmentId())
+                .orElseThrow(() -> new AppException(ErrorCode.DEPARTMENT_NOT_EXIST));
 
         validateDuplicatedFields(request.getUsername(), request.getEmail(), request.getPhone(), id);
-
-        Department department;
-        if (request.getDepartmentId() != null) {
-            department = departmentRepository.findById(request.getDepartmentId())
-                    .orElseThrow(() -> new AppException(ErrorCode.DEPARTMENT_NOT_EXIST));
-        } else {
-            department = getPrimaryDepartmentOrThrow(user);
-        }
-
-        if (currentUserService.hasRole(RoleName.DEPARTMENT_ADMIN)) {
-            UUID adminDeptId = getPrimaryDepartmentOrThrow(caller).getId();
-
-            if (!adminDeptId.equals(department.getId())) {
-                throw new AppException(ErrorCode.UNAUTHOZIZED);
-            }
-        }
 
         Position position = validatePosition(request.getPositionId(), department.getId());
 
@@ -247,25 +279,28 @@ public class UserService {
         user.setDepartment(department);
         user.setPosition(position);
 
-        // Cập nhật role nếu có roleId (User → Role là N-1)
-        if (request.getRoleId() != null) {
-            Role role = roleRepository.findById(request.getRoleId())
-                    .orElseThrow(() -> new AppException(ErrorCode.ROLE_NOT_EXIST));
+        Role role = roleRepository.findById(request.getRoleId())
+                .orElseThrow(() -> new AppException(ErrorCode.ROLE_NOT_EXIST));
 
-            String callerRoleStr = currentUserService.getCurrentUserRole();
-            if (callerRoleStr.equals(RoleName.USER.getAuthority())) {
-                throw new AppException(ErrorCode.UNAUTHOZIZED);
-            } else if (callerRoleStr.equals(RoleName.DEPARTMENT_ADMIN.getAuthority())) {
+        if (currentUserService.hasRole(RoleName.DEPARTMENT_ADMIN)) {
+            // Chỉ kiểm tra gán role nếu admin CÓ THAY ĐỔI role của user
+            if (!role.getId().equals(user.getRole() != null ? user.getRole().getId() : null)) {
                 if (!role.getRoleName().equals(RoleName.USER.name())) {
                     throw new AppException(ErrorCode.UNAUTHOZIZED); // Không được gán role cao hơn
                 }
             }
-            
-            user.setRole(role);
         }
 
+        user.setRole(role);
+
         if (request.getPassword() != null && !request.getPassword().isBlank()) {
+            if (isSelfUpdate) {
+                // Bảo mật: Ngăn chặn TẤT CẢ tự đổi mật khẩu qua luồng chung để lách mật khẩu
+                // cũ.
+                throw new AppException(ErrorCode.UNAUTHOZIZED);
+            }
             user.setPassword(passwordEncoder.encode(request.getPassword()));
+            user.setIsFirstLogin(true); // Đánh dấu để ép user đổi lại mật khẩu
         }
 
         return userMapper.toResponse(userRepository.save(user));
@@ -274,27 +309,31 @@ public class UserService {
     @Transactional(readOnly = true)
     public UserResponse getCurrentUserResponse() {
         User user = currentUserService.getCurrentActiveUser();
-        return userMapper.toResponse(user);
+        UserResponse response = userMapper.toResponse(user);
+
+        var auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.isAuthenticated()) {
+            java.util.Set<String> perms = auth.getAuthorities().stream()
+                    .map(org.springframework.security.core.GrantedAuthority::getAuthority)
+                    .filter(a -> !a.startsWith("ROLE_"))
+                    .collect(java.util.stream.Collectors.toSet());
+            response.setPermissions(perms);
+        }
+
+        return response;
     }
 
     public void delete(UUID id) {
         User user = getUser(id);
         User caller = currentUserService.getCurrentActiveUser();
 
-        // Authorization: only SUPER_ADMIN can delete any user;
-        // DEPARTMENT_ADMIN can delete users in their primary department; others
-        // forbidden
-        if (currentUserService.hasRole(RoleName.SUPER_ADMIN)) {
-            // allowed
-        } else if (currentUserService.hasRole(RoleName.DEPARTMENT_ADMIN)) {
-            UUID adminDeptId = getPrimaryDepartmentOrThrow(caller).getId();
-
-            if (!isUserInDepartment(user, adminDeptId)) {
-                throw new AppException(ErrorCode.UNAUTHOZIZED);
-            }
-        } else {
+        // Chặn Admin cấp dưới xóa SUPER_ADMIN
+        if (currentUserService.hasRole(RoleName.DEPARTMENT_ADMIN) &&
+                user.getRole() != null && user.getRole().getRoleName().equals(RoleName.SUPER_ADMIN.name())) {
             throw new AppException(ErrorCode.UNAUTHOZIZED);
         }
+
+        requireAdminAccessToDepartment(caller, user.getDepartment() != null ? user.getDepartment().getId() : null);
 
         user.softDelete(caller);
         userRepository.save(user);
@@ -326,21 +365,21 @@ public class UserService {
                 ? userRepository.existsByUsername(username)
                 : userRepository.existsByUsernameAndIdNot(username, id);
         if (existedUsername) {
-            errors.put("username",ErrorCode.USER_EXISTED.getMessage());
+            errors.put("username", ErrorCode.USER_EXISTED.getMessage());
         }
 
         boolean existedEmail = id == null
                 ? userRepository.existsByEmail(email)
                 : userRepository.existsByEmailAndIdNot(email, id);
         if (existedEmail) {
-            errors.put("email",ErrorCode.EMAIL_EXISTED.getMessage());
+            errors.put("email", ErrorCode.EMAIL_EXISTED.getMessage());
         }
 
         boolean existedPhone = id == null
                 ? userRepository.existsByPhone(phone)
                 : userRepository.existsByPhoneAndIdNot(phone, id);
         if (existedPhone) {
-            errors.put("phone",ErrorCode.PHONE_EXISTED.getMessage());
+            errors.put("phone", ErrorCode.PHONE_EXISTED.getMessage());
         }
 
         if (!errors.isEmpty()) {
@@ -348,23 +387,37 @@ public class UserService {
         }
     }
 
-    private Department getPrimaryDepartment(User user) {
-        return user.getDepartment();
+    private void requireAdminAccessToDepartment(User admin, UUID targetDeptId) {
+        if (currentUserService.hasRole(RoleName.SUPER_ADMIN))
+            return;
+        if (currentUserService.hasRole(RoleName.DEPARTMENT_ADMIN)) {
+            if (admin.getDepartment() == null || targetDeptId == null) {
+                throw new AppException(ErrorCode.UNAUTHOZIZED);
+            }
+            if (!getAllSubDepartmentIds(admin.getDepartment().getId()).contains(targetDeptId)) {
+                throw new AppException(ErrorCode.UNAUTHOZIZED);
+            }
+            return;
+        }
+        throw new AppException(ErrorCode.UNAUTHOZIZED);
     }
 
-    private Department getPrimaryDepartmentOrThrow(User user) {
-        Department department = getPrimaryDepartment(user);
-        if (department == null) {
-            throw new AppException(ErrorCode.DEPARTMENT_ID_REQUIRED);
-        }
-        return department;
-    }
+    private List<UUID> getAllSubDepartmentIds(UUID rootDeptId) {
+        if (rootDeptId == null)
+            return List.of();
+        List<UUID> allIds = new ArrayList<>();
+        allIds.add(rootDeptId);
 
-    private boolean isUserInDepartment(User user, UUID departmentId) {
-        if (departmentId == null) {
-            return false;
+        List<UUID> current = List.of(rootDeptId);
+        while (!current.isEmpty()) {
+            List<UUID> childIds = departmentRepository.findIdsByParentDepartmentIdIn(current);
+            if (childIds == null || childIds.isEmpty()) {
+                break;
+            }
+            allIds.addAll(childIds);
+            current = childIds;
         }
-        return user.getDepartment() != null && departmentId.equals(user.getDepartment().getId());
+        return allIds;
     }
 
 }

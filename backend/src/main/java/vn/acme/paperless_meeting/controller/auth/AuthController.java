@@ -4,6 +4,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -12,8 +13,8 @@ import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import vn.acme.paperless_meeting.dto.base.ApiResponse;
+import vn.acme.paperless_meeting.dto.request.auth.ChangePasswordRequest;
 import vn.acme.paperless_meeting.dto.request.auth.LoginRequest;
-import vn.acme.paperless_meeting.dto.request.user.UserCreateRequest;
 import vn.acme.paperless_meeting.dto.response.user.UserResponse;
 import vn.acme.paperless_meeting.service.User.UserService;
 import vn.acme.paperless_meeting.service.auth.AuthService;
@@ -73,13 +74,13 @@ public class AuthController {
     }
 
 
-    // @PostMapping("/change-password")
-    // public ResponseEntity<?> changePassword(Authentication authentication,
-    // @Valid @RequestBody ChangePasswordRequest request) {
-    // authService.changePassword(authentication, request);
-    // return ResponseEntity.ok(java.util.Map.of(
-    // "success", true,
-    // "message", "Đổi mật khẩu thành công"
-    // ));
-    // }
+    @PostMapping("/change-password")
+    public ApiResponse<Void> changePassword(Authentication authentication,
+            @Valid @RequestBody ChangePasswordRequest request) {
+        authService.changePassword(authentication, request);
+        return ApiResponse.<Void>builder()
+                .success(true)
+                .message("Đổi mật khẩu thành công")
+                .build();
+    }
 }

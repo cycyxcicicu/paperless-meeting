@@ -66,4 +66,15 @@ public class CurrentUserService {
             return false;
         return hasRole(role.getAuthority());
     }
+
+    /**
+     * Kiểm tra user hiện tại có permission (authority) cụ thể hay không.
+     */
+    public boolean hasAuthority(String authority) {
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated())
+            return false;
+        return auth.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals(authority));
+    }
 }

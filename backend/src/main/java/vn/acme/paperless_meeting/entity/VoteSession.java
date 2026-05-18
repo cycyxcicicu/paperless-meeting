@@ -69,6 +69,8 @@ public class VoteSession extends SoftDeletable {
 
     private Boolean allowChangeVote;
 
+    private Integer durationMinutes;
+
     private BigDecimal quorumRequiredPct;
 
     @Enumerated(EnumType.STRING)

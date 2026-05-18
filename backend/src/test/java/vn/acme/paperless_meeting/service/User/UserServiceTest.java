@@ -128,6 +128,9 @@ class UserServiceTest {
         lenient().when(userMapper.toResponse(user)).thenReturn(response);
         lenient().when(currentUserService.getCurrentActiveUser()).thenReturn(user);
         lenient().when(currentUserService.hasRole(RoleName.SUPER_ADMIN)).thenReturn(true);
+        lenient().when(roleRepository.findById(roleId)).thenReturn(Optional.of(role));
+        lenient().when(roleRepository.findById(null)).thenReturn(Optional.of(role));
+        lenient().when(departmentRepository.findById(null)).thenReturn(Optional.of(department));
     }
 
     @Test

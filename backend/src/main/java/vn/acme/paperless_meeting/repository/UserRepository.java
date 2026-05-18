@@ -22,6 +22,8 @@ public interface UserRepository extends JpaRepository<User, UUID>, JpaSpecificat
 
         boolean existsByUsernameAndIdNot(String username, UUID id);
 
+        boolean existsByRole_Id(UUID roleId);
+
         boolean existsByEmail(String email);
 
         // câu sql của cái này là SELECT COUNT(*) > 0 FROM user WHERE email = ? AND id

@@ -42,6 +42,6 @@ public class UserUpdateRequest {
 
     private String avatar;
 
-    // Optional: nếu null thì giữ nguyên role cũ
+    @NotNull(message = "ROLE_ID_REQUIRED")
     private UUID roleId;
 }

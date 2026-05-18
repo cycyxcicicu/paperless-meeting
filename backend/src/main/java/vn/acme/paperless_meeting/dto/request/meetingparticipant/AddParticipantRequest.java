@@ -5,8 +5,6 @@ import java.util.UUID;
 import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
 import lombok.Setter;
-import vn.acme.paperless_meeting.entity.enums.AttendanceStatus;
-import vn.acme.paperless_meeting.entity.enums.InviteStatus;
 import vn.acme.paperless_meeting.entity.enums.ParticipantRole;
 
 @Getter
@@ -17,10 +15,4 @@ public class AddParticipantRequest {
 
     @NotNull(message = "PARTICIPANT_ROLE_REQUIRED")
     private ParticipantRole participantRole;
-
-    private InviteStatus inviteStatus;
-
-    private AttendanceStatus attendanceStatus;
-
-    private String note;
 }

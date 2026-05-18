@@ -66,6 +66,31 @@ public class MeetingParticipant extends SoftDeletable {
 
         private String note;
 
+        @Column(name = "decline_reason")
+        private String declineReason;
+
+        @ManyToOne(fetch = FetchType.LAZY)
+        @JoinColumn(name = "substitute_user_id")
+        private User substituteUser;
+
+        @Column(name = "substitute_name")
+        private String substituteName;
+
+        @Column(name = "substitute_position")
+        private String substitutePosition;
+
+        @Column(name = "substitute_company")
+        private String substituteCompany;
+
+        @Column(name = "substitute_department")
+        private String substituteDepartment;
+
+        @Column(name = "substitute_email")
+        private String substituteEmail;
+
+        @Column(name = "substitute_phone")
+        private String substitutePhone;
+
         @CreationTimestamp
         @Column(name = "created_at", updatable = false)
         private LocalDateTime createdAt;

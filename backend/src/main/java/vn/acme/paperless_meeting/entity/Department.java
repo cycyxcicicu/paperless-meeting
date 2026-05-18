@@ -72,6 +72,9 @@ public class Department extends SoftDeletable {
         @Column(name = "headquarters_address")
         private String headquartersAddress;
 
+        @Column(name = "description", columnDefinition = "TEXT")
+        private String description;
+
         @ManyToOne(fetch = FetchType.LAZY)
         @JoinColumn(name = "parent_dept_id")
         private Department parentDepartment;

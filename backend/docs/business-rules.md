@@ -10,7 +10,8 @@ This document restates the raw business rules provided for the Paperless Meeting
 
 - Entity: `Meeting` (primary key `meeting_id`).
 - Fields of interest (explicit values): `title`, `description`, `start_time`, `end_time`, `status`.
-    - Allowed `status` values: `draft`, `scheduled`, `ongoing`, `closed`, `cancelled`.
+    - Allowed `status` values (theo code hiện tại): `DRAFT`, `PENDING_APPROVAL`, `UPCOMING`, `IN_PROGRESS`, `CLOSED`, `CANCELLED`, `REJECTED`.
+    - **Lưu ý (Đã cập nhật):** Việc chuyển trạng thái từ `UPCOMING` sang `IN_PROGRESS` đang được hệ thống tự động xử lý bởi một Cron Job (`MeetingStatusJob`) chạy mỗi phút (khi `start_time` <= thời gian hiện tại).
     - Optional/capability fields: `location_id`, `dept_id`, `checkin_open_at`, `checkin_close_at`, `late_after_minutes`, `cancel_reason` (nullable).
 - Relationships:
     - `Meeting` 1–N `AgendaItem`.

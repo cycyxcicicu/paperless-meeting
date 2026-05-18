@@ -31,7 +31,7 @@ import vn.acme.paperless_meeting.entity.base.SoftDeletable;
 @SQLDelete(sql = "UPDATE roles SET is_deleted = true, deleted_at = CURRENT_TIMESTAMP WHERE id = ? AND is_deleted = false")
 @SQLRestriction("is_deleted = false")
 @Table(name = "roles", uniqueConstraints = {
-                @UniqueConstraint(columnNames = { "role_name", "is_deleted" }, name = "uk_role_name")
+                @UniqueConstraint(columnNames = { "role_code", "is_deleted" }, name = "uk_role_code")
 })
 
 public class Role extends SoftDeletable {
@@ -39,6 +39,8 @@ public class Role extends SoftDeletable {
         @Id
         @GeneratedValue(strategy = GenerationType.UUID)
         private UUID id;
+
+        private String roleCode;
 
         private String roleName;
 

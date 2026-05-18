@@ -20,6 +20,7 @@ public class DepartmentResponse {
     private String phoneNumber;
     private String email;
     private String headquartersAddress;
+    private String description;
     private UUID parentDepartmentId;
 
     @Builder.Default

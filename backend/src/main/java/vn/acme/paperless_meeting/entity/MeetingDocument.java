@@ -53,4 +53,8 @@ public class MeetingDocument {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "doc_id", nullable = false)
     private Document document;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "agenda_item_id")
+    private AgendaItem agendaItem;
 }

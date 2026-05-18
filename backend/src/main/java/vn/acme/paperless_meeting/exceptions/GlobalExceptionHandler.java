@@ -62,7 +62,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(AppValidationException.class)
     public ResponseEntity<?> handleAppValidationException(AppValidationException ex) {
         log.error("Exception: ", ex);
-        ApiResponse<Map<String,String>> response = new ApiResponse<Map<String,String>>().error(
+        ApiResponse<Map<String,String>> response = ApiResponse.error(
                 ErrorCode.VALIDATION_FAILED.getCode(),
                 ErrorCode.VALIDATION_FAILED.getMessage(),
                 ex.getFieldErrors()

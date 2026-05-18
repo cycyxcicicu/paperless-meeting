@@ -17,11 +17,14 @@ public class UserPrincipal implements UserDetails {
     private final boolean enabled;
     private final List<GrantedAuthority> authorities;
 
-    public UserPrincipal(UUID id, String username, String password, boolean enabled, List<String> authoritiesStrings) {
+    private final boolean isFirstLogin;
+
+    public UserPrincipal(UUID id, String username, String password, boolean enabled, boolean isFirstLogin, List<String> authoritiesStrings) {
         this.id = id;
         this.username = username;
         this.password = password;
         this.enabled = enabled;
+        this.isFirstLogin = isFirstLogin;
         this.authorities = authoritiesStrings == null ? List.of() : authoritiesStrings.stream()
                 .map(a -> (GrantedAuthority) () -> a)
                 .toList();

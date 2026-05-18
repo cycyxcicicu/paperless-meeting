@@ -19,6 +19,6 @@ public class PermissionUpsertRequest {
     private String description;
 
 
-    Set<String> roleNames;
+    Set<String> roleCodes;
 
 }

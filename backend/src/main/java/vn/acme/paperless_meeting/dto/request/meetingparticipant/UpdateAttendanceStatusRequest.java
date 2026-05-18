@@ -10,4 +10,6 @@ import vn.acme.paperless_meeting.entity.enums.AttendanceStatus;
 public class UpdateAttendanceStatusRequest {
     @NotNull(message = "ATTENDANCE_STATUS_REQUIRED")
     private AttendanceStatus attendanceStatus;
+
+    private String note;
 }

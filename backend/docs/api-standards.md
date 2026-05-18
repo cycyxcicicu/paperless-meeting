@@ -17,7 +17,7 @@ Phạm vi: mọi endpoint REST được triển khai trong `src/main/java/vn/acm
 ```json
 {
   "success": true,
-  "code": "OK",
+  "code": 200,
   "message": "Tạo cuộc họp thành công",
   "data": { "id": "5f3b...-..." }
 }
@@ -28,8 +28,8 @@ Phạm vi: mọi endpoint REST được triển khai trong `src/main/java/vn/acm
 ```json
 {
   "success": false,
-  "code": "RESOURCE_NOT_FOUND",
-  "message": "Meeting not found",
+  "code": 1206,
+  "message": "Cuộc họp không tồn tại",
   "data": null
 }
 ```
@@ -61,7 +61,7 @@ Ghi chú: `code` tương ứng với enum `ErrorCode` (xem `src/main/java/vn/acm
 ```json
 {
   "success": true,
-  "code": "OK",
+  "code": 200,
   "message": "",
   "data": {
     "content": [ /* list */ ],

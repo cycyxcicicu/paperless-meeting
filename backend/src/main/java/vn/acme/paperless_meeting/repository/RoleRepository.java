@@ -10,13 +10,13 @@ import org.springframework.data.repository.query.Param;
 import vn.acme.paperless_meeting.entity.Role;
 
 public interface RoleRepository extends JpaRepository<Role, UUID> {
-	boolean existsByRoleName(String roleName);
+	boolean existsByRoleCode(String roleCode);
 
-	boolean existsByRoleNameAndIdNot(String roleName, UUID id);
+	boolean existsByRoleCodeAndIdNot(String roleCode, UUID id);
 
-	Integer countByRoleNameIn(Set<String> names);
+	Integer countByRoleCodeIn(Set<String> codes);
 
-	Set<Role> findByRoleNameIn(Set<String> names);
+	Set<Role> findByRoleCodeIn(Set<String> codes);
 
 	@Query("select r from Role r join r.rolePermissionSet rp where rp.permission.id = :permId")
 	Set<Role> findByRolePermissionPermissionId(@Param("permId") UUID permId);

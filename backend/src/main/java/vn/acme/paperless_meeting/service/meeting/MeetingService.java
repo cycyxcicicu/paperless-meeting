@@ -1,0 +1,464 @@
+package vn.acme.paperless_meeting.service.meeting;
+
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.UUID;
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import lombok.AccessLevel;
+import lombok.RequiredArgsConstructor;
+import lombok.experimental.FieldDefaults;
+import lombok.extern.slf4j.Slf4j;
+import vn.acme.paperless_meeting.dto.base.PageResponse;
+import vn.acme.paperless_meeting.dto.request.meeting.MeetingUpsertRequest;
+import vn.acme.paperless_meeting.dto.response.meeting.MeetingResponse;
+import vn.acme.paperless_meeting.entity.Department;
+import vn.acme.paperless_meeting.entity.Location;
+import vn.acme.paperless_meeting.entity.Meeting;
+import vn.acme.paperless_meeting.entity.User;
+import vn.acme.paperless_meeting.entity.enums.MeetingStatus;
+import vn.acme.paperless_meeting.entity.enums.AgendaItemStatus;
+import vn.acme.paperless_meeting.entity.enums.ParticipantRole;
+import vn.acme.paperless_meeting.entity.enums.RoleName;
+import vn.acme.paperless_meeting.exceptions.AppException;
+import vn.acme.paperless_meeting.exceptions.ErrorCode;
+import vn.acme.paperless_meeting.mapper.meeting.MeetingMapper;
+import vn.acme.paperless_meeting.repository.DepartmentRepository;
+import vn.acme.paperless_meeting.repository.LocationRepository;
+import vn.acme.paperless_meeting.entity.MeetingParticipant;
+import vn.acme.paperless_meeting.entity.enums.InviteStatus;
+import vn.acme.paperless_meeting.entity.enums.AttendanceStatus;
+import vn.acme.paperless_meeting.repository.MeetingParticipantRepository;
+import vn.acme.paperless_meeting.repository.MeetingRepository;
+import vn.acme.paperless_meeting.repository.UserRepository;
+import vn.acme.paperless_meeting.repository.AgendaItemRepository;
+import vn.acme.paperless_meeting.service.auth.CurrentUserService;
+import vn.acme.paperless_meeting.service.department.DepartmentService;
+import vn.acme.paperless_meeting.specification.meeting.MeetingSpecification;
+
+@Slf4j
+@Service
+@RequiredArgsConstructor
+@FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
+public class MeetingService {
+
+    MeetingRepository meetingRepository;
+    MeetingMapper meetingMapper;
+    CurrentUserService currentUserService;
+    DepartmentRepository departmentRepository;
+    DepartmentService departmentService;
+    LocationRepository locationRepository;
+    UserRepository userRepository;
+    MeetingParticipantRepository meetingParticipantRepository;
+    AgendaItemRepository agendaItemRepository;
+
+    /**
+     * Tìm kiếm và phân trang danh sách cuộc họp theo bộ lọc (từ khóa, trạng thái, thời gian).
+     */
+    @Transactional(readOnly = true)
+    public PageResponse<MeetingResponse> findAll(String keyword, MeetingStatus status, LocalDateTime fromDate, LocalDateTime toDate, Pageable pageable) {
+        User caller = currentUserService.getCurrentActiveUser();
+        boolean isSuperAdmin = currentUserService.hasRole(RoleName.SUPER_ADMIN);
+        
+        List<UUID> allowedDeptIds = null;
+        if (!isSuperAdmin) {
+            // Lịch họp của ai người đó xem, riêng Admin đơn vị thì được xem tất cả cuộc họp thuộc đơn vị và cấp con
+            if (currentUserService.hasRole(RoleName.DEPARTMENT_ADMIN) && caller.getDepartment() != null) {
+                allowedDeptIds = departmentService.getAllSubDepartmentIds(caller.getDepartment().getId());
+            }
+        }
+
+        Specification<Meeting> spec = MeetingSpecification.build(keyword, status, fromDate, toDate, allowedDeptIds, caller.getId(), isSuperAdmin);
+        Page<Meeting> page = meetingRepository.findAll(spec, pageable);
+
+        return PageResponse.<MeetingResponse>builder()
+                .content(page.getContent().stream().map(meetingMapper::toResponse).toList())
+                .page(page.getNumber())
+                .size(page.getSize())
+                .totalElements(page.getTotalElements())
+                .totalPages(page.getTotalPages())
+                .last(page.isLast())
+                .build();
+    }
+
+    /**
+     * Lấy chi tiết cuộc họp theo ID. Yêu cầu quyền xem cuộc họp.
+     */
+    public MeetingResponse findById(UUID id) {
+        Meeting meeting = getMeeting(id);
+        requireViewPermission(meeting);
+        
+        MeetingResponse response = meetingMapper.toResponse(meeting);
+        User caller = currentUserService.getCurrentActiveUser();
+        response.setCallerRole(determineCallerRole(meeting, caller));
+        return response;
+    }
+
+    private String determineCallerRole(Meeting meeting, User caller) {
+        if (meeting.getCreatedBy() != null && meeting.getCreatedBy().getId().equals(caller.getId())) {
+            return "CREATOR";
+        }
+        
+        var participantOpt = meetingParticipantRepository.findByMeetingIdAndUserId(meeting.getId(), caller.getId());
+        if (participantOpt.isPresent()) {
+            ParticipantRole role = participantOpt.get().getParticipantRole();
+            if (role != null) {
+                return role.name();
+            }
+        }
+        
+        boolean isPreparer = agendaItemRepository.existsByMeetingIdAndPreparedByUserId(meeting.getId(), caller.getId());
+        if (isPreparer) {
+            return "PREPARER";
+        }
+        
+        return "VIEWER";
+    }
+
+    /**
+     * Tạo cuộc họp mới ở trạng thái NHÁP. Kiểm tra phân quyền, thời gian và phòng họp.
+     */
+    @Transactional
+    public MeetingResponse create(MeetingUpsertRequest request) {
+        if (!currentUserService.hasAuthority("MEETING_CREATE")) {
+            throw new AppException(ErrorCode.UNAUTHOZIZED);
+        }
+
+        validateMeetingTime(request.getStartTime(), request.getEndTime());
+        validateLocationConflict(null, request.getLocationId(), request.getStartTime(), request.getEndTime());
+
+        User caller = currentUserService.getCurrentActiveUser();
+        
+        Department department = departmentRepository.findById(request.getDepartmentId())
+                .orElseThrow(() -> new AppException(ErrorCode.DEPARTMENT_NOT_EXIST));
+
+        Location location = null;
+        if (request.getLocationId() != null) {
+            location = locationRepository.findById(request.getLocationId())
+                    .orElseThrow(() -> new AppException(ErrorCode.LOCATION_NOT_EXIST));
+        }
+
+        Meeting meeting = meetingMapper.toEntity(request);
+        meeting.setStatus(MeetingStatus.DRAFT);
+        meeting.setDepartment(department);
+        meeting.setLocation(location);
+        meeting.setCreatedBy(caller);
+
+        Meeting savedMeeting = meetingRepository.save(meeting);
+
+        // Tự động thêm người tạo (createdBy) làm thư ký (SECRETARY)
+        MeetingParticipant creatorParticipant = new MeetingParticipant();
+        creatorParticipant.setMeeting(savedMeeting);
+        creatorParticipant.setUser(caller);
+        creatorParticipant.setParticipantRole(ParticipantRole.SECRETARY);
+        creatorParticipant.setInviteStatus(InviteStatus.ACCEPTED);
+        creatorParticipant.setAttendanceStatus(AttendanceStatus.NOT_CHECKED_IN);
+        meetingParticipantRepository.save(creatorParticipant);
+
+        return meetingMapper.toResponse(savedMeeting);
+    }
+
+    /**
+     * Cập nhật thông tin cuộc họp. Chỉ cho phép chỉnh sửa khi ở trạng thái NHÁP hoặc BỊ TỪ CHỐI.
+     */
+    @Transactional
+    public MeetingResponse update(UUID id, MeetingUpsertRequest request) {
+        Meeting meeting = getMeeting(id);
+        requireEditPermission(meeting);
+
+        if (meeting.getStatus() != MeetingStatus.DRAFT && meeting.getStatus() != MeetingStatus.REJECTED) {
+            throw new AppException(ErrorCode.MEETING_STATUS_TRANSITION_INVALID);
+        }
+
+        validateMeetingTime(request.getStartTime(), request.getEndTime());
+        validateLocationConflict(id, request.getLocationId(), request.getStartTime(), request.getEndTime());
+
+        Department department = departmentRepository.findById(request.getDepartmentId())
+                .orElseThrow(() -> new AppException(ErrorCode.DEPARTMENT_NOT_EXIST));
+
+        Location location = null;
+        if (request.getLocationId() != null) {
+            location = locationRepository.findById(request.getLocationId())
+                    .orElseThrow(() -> new AppException(ErrorCode.LOCATION_NOT_EXIST));
+        }
+
+        meetingMapper.updateEntity(request, meeting);
+        meeting.setDepartment(department);
+        meeting.setLocation(location);
+
+        return meetingMapper.toResponse(meetingRepository.save(meeting));
+    }
+
+    /**
+     * Trình duyệt cuộc họp. Chuyển trạng thái sang CHỜ PHÊ DUYỆT.
+     */
+    @Transactional
+    public void submitForApproval(UUID id) {
+        Meeting meeting = getMeeting(id);
+        requireEditPermission(meeting);
+
+        if (meeting.getStatus() != MeetingStatus.DRAFT && meeting.getStatus() != MeetingStatus.REJECTED) {
+            throw new AppException(ErrorCode.MEETING_STATUS_TRANSITION_INVALID);
+        }
+
+        // Kiểm tra xem tất cả các nội dung cuộc họp đã được phê duyệt tài liệu chưa
+        if (meeting.getAgendaItemList() != null && !meeting.getAgendaItemList().isEmpty()) {
+            boolean hasUnapprovedAgenda = meeting.getAgendaItemList().stream()
+                    .anyMatch(agenda -> agenda.getStatus() != AgendaItemStatus.APPROVED);
+            if (hasUnapprovedAgenda) {
+                throw new AppException(ErrorCode.AGENDA_NOT_APPROVED);
+            }
+        }
+
+        long chairCount = meetingParticipantRepository.countByMeetingIdAndParticipantRole(id, ParticipantRole.CHAIR);
+        if (chairCount == 0) {
+            throw new AppException(ErrorCode.MEETING_CHAIR_REQUIRED);
+        }
+        if (chairCount > 3) {
+            throw new AppException(ErrorCode.BAD_REQUEST);
+        }
+
+        long secretaryCount = meetingParticipantRepository.countByMeetingIdAndParticipantRole(id, ParticipantRole.SECRETARY);
+        if (secretaryCount == 0) {
+            throw new AppException(ErrorCode.MEETING_SECRETARY_REQUIRED);
+        }
+
+        meeting.setStatus(MeetingStatus.PENDING_APPROVAL);
+        meetingRepository.save(meeting);
+    }
+
+    /**
+     * Phê duyệt cuộc họp. Chuyển trạng thái sang ĐÃ DUYỆT.
+     */
+    @Transactional
+    public void approve(UUID id) {
+        Meeting meeting = getMeeting(id);
+        
+        // Kiểm tra quyền phê duyệt
+        requireApprovePermission(meeting);
+
+        if (meeting.getStatus() != MeetingStatus.PENDING_APPROVAL) {
+            throw new AppException(ErrorCode.MEETING_STATUS_TRANSITION_INVALID);
+        }
+
+        User caller = currentUserService.getCurrentActiveUser();
+        meeting.setStatus(MeetingStatus.APPROVED);
+        meeting.setApprovedBy(caller);
+        meeting.setApprovedAt(LocalDateTime.now());
+        meetingRepository.save(meeting);
+    }
+
+    /**
+     * Công bố cuộc họp đã được phê duyệt sang trạng thái SẮP DIỄN RA.
+     */
+    @Transactional
+    public void publish(UUID id) {
+        Meeting meeting = getMeeting(id);
+        
+        // Quyền chỉnh sửa (Ban Lãnh đạo hoặc Người tạo)
+        requireEditPermission(meeting);
+
+        if (meeting.getStatus() != MeetingStatus.APPROVED) {
+            throw new AppException(ErrorCode.MEETING_STATUS_TRANSITION_INVALID);
+        }
+
+        meeting.setStatus(MeetingStatus.UPCOMING);
+        meetingRepository.save(meeting);
+    }
+
+    /**
+     * Từ chối phê duyệt cuộc họp kèm theo lý do. Chuyển trạng thái sang BỊ TỪ CHỐI.
+     */
+    @Transactional
+    public void reject(UUID id, String rejectReason) {
+        Meeting meeting = getMeeting(id);
+        
+        requireApprovePermission(meeting);
+
+        if (meeting.getStatus() != MeetingStatus.PENDING_APPROVAL) {
+            throw new AppException(ErrorCode.MEETING_STATUS_TRANSITION_INVALID);
+        }
+
+        if (rejectReason == null || rejectReason.trim().isEmpty()) {
+            throw new AppException(ErrorCode.BAD_REQUEST);
+        }
+
+        User caller = currentUserService.getCurrentActiveUser();
+        meeting.setStatus(MeetingStatus.REJECTED);
+        meeting.setApprovedBy(caller);
+        meeting.setApprovedAt(LocalDateTime.now());
+        meeting.setRejectReason(rejectReason);
+        meetingRepository.save(meeting);
+    }
+
+    /**
+     * Hủy cuộc họp sắp diễn ra hoặc đang chờ duyệt kèm lý do. Chuyển trạng thái sang ĐÃ HỦY.
+     */
+    @Transactional
+    public void cancel(UUID id, String cancelReason) {
+        Meeting meeting = getMeeting(id);
+        requireEditPermission(meeting); // Yêu cầu quyền chỉnh sửa / Ban Lãnh đạo
+
+        if (meeting.getStatus() != MeetingStatus.UPCOMING 
+            && meeting.getStatus() != MeetingStatus.PENDING_APPROVAL 
+            && meeting.getStatus() != MeetingStatus.APPROVED) {
+            throw new AppException(ErrorCode.MEETING_STATUS_TRANSITION_INVALID);
+        }
+
+        if (cancelReason == null || cancelReason.trim().isEmpty()) {
+            throw new AppException(ErrorCode.BAD_REQUEST);
+        }
+
+        meeting.setStatus(MeetingStatus.CANCELLED);
+        meeting.setCancelReason(cancelReason);
+        meetingRepository.save(meeting);
+    }
+
+    /**
+     * Kết thúc cuộc họp đang diễn ra. Chuyển trạng thái sang ĐÃ KẾT THÚC.
+     */
+    @Transactional
+    public void close(UUID id) {
+        Meeting meeting = getMeeting(id);
+        requireEditPermission(meeting);
+
+        if (meeting.getStatus() != MeetingStatus.IN_PROGRESS) {
+            throw new AppException(ErrorCode.MEETING_STATUS_TRANSITION_INVALID);
+        }
+
+        meeting.setStatus(MeetingStatus.CLOSED);
+        meetingRepository.save(meeting);
+    }
+
+    /**
+     * Tìm cuộc họp theo ID. Ném ngoại lệ nếu không tồn tại.
+     */
+    private Meeting getMeeting(UUID id) {
+        return meetingRepository.findById(id)
+                .orElseThrow(() -> new AppException(ErrorCode.MEETING_NOT_EXIST));
+    }
+
+    /**
+     * Xác thực thời gian họp (phải lên lịch trước ít nhất 30 phút, kết thúc sau bắt đầu).
+     */
+    private void validateMeetingTime(LocalDateTime start, LocalDateTime end) {
+        if (start == null || end == null || !end.isAfter(start)) {
+            throw new AppException(ErrorCode.MEETING_INVALID_TIME_RANGE);
+        }
+        if (start.isBefore(LocalDateTime.now().plusMinutes(30))) {
+            throw new AppException(ErrorCode.MEETING_MUST_BE_SCHEDULED_BEFORE_30_MINUTES);
+        }
+    }
+
+    /**
+     * Kiểm tra trùng lịch phòng họp đối với các cuộc họp có hiệu lực.
+     */
+    private void validateLocationConflict(UUID meetingId, UUID locationId, LocalDateTime start, LocalDateTime end) {
+        if (locationId == null) return;
+        
+        // Chỉ kiểm tra trùng lịch với cuộc họp có hiệu lực (APPROVED, UPCOMING, IN_PROGRESS, PENDING_APPROVAL)
+        List<MeetingStatus> conflictStatuses = List.of(
+            MeetingStatus.APPROVED,
+            MeetingStatus.UPCOMING, 
+            MeetingStatus.IN_PROGRESS, 
+            MeetingStatus.PENDING_APPROVAL
+        );
+
+        boolean conflict = meetingRepository.existsRoomConflict(meetingId, locationId, conflictStatuses, start, end);
+        if (conflict) {
+            throw new AppException(ErrorCode.MEETING_LOCATION_TIME_CONFLICT);
+        }
+    }
+
+    /**
+     * Kiểm tra quyền xem cuộc họp.
+     */
+    private void requireViewPermission(Meeting meeting) {
+        if (currentUserService.hasRole(RoleName.SUPER_ADMIN)) return;
+        
+        User caller = currentUserService.getCurrentActiveUser();
+        if (meeting.getCreatedBy() != null && meeting.getCreatedBy().getId().equals(caller.getId())) return;
+        
+        // Cho phép nếu là Admin của đơn vị quản lý cuộc họp
+        if (currentUserService.hasRole(RoleName.DEPARTMENT_ADMIN) && meeting.getDepartment() != null && caller.getDepartment() != null) {
+            List<UUID> subDepts = departmentService.getAllSubDepartmentIds(caller.getDepartment().getId());
+            if (subDepts.contains(meeting.getDepartment().getId())) return;
+        }
+
+        // Cho phép nếu là Người chuẩn bị tài liệu cho cuộc họp này (được gán ở AgendaItem)
+        boolean isPreparer = agendaItemRepository.existsByMeetingIdAndPreparedByUserId(meeting.getId(), caller.getId());
+        if (isPreparer) return;
+
+        // Cho phép đại biểu tham gia cuộc họp xem NHƯNG chỉ khi cuộc họp ĐÃ ĐƯỢC CÔNG BỐ
+        boolean isParticipant = meetingParticipantRepository.existsByMeetingIdAndUserId(meeting.getId(), caller.getId());
+        if (isParticipant) {
+            List<MeetingStatus> publishedStatuses = List.of(
+                MeetingStatus.UPCOMING,
+                MeetingStatus.IN_PROGRESS,
+                MeetingStatus.CLOSED,
+                MeetingStatus.CANCELLED,
+                MeetingStatus.EXPIRED
+            );
+            if (publishedStatuses.contains(meeting.getStatus())) {
+                return;
+            }
+        }
+        
+        throw new AppException(ErrorCode.UNAUTHOZIZED);
+    }
+
+    /**
+     * Kiểm tra quyền chỉnh sửa cuộc họp.
+     */
+    private void requireEditPermission(Meeting meeting) {
+        if (currentUserService.hasRole(RoleName.SUPER_ADMIN)) return;
+
+        User caller = currentUserService.getCurrentActiveUser();
+        
+        // Cho phép nếu là người tạo cuộc họp
+        if (meeting.getCreatedBy() != null && meeting.getCreatedBy().getId().equals(caller.getId())) {
+            return;
+        }
+
+        // Cho phép nếu là Admin của đơn vị quản lý cuộc họp
+        if (currentUserService.hasRole(RoleName.DEPARTMENT_ADMIN) && meeting.getDepartment() != null && caller.getDepartment() != null) {
+            List<UUID> subDepts = departmentService.getAllSubDepartmentIds(caller.getDepartment().getId());
+            if (subDepts.contains(meeting.getDepartment().getId())) {
+                return;
+            }
+        }
+
+        // Cho phép nếu là chủ tọa cuộc họp (CHAIR)
+        boolean isChair = meetingParticipantRepository.existsByMeetingIdAndUserIdAndParticipantRole(
+            meeting.getId(), caller.getId(), ParticipantRole.CHAIR);
+        if (isChair) return;
+
+        throw new AppException(ErrorCode.UNAUTHOZIZED);
+    }
+
+    /**
+     * Kiểm tra quyền phê duyệt cuộc họp.
+     */
+    private void requireApprovePermission(Meeting meeting) {
+        if (currentUserService.hasRole(RoleName.SUPER_ADMIN)) return;
+
+        if (!currentUserService.hasRole(RoleName.DEPARTMENT_ADMIN)) {
+            throw new AppException(ErrorCode.UNAUTHOZIZED);
+        }
+
+        User caller = currentUserService.getCurrentActiveUser();
+        if (caller.getDepartment() == null || meeting.getDepartment() == null) {
+            throw new AppException(ErrorCode.UNAUTHOZIZED);
+        }
+
+        List<UUID> subDepts = departmentService.getAllSubDepartmentIds(caller.getDepartment().getId());
+        if (!subDepts.contains(meeting.getDepartment().getId())) {
+            throw new AppException(ErrorCode.UNAUTHOZIZED);
+        }
+    }
+}

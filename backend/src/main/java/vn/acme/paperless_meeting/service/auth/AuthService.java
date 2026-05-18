@@ -18,7 +18,9 @@ import vn.acme.paperless_meeting.entity.enums.UserStatus;
 import vn.acme.paperless_meeting.exceptions.AppException;
 import vn.acme.paperless_meeting.exceptions.ErrorCode;
 import vn.acme.paperless_meeting.repository.UserRepository;
-
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.core.Authentication;
+import vn.acme.paperless_meeting.dto.request.auth.ChangePasswordRequest;
 @Service
 @RequiredArgsConstructor
 public class AuthService {
@@ -29,6 +31,7 @@ public class AuthService {
     private final AuthCookieService authCookieService;
     private final RefreshTokenService refreshTokenService;
     private final UserRepository userRepository;
+    private final PasswordEncoder passwordEncoder;
 
     public void login(LoginRequest request, HttpServletRequest httpRequest, HttpServletResponse response) {
         try {
@@ -40,7 +43,7 @@ public class AuthService {
                     .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
 
             // JWT chỉ chứa 1 role (String), permissions sẽ được load khi xác thực
-            String role = user.getRole() != null ? "ROLE_" + user.getRole().getRoleName() : null;
+            String role = user.getRole() != null ? "ROLE_" + user.getRole().getRoleCode() : null;
 
             String accessToken = jwtTokenGenerator.generateAccessToken(request.getUsername(), role);
             String refreshToken = jwtTokenGenerator.generateRefreshToken(request.getUsername());
@@ -83,7 +86,7 @@ public class AuthService {
         User user = userRepository.findWithRoleByUsernameAndStatus(username, UserStatus.ACTIVE)
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
 
-        String role = user.getRole() != null ? "ROLE_" + user.getRole().getRoleName() : null;
+        String role = user.getRole() != null ? "ROLE_" + user.getRole().getRoleCode() : null;
 
         String newAccessToken = jwtTokenGenerator.generateAccessToken(username, role);
         String newRefreshToken = jwtTokenGenerator.generateRefreshToken(username);
@@ -111,21 +114,19 @@ public class AuthService {
 
    
 
-    // public void changePassword(Authentication authentication,
-    // ChangePasswordRequest request) {
-    // String username = authentication.getName();
-    // User user =
-    // userRepository.findByUsernameAndStatus(username,UserStatus.ACTIVE).orElseThrow(()->
-    // new AppException(ErrorCode.USER_NOT_EXISTED));
+    public void changePassword(Authentication authentication, ChangePasswordRequest request) {
+        String username = authentication.getName();
+        User user = userRepository.findWithRoleByUsernameAndStatus(username, UserStatus.ACTIVE)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
 
-    // if (!passwordEncoder.matches(request.currentPassword(),
-    // user.getPassword())) {
-    // throw new BadCredentialsException("Mật khẩu hiện tại không đúng");
-    // }
+        if (!passwordEncoder.matches(request.getOldPassword(), user.getPassword())) {
+            throw new BadCredentialsException("Mật khẩu hiện tại không đúng");
+        }
 
-    // user.setPassword(passwordEncoder.encode(request.newPassword()));
-    // userRepository.save(user);
-    // }
+        user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+        user.setIsFirstLogin(false); // Đã đổi mật khẩu
+        userRepository.save(user);
+    }
 
 
 

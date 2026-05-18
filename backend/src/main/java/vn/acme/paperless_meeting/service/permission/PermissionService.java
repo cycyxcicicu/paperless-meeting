@@ -4,7 +4,9 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
-
+import java.util.Arrays;
+import vn.acme.paperless_meeting.entity.enums.PermissionName;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -46,6 +48,7 @@ public class PermissionService {
     }
 
     @Transactional
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
     public PermissionResponse create(PermissionUpsertRequest request) {
         if (permissionRepository.existsByPermCode(request.getPermCode())) {
             throw new AppException(ErrorCode.PERMISSION_EXISTED);
@@ -53,13 +56,13 @@ public class PermissionService {
         Permission permission = permissionMapper.toEntity(request);
 
         permission.setPermCode(request.getPermCode().toUpperCase());
-        if (request.getRoleNames() != null) {
+        if (request.getRoleCodes() != null) {
 
-            if (roleRepository.countByRoleNameIn(request.getRoleNames()) != request.getRoleNames().size()) {
+            if (roleRepository.countByRoleCodeIn(request.getRoleCodes()) != request.getRoleCodes().size()) {
                 throw new AppException(ErrorCode.ROLE_NOT_EXIST);
             }
 
-            Set<Role> roles = roleRepository.findByRoleNameIn(request.getRoleNames());
+            Set<Role> roles = roleRepository.findByRoleCodeIn(request.getRoleCodes());
             permission.setRolePermissionList(new HashSet<>());
             for (Role r : roles) {
                 RolePermission rp = new RolePermission();
@@ -74,8 +77,16 @@ public class PermissionService {
     }
 
     @Transactional
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
     public PermissionResponse update(UUID id, PermissionUpsertRequest request) {
         Permission permission = getPermission(id);
+
+        boolean isCorePerm = Arrays.stream(PermissionName.values()).anyMatch(pn -> pn.name().equals(permission.getPermCode().toUpperCase()));
+        String normalizedCode = request.getPermCode().toUpperCase();
+
+        if (isCorePerm && !permission.getPermCode().toUpperCase().equals(normalizedCode)) {
+            throw new AppException(ErrorCode.SYSTEM_PERMISSION_PROTECTED);
+        }
 
         if (permissionRepository.existsByPermCodeAndIdNot(request.getPermCode(), id)) {
             throw new AppException(ErrorCode.PERMISSION_EXISTED);
@@ -85,13 +96,13 @@ public class PermissionService {
         permissionMapper.updateEntity(request, permission);
         permission.setPermCode(request.getPermCode().toUpperCase());
 
-        // if roleNames provided, validate and update RolePermission links
-        if (request.getRoleNames() != null) {
-            if (roleRepository.countByRoleNameIn(request.getRoleNames()) != request.getRoleNames().size()) {
+        // if roleCodes provided, validate and update RolePermission links
+        if (request.getRoleCodes() != null) {
+            if (roleRepository.countByRoleCodeIn(request.getRoleCodes()) != request.getRoleCodes().size()) {
                 throw new AppException(ErrorCode.ROLE_NOT_EXIST);
             }
 
-            Set<Role> roles = roleRepository.findByRoleNameIn(request.getRoleNames());
+            Set<Role> roles = roleRepository.findByRoleCodeIn(request.getRoleCodes());
             permission.getRolePermissionList().clear();
             for (Role r : roles) {
                 RolePermission rp = new RolePermission();
@@ -106,8 +117,15 @@ public class PermissionService {
     }
 
     @Transactional
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
     public void delete(UUID id) {
         Permission permission = getPermission(id);
+        
+        boolean isCorePerm = Arrays.stream(PermissionName.values()).anyMatch(pn -> pn.name().equals(permission.getPermCode().toUpperCase()));
+        if (isCorePerm) {
+            throw new AppException(ErrorCode.SYSTEM_PERMISSION_PROTECTED);
+        }
+
         try {
             var rolesWithPerm = roleRepository.findByRolePermissionPermissionId(id);
             if (rolesWithPerm != null && !rolesWithPerm.isEmpty()) {

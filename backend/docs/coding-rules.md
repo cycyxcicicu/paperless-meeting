@@ -40,7 +40,8 @@ This document outlines observable coding conventions in the Paperless Meeting re
 - Use standard HTTP methods: `@GetMapping`, `@PostMapping`, `@PutMapping`, `@DeleteMapping`.
 - Parameter validation: `@Valid @RequestBody [DTO] request`.
 - Return an `ApiResponse<T>` for all endpoints (never return raw objects).
-- Always build responses using `ApiResponse.<T>builder().success(true).message("...").data(...).build()`.
+- Always build responses using `ApiResponse.<T>builder().success(true).code(200).message("...").data(...).build()`.
+- **Lưu ý quan trọng (Đã cập nhật từ source code thực tế):** Khi sử dụng Builder của `ApiResponse`, BẮT BUỘC phải set `.success(true)` và `.code(200)` (hoặc code tương ứng). Tránh lỗi như trong `MeetingController` hiện tại (chỉ gọi `.data(response).build()`) dẫn đến response mặc định `success = false` và `code = 0`. Cũng không nên dùng hàm helper `ApiResponse.success(T data)` do hàm này đang bị hardcode trả về code `67`.
 
 **Example:**
 

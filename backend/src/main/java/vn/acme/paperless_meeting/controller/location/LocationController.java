@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import jakarta.validation.Valid;
@@ -30,13 +31,14 @@ public class LocationController {
 
 	@GetMapping
 	public ApiResponse<PageResponse<LocationResponse>> findAll(
-			@org.springframework.web.bind.annotation.RequestParam(required = false) String keyword,
-			@org.springframework.web.bind.annotation.RequestParam(required = false, name = "type") String type,
+			@RequestParam(required = false) String keyword,
+			@RequestParam(required = false, name = "isActive") Boolean isActive,
+			@RequestParam(required = false) UUID departmentId,
 			Pageable pageable) {
 		return ApiResponse.<PageResponse<LocationResponse>>builder()
 				.success(true)
 				.message("Lấy danh sách địa điểm thành công")
-				.data(locationService.findAll(keyword, type, pageable))
+				.data(locationService.findAll(keyword, isActive, departmentId, pageable))
 				.build();
 	}
 

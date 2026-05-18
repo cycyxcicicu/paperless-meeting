@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.Setter;
@@ -15,14 +16,13 @@ public class MeetingUpsertRequest {
     @Size(max = 255, message = "MEETING_TITLE_INVALID")
     private String title;
 
-    @Size(max = 5000, message = "MEETING_DESCRIPTION_INVALID")
-    private String description;
-
     private LocalDateTime startTime;
     private LocalDateTime endTime;
-    private LocalDateTime checkinOpenAt;
-    private LocalDateTime checkinCloseAt;
+    private String content;
+    private String onlineLink;
     private Integer lateAfterMinutes;
     private UUID locationId;
+
+    @NotNull(message = "DEPARTMENT_ID_REQUIRED")
     private UUID departmentId;
 }

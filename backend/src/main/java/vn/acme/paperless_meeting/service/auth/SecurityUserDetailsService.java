@@ -34,8 +34,8 @@ public class SecurityUserDetailsService implements UserDetailsService {
         List<String> authorities = new ArrayList<>();
         Role role = user.getRole();
         if (role != null) {
-            // Thêm role name vào authorities (prefix ROLE_ cho Spring Security hasRole())
-            authorities.add("ROLE_" + role.getRoleName());
+            // Thêm role code vào authorities (prefix ROLE_ cho Spring Security hasRole())
+            authorities.add("ROLE_" + role.getRoleCode());
 
             // Thêm tất cả permission codes vào authorities (cho hasAuthority())
             if (role.getRolePermissionSet() != null) {
@@ -52,6 +52,7 @@ public class SecurityUserDetailsService implements UserDetailsService {
                 user.getUsername(),
                 user.getPassword(),
                 user.getStatus() == UserStatus.ACTIVE,
+                user.getIsFirstLogin() != null ? user.getIsFirstLogin() : false,
                 authorities);
     }
 }

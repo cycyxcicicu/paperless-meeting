@@ -4,8 +4,11 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
-import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -13,15 +16,18 @@ import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import vn.acme.paperless_meeting.dto.request.department.DepartmentUpsertRequest;
+import vn.acme.paperless_meeting.dto.base.PageResponse;
+import vn.acme.paperless_meeting.dto.request.department.DepartmentUpsertRequest;
 import vn.acme.paperless_meeting.dto.response.department.DepartmentResponse;
 import vn.acme.paperless_meeting.entity.Department;
 import vn.acme.paperless_meeting.entity.User;
+import vn.acme.paperless_meeting.entity.enums.RoleName;
 import vn.acme.paperless_meeting.exceptions.AppException;
 import vn.acme.paperless_meeting.exceptions.ErrorCode;
 import vn.acme.paperless_meeting.mapper.department.DepartmentMapper;
 import vn.acme.paperless_meeting.repository.DepartmentRepository;
-import vn.acme.paperless_meeting.repository.UserRepository;
 import vn.acme.paperless_meeting.service.auth.CurrentUserService;
+import vn.acme.paperless_meeting.specification.department.DepartmentSpecification;
 
 @Service
 @RequiredArgsConstructor
@@ -31,7 +37,6 @@ public class DepartmentService {
     DepartmentMapper departmentMapper;
     CurrentUserService currentUserService;
 
-    @PreAuthorize("hasRole('SUPER_ADMIN')")
     public List<DepartmentResponse> findAll() {
         var departments = departmentRepository.findAll();
 
@@ -63,13 +68,57 @@ public class DepartmentService {
         return roots;
     }
 
-    @PreAuthorize("hasRole('SUPER_ADMIN')")
+    @Transactional(readOnly = true)
+    public PageResponse<DepartmentResponse> getChildrenPage(UUID parentId, String keyword, Pageable pageable) {
+        User caller = currentUserService.getCurrentActiveUser();
+
+        // Kiểm tra quyền
+        if (!currentUserService.hasRole(RoleName.SUPER_ADMIN)) {
+            if (parentId == null) {
+                // DEPARTMENT_ADMIN không được xem gốc của toàn hệ thống (trừ khi gốc đó là Sở của họ, nhưng parentId=null nghĩa là root system)
+                // Tuy nhiên, họ có thể xem danh sách con của các phòng nằm trong quyền quản lý
+                throw new AppException(ErrorCode.UNAUTHOZIZED);
+            }
+            
+            UUID callerDeptId = caller.getDepartment() != null ? caller.getDepartment().getId() : null;
+            if (callerDeptId == null) {
+                throw new AppException(ErrorCode.DEPARTMENT_ID_REQUIRED);
+            }
+
+            if (!getAllSubDepartmentIds(callerDeptId).contains(parentId)) {
+                throw new AppException(ErrorCode.UNAUTHOZIZED);
+            }
+        }
+
+        Specification<Department> spec = DepartmentSpecification.build(keyword, parentId);
+        Page<Department> page = departmentRepository.findAll(spec, pageable);
+
+        List<DepartmentResponse> content = page.getContent().stream()
+                .map(departmentMapper::toResponse)
+                .toList();
+
+        return PageResponse.<DepartmentResponse>builder()
+                .content(content)
+                .page(page.getNumber())
+                .size(page.getSize())
+                .totalElements(page.getTotalElements())
+                .totalPages(page.getTotalPages())
+                .last(page.isLast())
+                .build();
+    }
+
     public DepartmentResponse findById(UUID id) {
         return departmentMapper.toResponse(getDepartment(id));
     }
 
-    @PreAuthorize("hasRole('SUPER_ADMIN')")
     public DepartmentResponse create(DepartmentUpsertRequest request) {
+        if (currentUserService.hasRole(RoleName.USER)) {
+            throw new AppException(ErrorCode.UNAUTHOZIZED);
+        }
+
+        User caller = currentUserService.getCurrentActiveUser();
+        requireAdminAccessToDepartment(caller, request.getParentDepartmentId());
+
         validateDuplicate(request.getDeptName(), request.getParentDepartmentId(), null);
 
         Department department = departmentMapper.toEntity(request);
@@ -79,12 +128,24 @@ public class DepartmentService {
         return departmentMapper.toResponse(departmentRepository.save(department));
     }
 
-    @PreAuthorize("hasRole('SUPER_ADMIN')")
     public DepartmentResponse update(UUID id, DepartmentUpsertRequest request) {
-        Department department = getDepartment(id);
+        if (currentUserService.hasRole(RoleName.USER)) {
+            throw new AppException(ErrorCode.UNAUTHOZIZED);
+        }
 
-        if (request.getParentDepartmentId() != null && request.getParentDepartmentId().equals(id)) {
-            throw new AppException(ErrorCode.BAD_REQUEST);
+        Department department = getDepartment(id);
+        User caller = currentUserService.getCurrentActiveUser();
+
+        requireAdminAccessToDepartment(caller, id);
+
+        if (currentUserService.hasRole(RoleName.DEPARTMENT_ADMIN)) {
+            UUID oldParentId = department.getParentDepartment() != null ? department.getParentDepartment().getId()
+                    : null;
+            request.setParentDepartmentId(oldParentId);
+        } else {
+            if (request.getParentDepartmentId() != null && request.getParentDepartmentId().equals(id)) {
+                throw new AppException(ErrorCode.BAD_REQUEST);
+            }
         }
 
         validateDuplicate(request.getDeptName(), request.getParentDepartmentId(), id);
@@ -95,11 +156,22 @@ public class DepartmentService {
     }
 
     @Transactional
-    @PreAuthorize("hasRole('SUPER_ADMIN')")
     public void delete(UUID id) {
+        if (currentUserService.hasRole(RoleName.USER)) {
+            throw new AppException(ErrorCode.UNAUTHOZIZED);
+        }
+
         getDepartment(id); // ensure exists
 
         User caller = currentUserService.getCurrentActiveUser();
+        requireAdminAccessToDepartment(caller, id);
+
+        if (currentUserService.hasRole(RoleName.DEPARTMENT_ADMIN)) {
+            if (caller.getDepartment() != null && id.equals(caller.getDepartment().getId())) {
+                throw new AppException(ErrorCode.UNAUTHOZIZED);
+            }
+        }
+
         UUID deletedBy = caller != null ? caller.getId() : null;
 
         List<UUID> allIds = new ArrayList<>();
@@ -151,5 +223,38 @@ public class DepartmentService {
     private Department getDepartment(UUID id) {
         return departmentRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.DEPARTMENT_NOT_EXIST));
+    }
+
+    private void requireAdminAccessToDepartment(User admin, UUID targetDeptId) {
+        if (currentUserService.hasRole(RoleName.SUPER_ADMIN))
+            return;
+        if (currentUserService.hasRole(RoleName.DEPARTMENT_ADMIN)) {
+            if (admin.getDepartment() == null || targetDeptId == null) {
+                throw new AppException(ErrorCode.UNAUTHOZIZED);
+            }
+            if (!getAllSubDepartmentIds(admin.getDepartment().getId()).contains(targetDeptId)) {
+                throw new AppException(ErrorCode.UNAUTHOZIZED);
+            }
+            return;
+        }
+        throw new AppException(ErrorCode.UNAUTHOZIZED);
+    }
+
+    public List<UUID> getAllSubDepartmentIds(UUID rootDeptId) {
+        if (rootDeptId == null)
+            return List.of();
+        List<UUID> allIds = new ArrayList<>();
+        allIds.add(rootDeptId);
+
+        List<UUID> current = List.of(rootDeptId);
+        while (!current.isEmpty()) {
+            List<UUID> childIds = departmentRepository.findIdsByParentDepartmentIdIn(current);
+            if (childIds == null || childIds.isEmpty()) {
+                break;
+            }
+            allIds.addAll(childIds);
+            current = childIds;
+        }
+        return allIds;
     }
 }

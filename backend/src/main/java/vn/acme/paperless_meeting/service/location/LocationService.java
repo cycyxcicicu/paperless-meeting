@@ -1,5 +1,6 @@
 package vn.acme.paperless_meeting.service.location;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -18,14 +19,15 @@ import vn.acme.paperless_meeting.dto.response.location.LocationResponse;
 import vn.acme.paperless_meeting.entity.Department;
 import vn.acme.paperless_meeting.entity.Location;
 import vn.acme.paperless_meeting.entity.User;
-import vn.acme.paperless_meeting.entity.enums.LocationType;
+
 import vn.acme.paperless_meeting.entity.enums.RoleName;
 import vn.acme.paperless_meeting.exceptions.AppException;
 import vn.acme.paperless_meeting.exceptions.ErrorCode;
 import vn.acme.paperless_meeting.mapper.location.LocationMapper;
-import vn.acme.paperless_meeting.repository.LocationRepository;
 import vn.acme.paperless_meeting.repository.DepartmentRepository;
+import vn.acme.paperless_meeting.repository.LocationRepository;
 import vn.acme.paperless_meeting.service.auth.CurrentUserService;
+import vn.acme.paperless_meeting.service.department.DepartmentService;
 import vn.acme.paperless_meeting.specification.location.LocationSpecification;
 
 @Service
@@ -36,41 +38,44 @@ public class LocationService {
     LocationMapper locationMapper;
     CurrentUserService currentUserService;
     DepartmentRepository departmentRepository;
+    DepartmentService departmentService;
 
     @Transactional(readOnly = true)
-    public PageResponse<LocationResponse> findAll(String keyword, String typeStr, Pageable pageable) {
-        if (pageable.getPageNumber() < 0) {
-            throw new AppException(ErrorCode.BAD_REQUEST);
-        }
-        if (pageable.getPageSize() <= 0) {
+    public PageResponse<LocationResponse> findAll(String keyword, Boolean isActive, UUID departmentId, Pageable pageable) {
+        if (pageable.getPageNumber() < 0 || pageable.getPageSize() <= 0) {
             throw new AppException(ErrorCode.BAD_REQUEST);
         }
 
         User caller = currentUserService.getCurrentActiveUser();
-        UUID departmentId = null;
+        List<UUID> allowedDeptIds = null;
 
-        if (currentUserService.hasRole(RoleName.SUPER_ADMIN)) {
-            // allowed: no department restriction
-        } else if (currentUserService.hasRole(RoleName.DEPARTMENT_ADMIN)) {
+        boolean includeShared = true;
+
+        if (!currentUserService.hasRole(RoleName.SUPER_ADMIN)) {
+            if (!hasViewPermission()) {
+                throw new AppException(ErrorCode.UNAUTHOZIZED);
+            }
             if (caller.getDepartment() == null) {
                 throw new AppException(ErrorCode.DEPARTMENT_ID_REQUIRED);
             }
-            departmentId = caller.getDepartment().getId();
-        } else {
-            throw new AppException(ErrorCode.UNAUTHOZIZED);
-        }
 
-        LocationType type = null;
-        if (typeStr != null && !typeStr.isBlank()) {
-            try {
-                type = LocationType.valueOf(typeStr.trim().toUpperCase());
-            } catch (IllegalArgumentException ex) {
-                throw new AppException(ErrorCode.BAD_REQUEST);
+            if (departmentId == null) {
+                allowedDeptIds = departmentService.getAllSubDepartmentIds(caller.getDepartment().getId());
+            } else {
+                if (!departmentService.getAllSubDepartmentIds(caller.getDepartment().getId()).contains(departmentId)) {
+                    throw new AppException(ErrorCode.UNAUTHOZIZED);
+                }
+                allowedDeptIds = List.of(departmentId);
+                includeShared = false;
+            }
+        } else {
+            if (departmentId != null) {
+                allowedDeptIds = List.of(departmentId);
+                includeShared = false;
             }
         }
 
-        Specification<Location> spec = LocationSpecification.build(keyword, type, departmentId);
-
+        Specification<Location> spec = LocationSpecification.build(keyword, isActive, allowedDeptIds, includeShared);
         Page<Location> page = locationRepository.findAll(spec, pageable);
 
         List<LocationResponse> content = page.getContent().stream()
@@ -89,57 +94,36 @@ public class LocationService {
 
     public LocationResponse findById(UUID id) {
         Location location = getLocation(id);
-
-        // Authorization: SUPER_ADMIN can view any; DEPARTMENT_ADMIN only for their department; others forbidden
-        var caller = currentUserService.getCurrentActiveUser();
-        if (currentUserService.hasRole(RoleName.SUPER_ADMIN)) {
-            // allowed
-        } else if (currentUserService.hasRole(RoleName.DEPARTMENT_ADMIN)) {
-            if (caller.getDepartment() == null) {
-                throw new AppException(ErrorCode.DEPARTMENT_ID_REQUIRED);
-            }
-            UUID adminDeptId = caller.getDepartment().getId();
-
-            if (location.getDepartment() == null || !adminDeptId.equals(location.getDepartment().getId())) {
-                throw new AppException(ErrorCode.UNAUTHOZIZED);
-            }
-        } else {
-            throw new AppException(ErrorCode.UNAUTHOZIZED);
-        }
+        User caller = currentUserService.getCurrentActiveUser();
+        
+        UUID deptId = location.getDepartment() != null ? location.getDepartment().getId() : null;
+        requireAccessToDepartment(caller, deptId, false);
 
         return locationMapper.toResponse(location);
     }
 
     public LocationResponse create(LocationUpsertRequest request) {
         User caller = currentUserService.getCurrentActiveUser();
+        UUID reqDeptId = request.getDepartmentId();
 
-        if (currentUserService.hasRole(RoleName.USER)) {
-            throw new AppException(ErrorCode.UNAUTHOZIZED);
+        if (!currentUserService.hasRole(RoleName.SUPER_ADMIN)) {
+            if (!hasManagePermission()) {
+                throw new AppException(ErrorCode.UNAUTHOZIZED);
+            }
+            if (reqDeptId == null) {
+                if (caller.getDepartment() == null) {
+                    throw new AppException(ErrorCode.DEPARTMENT_ID_REQUIRED);
+                }
+                reqDeptId = caller.getDepartment().getId();
+            } else {
+                requireAccessToDepartment(caller, reqDeptId, true);
+            }
         }
 
-        UUID reqDeptId = request.getDepartmentId();
         Department dept = null;
-
-        if (currentUserService.hasRole(RoleName.SUPER_ADMIN)) {
-            if (reqDeptId != null) {
-                dept = departmentRepository.findById(reqDeptId)
-                        .orElseThrow(() -> new AppException(ErrorCode.DEPARTMENT_NOT_EXIST));
-            }
-        } else if (currentUserService.hasRole(RoleName.DEPARTMENT_ADMIN)) {
-            if (caller.getDepartment() == null) {
-                throw new AppException(ErrorCode.DEPARTMENT_ID_REQUIRED);
-            }
-            UUID adminDeptId = caller.getDepartment().getId();
-
-            if (reqDeptId == null) {
-                dept = departmentRepository.findById(adminDeptId)
-                        .orElseThrow(() -> new AppException(ErrorCode.DEPARTMENT_NOT_EXIST));
-            } else if (!adminDeptId.equals(reqDeptId)) {
-                throw new AppException(ErrorCode.UNAUTHOZIZED);
-            } else {
-                dept = departmentRepository.findById(reqDeptId)
-                        .orElseThrow(() -> new AppException(ErrorCode.DEPARTMENT_NOT_EXIST));
-            }
+        if (reqDeptId != null) {
+            dept = departmentRepository.findById(reqDeptId)
+                    .orElseThrow(() -> new AppException(ErrorCode.DEPARTMENT_NOT_EXIST));
         }
 
         Location location = locationMapper.toEntity(request);
@@ -152,37 +136,18 @@ public class LocationService {
         Location location = getLocation(id);
         User caller = currentUserService.getCurrentActiveUser();
 
-        if (currentUserService.hasRole(RoleName.SUPER_ADMIN)) {
-            // allowed
-        } else if (currentUserService.hasRole(RoleName.DEPARTMENT_ADMIN)) {
-            if (caller.getDepartment() == null) {
-                throw new AppException(ErrorCode.DEPARTMENT_ID_REQUIRED);
-            }
-            UUID adminDeptId = caller.getDepartment().getId();
-
-            if (location.getDepartment() == null || !adminDeptId.equals(location.getDepartment().getId())) {
-                throw new AppException(ErrorCode.UNAUTHOZIZED);
-            }
-        } else {
-            throw new AppException(ErrorCode.UNAUTHOZIZED);
-        }
+        UUID currentDeptId = location.getDepartment() != null ? location.getDepartment().getId() : null;
+        requireAccessToDepartment(caller, currentDeptId, true);
 
         UUID reqDeptId = request.getDepartmentId();
-        if (reqDeptId != null) {
+        if (reqDeptId == null) {
+            if (currentUserService.hasRole(RoleName.SUPER_ADMIN)) {
+                location.setDepartment(null);
+            }
+        } else if (!reqDeptId.equals(currentDeptId)) {
+            requireAccessToDepartment(caller, reqDeptId, true);
             Department dept = departmentRepository.findById(reqDeptId)
                     .orElseThrow(() -> new AppException(ErrorCode.DEPARTMENT_NOT_EXIST));
-
-            if (currentUserService.hasRole(RoleName.DEPARTMENT_ADMIN)) {
-                if (caller.getDepartment() == null) {
-                    throw new AppException(ErrorCode.DEPARTMENT_ID_REQUIRED);
-                }
-                UUID adminDeptId = caller.getDepartment().getId();
-
-                if (!adminDeptId.equals(reqDeptId)) {
-                    throw new AppException(ErrorCode.UNAUTHOZIZED);
-                }
-            }
-
             location.setDepartment(dept);
         }
 
@@ -194,20 +159,8 @@ public class LocationService {
         Location location = getLocation(id);
         User caller = currentUserService.getCurrentActiveUser();
 
-        if (currentUserService.hasRole(RoleName.SUPER_ADMIN)) {
-            // allowed
-        } else if (currentUserService.hasRole(RoleName.DEPARTMENT_ADMIN)) {
-            if (caller.getDepartment() == null) {
-                throw new AppException(ErrorCode.DEPARTMENT_ID_REQUIRED);
-            }
-            UUID adminDeptId = caller.getDepartment().getId();
-
-            if (location.getDepartment() == null || !adminDeptId.equals(location.getDepartment().getId())) {
-                throw new AppException(ErrorCode.UNAUTHOZIZED);
-            }
-        } else {
-            throw new AppException(ErrorCode.UNAUTHOZIZED);
-        }
+        UUID currentDeptId = location.getDepartment() != null ? location.getDepartment().getId() : null;
+        requireAccessToDepartment(caller, currentDeptId, true);
 
         locationRepository.delete(location);
     }
@@ -215,5 +168,47 @@ public class LocationService {
     private Location getLocation(UUID id) {
         return locationRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.LOCATION_NOT_EXIST));
+    }
+
+    private boolean hasViewPermission() {
+        return currentUserService.hasRole(RoleName.SUPER_ADMIN) ||
+               currentUserService.hasRole(RoleName.DEPARTMENT_ADMIN) ||
+               currentUserService.hasAuthority("LOCATION_VIEW_DEPARTMENT") ||
+               currentUserService.hasAuthority("MEETING_CREATE");
+    }
+
+    private boolean hasManagePermission() {
+        return currentUserService.hasRole(RoleName.SUPER_ADMIN) ||
+               currentUserService.hasRole(RoleName.DEPARTMENT_ADMIN) ||
+               currentUserService.hasAuthority("LOCATION_MANAGE_DEPARTMENT");
+    }
+
+    private void requireAccessToDepartment(User caller, UUID targetDeptId, boolean isManage) {
+        if (currentUserService.hasRole(RoleName.SUPER_ADMIN)) return;
+
+        // If target has no department (shared), anyone with view permission can see it
+        // but only SUPER_ADMIN can manage it
+        if (targetDeptId == null) {
+            if (isManage) {
+                throw new AppException(ErrorCode.UNAUTHOZIZED);
+            } else {
+                if (!hasViewPermission()) {
+                    throw new AppException(ErrorCode.UNAUTHOZIZED);
+                }
+                return; // Allowed to view
+            }
+        }
+
+        boolean hasPermission = isManage ? hasManagePermission() : hasViewPermission();
+        if (hasPermission) {
+            if (caller.getDepartment() == null) {
+                throw new AppException(ErrorCode.UNAUTHOZIZED);
+            }
+            if (!departmentService.getAllSubDepartmentIds(caller.getDepartment().getId()).contains(targetDeptId)) {
+                throw new AppException(ErrorCode.UNAUTHOZIZED);
+            }
+            return;
+        }
+        throw new AppException(ErrorCode.UNAUTHOZIZED);
     }
 }

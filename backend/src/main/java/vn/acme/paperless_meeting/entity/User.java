@@ -63,6 +63,9 @@ public class User extends SoftDeletable {
         @Column(name = "status")
         private UserStatus status;
 
+        @Column(name = "is_first_login")
+        private Boolean isFirstLogin = true;
+
         private String avatar;
 
         @ManyToOne(fetch = FetchType.LAZY)

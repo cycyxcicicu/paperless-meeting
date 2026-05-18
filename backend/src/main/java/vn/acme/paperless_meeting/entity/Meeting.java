@@ -52,7 +52,15 @@ public class Meeting extends SoftDeletable {
     private UUID id;
 
     private String title;
-    private String description;
+    @Column(name = "approved_at")
+    private LocalDateTime approvedAt;
+
+    @Column(name = "reject_reason", columnDefinition = "TEXT")
+    private String rejectReason;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "approved_by")
+    private User approvedBy;
     @Column(name = "start_time")
     private LocalDateTime startTime;
     @Column(name = "end_time")
@@ -65,8 +73,11 @@ public class Meeting extends SoftDeletable {
     @CreationTimestamp
     private LocalDateTime createdAt;
 
-    private LocalDateTime checkinOpenAt;
-    private LocalDateTime checkinCloseAt;
+    @Column(columnDefinition = "TEXT")
+    private String content;
+
+    @Column(name = "online_link")
+    private String onlineLink;
     
     private Integer lateAfterMinutes;
 

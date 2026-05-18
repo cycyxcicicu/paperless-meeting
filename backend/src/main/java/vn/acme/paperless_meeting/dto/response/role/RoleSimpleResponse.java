@@ -9,5 +9,6 @@ import lombok.Getter;
 @Builder
 public class RoleSimpleResponse {
     private UUID id;
+    private String roleCode;
     private String roleName;
 }

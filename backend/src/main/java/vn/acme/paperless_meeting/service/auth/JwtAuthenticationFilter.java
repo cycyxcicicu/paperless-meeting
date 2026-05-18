@@ -2,8 +2,8 @@ package vn.acme.paperless_meeting.service.auth;
 
 import java.io.IOException;
 
-import org.springframework.http.HttpHeaders;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -25,7 +25,7 @@ import vn.acme.paperless_meeting.service.util.CookieUtil;
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private static final String BEARER_PREFIX = "Bearer ";
-    
+
     private final JwtTokenVerifier jwtTokenVerifier;
     private final SecurityUserDetailsService userDetailsService;
 
@@ -34,8 +34,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
-                                    HttpServletResponse response,
-                                    FilterChain filterChain) throws ServletException, IOException {
+            HttpServletResponse response,
+            FilterChain filterChain) throws ServletException, IOException {
 
         String token = resolveAccessToken(request);
 
@@ -53,15 +53,37 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             String username = jwtTokenVerifier.extractUsername(token);
             UserDetails userDetails = userDetailsService.loadUserByUsername(username);
 
-            UsernamePasswordAuthenticationToken authentication =
-                    new UsernamePasswordAuthenticationToken(
-                            userDetails,
-                            null,
-                            userDetails.getAuthorities()
-                    );
+            UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
+                    userDetails,
+                    null,
+                    userDetails.getAuthorities());
 
             authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
             SecurityContextHolder.getContext().setAuthentication(authentication);
+
+            // Xử lý Strict Backend Check cho First Login
+            if (userDetails instanceof UserPrincipal) {
+                UserPrincipal principal = (UserPrincipal) userDetails;
+                if (principal.isFirstLogin()) {
+                    String requestURI = request.getRequestURI();
+                    // Các endpoint cho phép khi chưa đổi mật khẩu (Dùng endsWith để tránh bị lỗi do dính prefix context-path như /api/v1)
+                    boolean isAllowed = requestURI.endsWith("/auth/change-password") ||
+                            requestURI.endsWith("/auth/logout") ||
+                            requestURI.endsWith("/auth/me") ||
+                            requestURI.endsWith("/auth/refresh");
+
+                    if (!isAllowed) {
+                        // Trả về 403 Forbidden nếu cố gắng gọi các API khác
+                        response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                        response.setContentType("application/json");
+                        response.setCharacterEncoding("UTF-8");
+                        response.getWriter().write(
+                                "{\"success\": false, \"message\": \"Bạn phải đổi mật khẩu trong lần đăng nhập đầu tiên.\"}");
+                        response.getWriter().flush();
+                        return;
+                    }
+                }
+            }
 
         } catch (Exception ex) {
             log.warn(
@@ -69,8 +91,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     request.getMethod(),
                     request.getRequestURI(),
                     ex.getMessage(),
-                    ex
-            );
+                    ex);
             // token sai -> để chain đi tiếp, endpoint private sẽ bị chặn ở tầng security
         }
 

@@ -8,23 +8,13 @@ import vn.acme.paperless_meeting.dto.request.position.PositionUpsertRequest;
 import vn.acme.paperless_meeting.dto.response.position.PositionResponse;
 import vn.acme.paperless_meeting.entity.Position;
 
-@Mapper(componentModel = "spring")
+@Mapper(componentModel = "spring", unmappedTargetPolicy = org.mapstruct.ReportingPolicy.IGNORE)
 public interface PositionMapper {
 
-    @Mapping(target = "id", ignore = true)
-    @Mapping(target = "department", ignore = true)
-    @Mapping(target = "createdAt", ignore = true)
-    @Mapping(target = "updatedAt", ignore = true)
     Position toEntity(PositionUpsertRequest request);
 
-    @Mapping(target = "id", ignore = true)
-    @Mapping(target = "department", ignore = true)
-    @Mapping(target = "createdAt", ignore = true)
-    @Mapping(target = "updatedAt", ignore = true)
     void updateEntity(PositionUpsertRequest request, @MappingTarget Position position);
 
-    @Mapping(target = "departmentId", ignore = true)
-    @Mapping(target = "departmentName", ignore = true)
     PositionResponse toResponse(Position position);
 
     /**

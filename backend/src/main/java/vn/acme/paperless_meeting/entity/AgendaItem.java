@@ -72,6 +72,19 @@ public class AgendaItem extends SoftDeletable {
         @JoinColumn(name = "owner_user_id")
         private User ownerUser;
 
+        @ManyToOne(fetch = FetchType.LAZY)
+        @JoinColumn(name = "prepared_by_user_id")
+        private User preparedByUser;
+
+        @Column(name = "start_time")
+        private LocalDateTime startTime;
+
+        @Column(name = "end_time")
+        private LocalDateTime endTime;
+
+        @Column(name = "reject_reason", length = 1000)
+        private String rejectReason;
+
         @OneToMany(mappedBy = "agendaItem", orphanRemoval = false)
         private List<Motion> motionList = new ArrayList<>();
 

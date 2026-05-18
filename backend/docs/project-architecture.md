@@ -65,7 +65,7 @@ The project models the following core domain entities:
   - `UserDepartment` is a junction entity enabling N–N relationship between `User` and `Department` with metadata (`isPrimary`, `endDate`).
 
 - **Meeting / Agenda / Participants**: core meeting workflow.
-  - `Meeting` is the main entity with status (draft, scheduled, ongoing, closed, cancelled).
+  - `Meeting` is the main entity with status (`DRAFT`, `PENDING_APPROVAL`, `UPCOMING`, `IN_PROGRESS`, `CLOSED`, `CANCELLED`, `REJECTED`). Trạng thái chuyển từ `UPCOMING` sang `IN_PROGRESS` được tự động hóa bằng Cron Job (`MeetingStatusJob`).
   - `AgendaItem` represents agenda items belonging to a meeting, ordered by `order_no`.
   - `MeetingParticipant` links `User` to `Meeting` with participant role (chair, secretary, member, guest), invite status, and attendance status.
 

@@ -1,0 +1,40 @@
+package vn.acme.paperless_meeting.entity.enums;
+
+public enum PermissionName {
+    // User-related
+    PROFILE_UPDATE_SELF,
+    USER_VIEW_DEPARTMENT,
+    USER_MANAGE_DEPARTMENT,
+    USER_VIEW_ALL,
+    USER_MANAGE_ALL,
+
+    // Meeting-related
+    MEETING_CREATE,
+    MEETING_VIEW_OWN,
+    MEETING_MANAGE_OWN,
+    MEETING_VIEW_DEPARTMENT,
+    MEETING_MANAGE_DEPARTMENT,
+    MEETING_VIEW_ALL,
+    MEETING_MANAGE_ALL,
+
+    // Location
+    LOCATION_VIEW_DEPARTMENT,
+    LOCATION_MANAGE_DEPARTMENT,
+    LOCATION_VIEW_ALL,
+    LOCATION_MANAGE_ALL,
+
+    // Report
+    REPORT_VIEW_DEPARTMENT,
+    REPORT_VIEW_ALL,
+
+    // Backwards-compat / legacy permissions
+    MEETING_VIEW,
+    MEETING_UPDATE,
+    MEETING_CANCEL,
+    PARTICIPANT_MANAGE,
+    AGENDA_MANAGE,
+
+    // RBAC maintenance
+    MANAGE_ROLE_ASSIGNMENTS,
+    VIEW_ROLE_ASSIGNMENTS
+}

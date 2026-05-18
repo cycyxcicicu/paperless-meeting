@@ -5,11 +5,13 @@ import java.util.UUID;
 
 import lombok.Builder;
 import lombok.Getter;
+import lombok.Setter;
 import vn.acme.paperless_meeting.entity.enums.AttendanceStatus;
 import vn.acme.paperless_meeting.entity.enums.InviteStatus;
 import vn.acme.paperless_meeting.entity.enums.ParticipantRole;
 
 @Getter
+@Setter
 @Builder
 public class ParticipantResponse {
     private UUID meetingId;
@@ -20,6 +22,19 @@ public class ParticipantResponse {
     private InviteStatus inviteStatus;
     private AttendanceStatus attendanceStatus;
     private String note;
+    private String deptName;
+    private String positionName;
+    private String declineReason;
+    private UUID substituteUserId;
+    private String substituteUserFullName;
+    private String substituteName;
+    private String substitutePosition;
+    private String substituteCompany;
+    private String substituteDepartment;
+    private String substituteEmail;
+    private String substitutePhone;
+    private String substitutedForUserName;
+    private String substitutedForUserPosition;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

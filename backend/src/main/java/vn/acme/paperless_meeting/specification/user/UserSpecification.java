@@ -14,7 +14,7 @@ import vn.acme.paperless_meeting.entity.User;
 import vn.acme.paperless_meeting.entity.enums.UserStatus;
 
 public class UserSpecification {
-    public static Specification<User> build(String keyword, UserStatus status, String roleParam, UUID departmentId) {
+    public static Specification<User> build(String keyword, UserStatus status, String roleParam, List<UUID> departmentIds) {
         return (root, query, cb) -> {
             // avoid fetch joins in count query
             if (!Long.class.equals(query.getResultType())) {
@@ -39,8 +39,12 @@ public class UserSpecification {
                 predicates.add(cb.equal(root.get("status"), status));
             }
 
-            if (departmentId != null) {
-                predicates.add(cb.equal(root.get("department").get("id"), departmentId));
+            if (departmentIds != null && !departmentIds.isEmpty()) {
+                if (departmentIds.size() == 1) {
+                    predicates.add(cb.equal(root.get("department").get("id"), departmentIds.get(0)));
+                } else {
+                    predicates.add(root.get("department").get("id").in(departmentIds));
+                }
             }
 
             if (roleParam != null && !roleParam.isBlank()) {

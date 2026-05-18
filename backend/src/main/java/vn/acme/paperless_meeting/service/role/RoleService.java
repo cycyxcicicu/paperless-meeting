@@ -1,9 +1,12 @@
 package vn.acme.paperless_meeting.service.role;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
@@ -13,14 +16,18 @@ import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import vn.acme.paperless_meeting.dto.request.role.RoleUpsertRequest;
 import vn.acme.paperless_meeting.dto.response.role.RoleResponse;
+import java.util.Arrays;
 import vn.acme.paperless_meeting.entity.Permission;
 import vn.acme.paperless_meeting.entity.Role;
 import vn.acme.paperless_meeting.entity.RolePermission;
 import vn.acme.paperless_meeting.entity.User;
+import vn.acme.paperless_meeting.entity.enums.RoleName;
 import vn.acme.paperless_meeting.entity.enums.UserStatus;
 import vn.acme.paperless_meeting.exceptions.AppException;
+import vn.acme.paperless_meeting.exceptions.AppValidationException;
 import vn.acme.paperless_meeting.exceptions.ErrorCode;
 import vn.acme.paperless_meeting.mapper.role.RoleMapper;
+import vn.acme.paperless_meeting.repository.PermissionRepository;
 import vn.acme.paperless_meeting.repository.RoleRepository;
 import vn.acme.paperless_meeting.repository.UserRepository;
 
@@ -30,30 +37,45 @@ import vn.acme.paperless_meeting.repository.UserRepository;
 public class RoleService {
     RoleRepository roleRepository;
     RoleMapper roleMapper;
-    vn.acme.paperless_meeting.repository.PermissionRepository permissionRepository;
+    PermissionRepository permissionRepository;
     UserRepository userRepository;
 
+  
     public List<RoleResponse> findAll() {
         return roleRepository.findAll().stream()
                 .map(roleMapper::toResponse)
                 .toList();
     }
 
+  
     public RoleResponse findById(UUID id) {
         return roleMapper.toResponse(getRole(id));
     }
 
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
     public RoleResponse create(RoleUpsertRequest request) {
-        if (roleRepository.existsByRoleName(request.getRoleName())) {
-            throw new AppException(ErrorCode.ROLE_EXISTED);
+        String normalizedRoleCode = request.getRoleCode().trim().toUpperCase();
+        
+        Map<String, String> errors = new HashMap<>();
+
+        if (roleRepository.existsByRoleCode(normalizedRoleCode)) {
+            errors.put("roleCode", ErrorCode.ROLE_EXISTED.getMessage());
+        }
+
+        if (request.getPermCodes() != null) {
+            if (permissionRepository.countByPermCodeIn(request.getPermCodes()) != request.getPermCodes().size()) {
+                errors.put("permCodes", ErrorCode.PERMISSION_NOT_EXIST.getMessage());
+            }
+        }
+
+        if (!errors.isEmpty()) {
+            throw new AppValidationException(errors);
         }
 
         Role role = roleMapper.toEntity(request);
-        role.setRoleName(request.getRoleName().toUpperCase());
+        role.setRoleCode(normalizedRoleCode);
+        role.setRoleName(request.getRoleName().trim());
         if (request.getPermCodes() != null) {
-            if (permissionRepository.countByPermCodeIn(request.getPermCodes()) != request.getPermCodes().size()) {
-                throw new AppException(ErrorCode.PERMISSION_NOT_EXIST);
-            }
             Set<Permission> perms = permissionRepository.findByPermCodeIn(request.getPermCodes());
             // clear existing links (orphanRemoval will delete them)
             role.getRolePermissionSet().clear();
@@ -70,20 +92,36 @@ public class RoleService {
     }
 
     @Transactional
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
     public RoleResponse update(UUID id, RoleUpsertRequest request) {
         Role role = getRole(id);
 
-        if (roleRepository.existsByRoleNameAndIdNot(request.getRoleName(), id)) {
-            throw new AppException(ErrorCode.ROLE_EXISTED);
-        }
+        boolean isCoreRole = Arrays.stream(RoleName.values()).anyMatch(rn -> rn.name().equals(role.getRoleCode()));
+        String normalizedRoleCode = request.getRoleCode().trim().toUpperCase();
 
-        roleMapper.updateEntity(request, role);
-        role.setRoleName(request.getRoleName().toUpperCase());
+        Map<String, String> errors = new HashMap<>();
+
+        if (isCoreRole && !role.getRoleCode().equals(normalizedRoleCode)) {
+            errors.put("roleCode", ErrorCode.SYSTEM_ROLE_PROTECTED.getMessage());
+        } else if (roleRepository.existsByRoleCodeAndIdNot(normalizedRoleCode, id)) {
+            errors.put("roleCode", ErrorCode.ROLE_EXISTED.getMessage());
+        }
 
         if (request.getPermCodes() != null) {
             if (permissionRepository.countByPermCodeIn(request.getPermCodes()) != request.getPermCodes().size()) {
-                throw new AppException(ErrorCode.PERMISSION_NOT_EXIST);
+                errors.put("permCodes", ErrorCode.PERMISSION_NOT_EXIST.getMessage());
             }
+        }
+
+        if (!errors.isEmpty()) {
+            throw new AppValidationException(errors);
+        }
+
+        roleMapper.updateEntity(request, role);
+        role.setRoleCode(normalizedRoleCode);
+        role.setRoleName(request.getRoleName().trim());
+
+        if (request.getPermCodes() != null) {
             Set<Permission> perms = permissionRepository.findByPermCodeIn(request.getPermCodes());
             role.getRolePermissionSet().clear();
             for (Permission p : perms) {
@@ -99,8 +137,19 @@ public class RoleService {
         return roleMapper.toResponse(roleRepository.save(role));
     }
 
+    @PreAuthorize("hasRole('SUPER_ADMIN')")
     public void delete(UUID id) {
         Role role = getRole(id);
+
+        boolean isCoreRole = Arrays.stream(RoleName.values()).anyMatch(rn -> rn.name().equals(role.getRoleCode()));
+        if (isCoreRole) {
+            throw new AppException(ErrorCode.SYSTEM_ROLE_PROTECTED);
+        }
+
+        // Kiểm tra xem Role đã được sử dụng chưa
+        if (userRepository.existsByRole_Id(id)) {
+            throw new AppException(ErrorCode.ROLE_IN_USE);
+        }
 
         User deletedBy = null;
         try {

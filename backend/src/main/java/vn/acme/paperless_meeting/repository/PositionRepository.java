@@ -12,48 +12,33 @@ import vn.acme.paperless_meeting.entity.Position;
 
 public interface PositionRepository extends JpaRepository<Position, UUID> {
 
-    /**
-     * Tìm tất cả vị trí theo id phòng ban
-     * Lưu ý: các bản ghi bị xóa mềm (soft-deleted) sẽ tự động bị loại trừ
-     * bởi @SQLRestriction trên entity Position
-     */
+    // Tìm tất cả vị trí theo id phòng ban
     List<Position> findByDepartmentId(UUID departmentId);
 
-    /**
-     * Kiểm tra xem mã vị trí có tồn tại trong phòng ban hay không
-     * Lưu ý: các bản ghi bị xóa mềm (soft-deleted) sẽ được loại trừ tự động
-     * bởi @SQLRestriction
-     */
+    // Tìm các vị trí dùng chung (không thuộc phòng ban nào)
+    List<Position> findByDepartmentIsNull();
+
+    // Tìm các vị trí dùng chung VÀ các vị trí thuộc danh sách phòng ban
+    List<Position> findByDepartmentIsNullAndIsDeletedFalseOrDepartmentIdInAndIsDeletedFalse(List<UUID> departmentIds);
+
+    @Query("SELECT p FROM Position p WHERE (p.department IS NULL OR p.department.id IN :departmentIds) ORDER BY p.department.id NULLS FIRST, p.rankOrder ASC, p.positionName ASC")
+    List<Position> findSystemAndAllowedPositions(@Param("departmentIds") List<UUID> departmentIds);
+
+
+    // Kiểm tra trùng mã vị trí trong phòng ban
     boolean existsByPositionCodeAndDepartmentId(String positionCode, UUID departmentId);
+    boolean existsByPositionCodeAndDepartmentIsNull(String positionCode);
 
-    /**
-     * Kiểm tra xem mã vị trí có tồn tại trong phòng ban, ngoại trừ một vị trí cụ
-     * thể
-     * Lưu ý: các bản ghi bị xóa mềm (soft-deleted) sẽ được loại trừ tự động
-     * bởi @SQLRestriction
-     */
     boolean existsByPositionCodeAndDepartmentIdAndIdNot(String positionCode, UUID departmentId, UUID id);
+    boolean existsByPositionCodeAndDepartmentIsNullAndIdNot(String positionCode, UUID id);
 
-    /**
-     * Kiểm tra xem tên vị trí có tồn tại trong phòng ban hay không
-     * Lưu ý: các bản ghi bị xóa mềm (soft-deleted) sẽ được loại trừ tự động
-     * bởi @SQLRestriction
-     */
     boolean existsByPositionNameAndDepartmentId(String positionName, UUID departmentId);
+    boolean existsByPositionNameAndDepartmentIsNull(String positionName);
 
-    /**
-     * Kiểm tra xem tên vị trí có tồn tại trong phòng ban, ngoại trừ một vị trí cụ
-     * thể
-     * Lưu ý: các bản ghi bị xóa mềm (soft-deleted) sẽ được loại trừ tự động
-     * bởi @SQLRestriction
-     */
     boolean existsByPositionNameAndDepartmentIdAndIdNot(String positionName, UUID departmentId, UUID id);
+    boolean existsByPositionNameAndDepartmentIsNullAndIdNot(String positionName, UUID id);
 
-    /**
-     * Tìm các vị trí theo id phòng ban và sắp xếp kết quả
-     * Lưu ý: các bản ghi bị xóa mềm (soft-deleted) sẽ được loại trừ tự động
-     * bởi @SQLRestriction
-     */
+    // Tìm các vị trí theo id phòng ban và sắp xếp kết quả
     @Query("""
             SELECT p FROM Position p
             WHERE p.department.id = :departmentId
@@ -61,17 +46,9 @@ public interface PositionRepository extends JpaRepository<Position, UUID> {
             """)
     List<Position> findByDepartmentIdOrdered(@Param("departmentId") UUID departmentId);
 
-    /**
-     * Tìm tất cả vị trí theo danh sách id phòng ban
-     * Lưu ý: các bản ghi bị xóa mềm (soft-deleted) sẽ được loại trừ tự động
-     * bởi @SQLRestriction
-     */
+    // Tìm tất cả vị trí theo danh sách id phòng ban
     List<Position> findByDepartmentIdIn(List<UUID> departmentIds);
 
-    /**
-     * Tìm vị trí theo mã
-     * Lưu ý: các bản ghi bị xóa mềm (soft-deleted) sẽ được loại trừ tự động
-     * bởi @SQLRestriction
-     */
+    // Tìm vị trí theo mã
     Optional<Position> findByPositionCode(String positionCode);
 }

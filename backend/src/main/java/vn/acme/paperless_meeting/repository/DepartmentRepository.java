@@ -9,7 +9,9 @@ import vn.acme.paperless_meeting.entity.Department;
 import java.util.List;
 import java.util.UUID;
 
-public interface DepartmentRepository extends JpaRepository<Department, UUID> {
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+
+public interface DepartmentRepository extends JpaRepository<Department, UUID>, JpaSpecificationExecutor<Department> {
 	boolean existsByDeptNameAndParentDepartment_Id(String deptName, UUID parentDepartmentId);
 
 	boolean existsByDeptNameAndParentDepartmentIsNull(String deptName);

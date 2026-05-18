@@ -29,10 +29,12 @@ import vn.acme.paperless_meeting.entity.enums.AttendanceStatus;
 @AllArgsConstructor
 @Entity
 @Table(name = "attendance_logs", uniqueConstraints = {
-                @UniqueConstraint(columnNames = { "meeting_id", "user_id" }, name = "uk_attendance_meeting_user")
+                @UniqueConstraint(columnNames = { "meeting_id", "user_id" }, name = "uk_attendance_meeting_user"),
+                @UniqueConstraint(columnNames = { "meeting_id", "guest_id" }, name = "uk_attendance_meeting_guest")
 }, indexes = {
                 @Index(columnList = "meeting_id", name = "idx_attendance_meeting"),
                 @Index(columnList = "user_id", name = "idx_attendance_user"),
+                @Index(columnList = "guest_id", name = "idx_attendance_guest"),
                 @Index(columnList = "checkin_time", name = "idx_attendance_checkin_time")
 })
 
@@ -75,6 +77,10 @@ public class AttendanceLog {
         @ManyToOne(fetch = FetchType.LAZY)
         @JoinColumn(name = "user_id")
         private User user;
+
+        @ManyToOne(fetch = FetchType.LAZY)
+        @JoinColumn(name = "guest_id")
+        private MeetingGuest guest;
 
         @ManyToOne(fetch = FetchType.LAZY)
         @JoinColumn(name = "recorded_by")

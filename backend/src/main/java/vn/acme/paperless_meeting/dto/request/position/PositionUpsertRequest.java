@@ -28,6 +28,4 @@ public class PositionUpsertRequest {
     @Size(max = 500, message = "DESCRIPTION_INVALID")
     private String description;
 
-    @NotNull(message = "DEPARTMENT_ID_REQUIRED")
-    private UUID departmentId;
 }

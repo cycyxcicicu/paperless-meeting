@@ -35,5 +35,7 @@ public class DepartmentUpsertRequest {
     @Size(max = 255, message = "ADDRESS_INVALID")
     private String headquartersAddress;
 
+    private String description;
+
     private UUID parentDepartmentId;
 }

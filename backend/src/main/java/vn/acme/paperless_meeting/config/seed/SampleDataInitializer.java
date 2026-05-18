@@ -32,7 +32,6 @@ import vn.acme.paperless_meeting.entity.User;
 import vn.acme.paperless_meeting.entity.enums.AttendanceStatus;
 import vn.acme.paperless_meeting.entity.enums.DepartmentStatus;
 import vn.acme.paperless_meeting.entity.enums.InviteStatus;
-import vn.acme.paperless_meeting.entity.enums.LocationType;
 import vn.acme.paperless_meeting.entity.enums.MeetingStatus;
 import vn.acme.paperless_meeting.entity.enums.ParticipantRole;
 import vn.acme.paperless_meeting.entity.enums.UserStatus;
@@ -202,12 +201,12 @@ public class SampleDataInitializer implements CommandLineRunner {
         Map<String, Department> departmentByPath = ensureDepartments();
         Map<String, Position> positionByCode = ensurePositions(departmentByPath);
 
-        Map<String, Role> roleByName = ensureRoles();
+        Map<String, Role> roleByCode = ensureRoles();
         Map<String, Permission> permissionByCode = ensurePermissions();
-        ensureRolePermissions(roleByName, permissionByCode);
+        ensureRolePermissions(roleByCode, permissionByCode);
 
         Map<String, User> userByUsername = ensureUsers(departmentByPath, positionByCode);
-        ensureRoleAssignments(roleByName, userByUsername);
+        ensureRoleAssignments(roleByCode, userByUsername);
 
         Map<String, Location> locationByCode = ensureLocations();
         List<MeetingSeed> meetingSeeds = buildMeetingSeeds();
@@ -230,6 +229,7 @@ public class SampleDataInitializer implements CommandLineRunner {
                 department.setParentDepartment(parent);
                 department.setCode(deriveDepartmentCode(seed));
                 department.setStatus(DepartmentStatus.ACTIVE);
+                department.setDescription("Mô tả mặc định cho " + seed.name());
                 department = departmentRepository.save(department);
                 existing.add(department);
             } else {
@@ -386,20 +386,28 @@ public class SampleDataInitializer implements CommandLineRunner {
     }
 
     private Map<String, Role> ensureRoles() {
-        List<String> roleNames = List.of("SUPER_ADMIN", "DEPARTMENT_ADMIN", "USER");
-        Map<String, Role> existingByName = indexBy(roleRepository.findAll(), role -> role.getRoleName().toUpperCase());
+        Map<String, String> roleMap = new LinkedHashMap<>();
+        roleMap.put("SUPER_ADMIN", "Quản trị hệ thống");
+        roleMap.put("DEPARTMENT_ADMIN", "Quản trị đơn vị");
+        roleMap.put("USER", "Người dùng hệ thống");
+
+        Map<String, Role> existingByCode = indexBy(roleRepository.findAll(), role -> role.getRoleCode() != null ? role.getRoleCode().toUpperCase() : "");
         Map<String, Role> result = new LinkedHashMap<>();
 
-        for (String roleName : roleNames) {
-            Role role = existingByName.get(roleName);
+        for (Map.Entry<String, String> entry : roleMap.entrySet()) {
+            String roleCode = entry.getKey();
+            String roleName = entry.getValue();
+
+            Role role = existingByCode.get(roleCode);
             if (role == null) {
                 role = new Role();
             }
 
+            role.setRoleCode(roleCode);
             role.setRoleName(roleName);
             role = roleRepository.save(role);
-            existingByName.put(roleName, role);
-            result.put(roleName, role);
+            existingByCode.put(roleCode, role);
+            result.put(roleCode, role);
         }
 
         return result;
@@ -464,7 +472,7 @@ public class SampleDataInitializer implements CommandLineRunner {
         return result;
     }
 
-    private void ensureRolePermissions(Map<String, Role> roleByName, Map<String, Permission> permissionByCode) {
+    private void ensureRolePermissions(Map<String, Role> roleByCode, Map<String, Permission> permissionByCode) {
         // Build role -> permission mapping according to new RBAC matrix.
         Set<String> allCodes = new LinkedHashSet<>(permissionByCode.keySet());
 
@@ -493,13 +501,14 @@ public class SampleDataInitializer implements CommandLineRunner {
         // Regular USER: personal profile + own meeting actions
         matrix.put("USER", Set.of(
                 "PROFILE_UPDATE_SELF",
+                "MEETING_CREATE",
                 "MEETING_VIEW_OWN",
                 "MEETING_MANAGE_OWN",
                 // Compatibility
                 "MEETING_VIEW"));
 
         for (Map.Entry<String, Set<String>> entry : matrix.entrySet()) {
-            Role role = roleByName.get(entry.getKey());
+            Role role = roleByCode.get(entry.getKey());
             if (role == null) {
                 throw new IllegalStateException("Missing role seed: " + entry.getKey());
             }
@@ -631,6 +640,7 @@ public class SampleDataInitializer implements CommandLineRunner {
         user.setEmail(seed.email());
         user.setPhone(seed.phone());
         user.setStatus(UserStatus.ACTIVE);
+        user.setIsFirstLogin(true);
         user.setPassword(passwordEncoder.encode(DEFAULT_PASSWORD));
         user.setPosition(position);
 
@@ -646,11 +656,11 @@ public class SampleDataInitializer implements CommandLineRunner {
         userRepository.save(user);
     }
 
-    private void ensureRoleAssignments(Map<String, Role> roleByName,
+    private void ensureRoleAssignments(Map<String, Role> roleByCode,
             Map<String, User> userByUsername) {
-        Role superAdminRole = requireRole(roleByName, "SUPER_ADMIN");
-        Role departmentAdminRole = requireRole(roleByName, "DEPARTMENT_ADMIN");
-        Role userRole = requireRole(roleByName, "USER");
+        Role superAdminRole = requireRole(roleByCode, "SUPER_ADMIN");
+        Role departmentAdminRole = requireRole(roleByCode, "DEPARTMENT_ADMIN");
+        Role userRole = requireRole(roleByCode, "USER");
 
         User adminHp = requireUser(userByUsername, "admin.hp");
         User globalCreator = requireUser(userByUsername, "global.creator");
@@ -703,8 +713,8 @@ public class SampleDataInitializer implements CommandLineRunner {
             location.setName(seed.name());
             location.setAddress(seed.address());
             location.setRoomCode(seed.roomCode());
-            location.setOnlineLink(seed.onlineLink());
-            location.setType(seed.type());
+            location.setIsActive(seed.isActive());
+            location.setCapacity(seed.capacity());
 
             Location saved = locationRepository.save(location);
             existingByRoomCode.put(seed.roomCode(), saved);
@@ -723,26 +733,26 @@ public class SampleDataInitializer implements CommandLineRunner {
                     blueprint.locationCode("office"),
                     "Phòng họp chuyên đề - " + blueprint.name(),
                     officeAddress,
-                    null,
-                    LocationType.OFFLINE));
+                    true,
+                    20));
             seeds.add(new LocationSeed(
                     blueprint.locationCode("hall"),
                     "Hội trường - " + blueprint.name(),
                     officeAddress,
-                    null,
-                    LocationType.OFFLINE));
+                    true,
+                    200));
             seeds.add(new LocationSeed(
                     blueprint.locationCode("online"),
                     "Phòng họp trực tuyến - " + blueprint.name(),
                     null,
-                    "https://meet.hp.local/" + blueprint.slug() + "/online",
-                    LocationType.ONLINE));
+                    true,
+                    100));
             seeds.add(new LocationSeed(
                     blueprint.locationCode("hybrid"),
                     "Phòng họp kết hợp - " + blueprint.name(),
                     officeAddress,
-                    "https://meet.hp.local/" + blueprint.slug() + "/hybrid",
-                    LocationType.HYBRID));
+                    true,
+                    50));
         }
 
         return seeds;
@@ -772,10 +782,9 @@ public class SampleDataInitializer implements CommandLineRunner {
                 blueprint.focusLabel(),
                 "Dự thảo kế hoạch " + blueprint.focusLabel() + " - " + blueprint.name(),
                 "Chuẩn bị nội dung và phân công đầu mối cho " + blueprint.focusLabel() + ".",
+                "https://meet.hp.local/" + blueprint.slug() + "/draft",
                 startTime,
                 startTime.plusMinutes(90),
-                startTime.minusMinutes(20),
-                startTime.plusMinutes(15),
                 10,
                 MeetingStatus.DRAFT,
                 null,
@@ -794,12 +803,11 @@ public class SampleDataInitializer implements CommandLineRunner {
                 blueprint.focusLabel(),
                 "Giao ban " + blueprint.focusLabel() + " định kỳ - " + blueprint.name(),
                 "Rà soát tiến độ triển khai nhiệm vụ " + blueprint.focusLabel() + " của " + blueprint.name() + ".",
+                "https://meet.hp.local/" + blueprint.slug() + "/operational",
                 startTime,
                 startTime.plusMinutes(120),
-                startTime.minusMinutes(20),
-                startTime.plusMinutes(15),
                 10,
-                MeetingStatus.SCHEDULED,
+                MeetingStatus.UPCOMING,
                 null,
                 blueprint.creatorUsername(1),
                 blueprint.topLevelPath(),
@@ -808,8 +816,8 @@ public class SampleDataInitializer implements CommandLineRunner {
     }
 
     private MeetingSeed buildReviewMeetingSeed(DepartmentBlueprint blueprint, int departmentIndex) {
-        MeetingStatus status = departmentIndex % 2 == 0 ? MeetingStatus.CLOSED : MeetingStatus.ONGOING;
-        LocalDateTime startTime = status == MeetingStatus.ONGOING
+        MeetingStatus status = departmentIndex % 2 == 0 ? MeetingStatus.CLOSED : MeetingStatus.IN_PROGRESS;
+        LocalDateTime startTime = status == MeetingStatus.IN_PROGRESS
                 ? MEETING_REFERENCE_DATE.minusMinutes(30).plusMinutes(departmentIndex * 3L)
                 : MEETING_REFERENCE_DATE.minusDays(7L + departmentIndex).withHour(13).withMinute(30).withSecond(0)
                         .withNano(0);
@@ -821,10 +829,9 @@ public class SampleDataInitializer implements CommandLineRunner {
                 blueprint.focusLabel(),
                 "Tổng kết " + blueprint.focusLabel() + " quý II - " + blueprint.name(),
                 "Đánh giá kết quả và kiến nghị điều chỉnh cho " + blueprint.focusLabel() + ".",
+                "https://meet.hp.local/" + blueprint.slug() + "/review",
                 startTime,
                 startTime.plusMinutes(90),
-                startTime.minusMinutes(20),
-                startTime.plusMinutes(15),
                 10,
                 status,
                 null,
@@ -835,7 +842,7 @@ public class SampleDataInitializer implements CommandLineRunner {
     }
 
     private MeetingSeed buildInterDepartmentalMeetingSeed(DepartmentBlueprint blueprint, int departmentIndex) {
-        MeetingStatus status = departmentIndex % 4 == 0 ? MeetingStatus.CANCELLED : MeetingStatus.SCHEDULED;
+        MeetingStatus status = departmentIndex % 4 == 0 ? MeetingStatus.CANCELLED : MeetingStatus.UPCOMING;
         LocalDateTime startTime = meetingDate(20L + departmentIndex, 15, 0);
         return new MeetingSeed(
                 departmentIndex,
@@ -844,10 +851,9 @@ public class SampleDataInitializer implements CommandLineRunner {
                 blueprint.focusLabel(),
                 "Điều phối liên ngành về " + blueprint.focusLabel() + " - " + blueprint.name(),
                 "Phối hợp các đơn vị để xử lý nhóm nhiệm vụ " + blueprint.focusLabel() + ".",
+                "https://meet.hp.local/" + blueprint.slug() + "/inter-dept",
                 startTime,
                 startTime.plusMinutes(120),
-                startTime.minusMinutes(20),
-                startTime.plusMinutes(15),
                 10,
                 status,
                 status == MeetingStatus.CANCELLED ? "Điều chỉnh lịch làm việc liên ngành" : null,
@@ -871,11 +877,10 @@ public class SampleDataInitializer implements CommandLineRunner {
             }
 
             meeting.setTitle(seed.title());
-            meeting.setDescription(seed.description());
+            meeting.setContent(seed.content());
+            meeting.setOnlineLink(seed.onlineLink());
             meeting.setStartTime(seed.startTime());
             meeting.setEndTime(seed.endTime());
-            meeting.setCheckinOpenAt(seed.checkinOpenAt());
-            meeting.setCheckinCloseAt(seed.checkinCloseAt());
             meeting.setLateAfterMinutes(seed.lateAfterMinutes());
             meeting.setStatus(seed.status());
             meeting.setCancelReason(seed.cancelReason());
@@ -955,7 +960,7 @@ public class SampleDataInitializer implements CommandLineRunner {
     }
 
     private List<ParticipantSeed> buildReviewParticipants(MeetingSeed seed, DepartmentBlueprint blueprint) {
-        boolean ongoing = seed.status() == MeetingStatus.ONGOING;
+        boolean ongoing = seed.status() == MeetingStatus.IN_PROGRESS;
         AttendanceStatus chairStatus = AttendanceStatus.PRESENT;
         AttendanceStatus secretaryStatus = AttendanceStatus.PRESENT;
         AttendanceStatus participantStatus = ongoing ? AttendanceStatus.NOT_CHECKED_IN : AttendanceStatus.PRESENT;
@@ -1166,8 +1171,8 @@ public class SampleDataInitializer implements CommandLineRunner {
             String roomCode,
             String name,
             String address,
-            String onlineLink,
-            LocationType type) {
+            Boolean isActive,
+            Integer capacity) {
     }
 
     private record MeetingSeed(
@@ -1176,11 +1181,10 @@ public class SampleDataInitializer implements CommandLineRunner {
             String departmentName,
             String focusLabel,
             String title,
-            String description,
+            String content,
+            String onlineLink,
             LocalDateTime startTime,
             LocalDateTime endTime,
-            LocalDateTime checkinOpenAt,
-            LocalDateTime checkinCloseAt,
             Integer lateAfterMinutes,
             MeetingStatus status,
             String cancelReason,
