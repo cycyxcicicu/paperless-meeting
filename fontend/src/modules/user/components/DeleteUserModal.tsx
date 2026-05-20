@@ -73,7 +73,12 @@ export const DeleteUserModal: React.FC<DeleteUserModalProps> = ({
             </div>
             <div className="flex items-start gap-2">
               <span className="text-xs btn-primary text-gray-600 min-w-[100px]">Đơn vị:</span>
-              <span className="text-sm text-gray-900">{user.department}</span>
+              <span className="text-sm text-gray-900">
+                {typeof user.department === 'object' && user.department !== null
+                  ? (user.department as any).deptName || (user.department as any).name || ''
+                  : String(user.department || '')
+                }
+              </span>
             </div>
           </div>
         )}

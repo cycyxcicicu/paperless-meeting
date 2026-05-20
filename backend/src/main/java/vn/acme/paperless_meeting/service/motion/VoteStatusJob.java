@@ -21,6 +21,7 @@ public class VoteStatusJob {
 
     private final VoteSessionRepository voteSessionRepository;
     private final MotionRepository motionRepository;
+    private final MotionService motionService;
 
     @Scheduled(fixedDelay = 5000) // Chạy mỗi 5 giây
     @Transactional
@@ -33,16 +34,9 @@ public class VoteStatusJob {
             if (session.getOpenedAt() != null && session.getDurationMinutes() != null) {
                 LocalDateTime expireTime = session.getOpenedAt().plusMinutes(session.getDurationMinutes());
                 if (now.isAfter(expireTime)) {
-                    session.setStatus(VoteSessionStatus.CLOSED);
-                    session.setClosedAt(expireTime);
-                    voteSessionRepository.save(session);
-
-                    // Fix bug: phải gọi save() tường minh; Dirty Checking không đủ đảm bảo khi không có cascade MERGE
-                    Motion motion = session.getMotion();
-                    if (motion != null) {
-                        motion.setStatus(MotionStatus.CLOSED);
-                        motionRepository.save(motion);
-                        log.info("Auto closed expired VoteSession ID: {} for Motion: {}", session.getId(), motion.getTitle());
+                    motionService.completeVoteSession(session);
+                    if (session.getMotion() != null) {
+                        log.info("Auto closed expired VoteSession ID: {} for Motion: {}", session.getId(), session.getMotion().getTitle());
                     }
                 }
             }

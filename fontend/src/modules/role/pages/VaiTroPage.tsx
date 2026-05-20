@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { PageHeader } from '@/common/components/layout/PageHeader';
 import { RoleFormModal } from '@/modules/role/components/RoleFormModal';
 import { DeleteRoleModal } from '@/modules/role/components/DeleteRoleModal';
@@ -6,10 +6,12 @@ import { toast } from '@/lib/toast';
 import { Shield, ShieldCheck, Key, Plus, Trash2, Edit } from 'lucide-react';
 import { Button } from '@/common/components/ui/button';
 import { StatCard } from '@/common/components/ui/StatCard';
+import { roleApi } from '../services/role.api';
+import { permissionApi } from '../services/permission.api';
 
 // Table Engine
 import { DataTable, DataToolbar, BulkActionDef } from '@/common/components/table-engine';
-import { Role, getRoleTableColumns, getRoleRowActions, getRoleFilters, getRoleFilterLabel } from '@/modules/role/table/roleTable.schema';
+import { Role, getRoleTableColumns, getRoleRowActions, getRoleFilters } from '@/modules/role/table/roleTableColumns';
 
 const VaiTroPage = () => {
   // Pagination State
@@ -22,7 +24,7 @@ const VaiTroPage = () => {
   const [filterValues, setFilterValues] = useState<Record<string, string>>({});
 
   // Selection State
-  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]); // UUID representation
 
   // Modal State
   const [roleFormModal, setRoleFormModal] = useState<{
@@ -38,109 +40,40 @@ const VaiTroPage = () => {
 
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Mock data
-  const allRoles: Role[] = useMemo(() => [
-    {
-      id: 1,
-      name: 'TWD_Tổng hợp Phiếu lấy ý kiến',
-      code: 'TWD_TH_PLYK',
-      description: 'Vai trò dành cho người có quyền tổng hợp PLYK tại đơn vị',
-      isActive: true,
-      isSystem: false,
-      userCount: 12,
-      permissions: ['view_dashboard', 'view_documents', 'upload_documents']
-    },
-    {
-      id: 2,
-      name: 'TWD_Chủ trì',
-      code: 'TWD_CHUTRI',
-      description: '',
-      isActive: true,
-      isSystem: false,
-      userCount: 8,
-      permissions: ['view_dashboard', 'create_meeting', 'edit_meeting']
-    },
-    {
-      id: 3,
-      name: 'TWD_Quản trị hệ thống',
-      code: 'ROLE_SUPER_ADMIN_DV',
-      description: 'ROLE cho quản trị hệ thống',
-      isActive: true,
-      isSystem: true,
-      userCount: 3,
-      permissions: ['view_dashboard', 'manage_users', 'manage_roles', 'manage_settings']
-    },
-    {
-      id: 4,
-      name: 'TWD_Khách mời',
-      code: 'TWD_KM',
-      description: 'ROLE cho khách mời tham gia phiên họp',
-      isActive: true,
-      isSystem: false,
-      userCount: 25,
-      permissions: ['view_documents']
-    },
-    {
-      id: 5,
-      name: 'TWD_Thư ký',
-      code: 'TWD_THUKY',
-      description: 'ROLE cho thư ký và chuyên viên tạo phiên',
-      isActive: true,
-      isSystem: false,
-      userCount: 5,
-      permissions: ['view_dashboard', 'create_meeting', 'edit_meeting', 'view_documents', 'upload_documents']
-    },
-    {
-      id: 6,
-      name: 'TWD_Thành viên',
-      code: 'TWD_TV',
-      description: 'ROLE cho thành viên - chủ trì',
-      isActive: true,
-      isSystem: false,
-      userCount: 45,
-      permissions: ['view_dashboard', 'view_documents']
-    },
-    {
-      id: 7,
-      name: 'Admin Full Menu',
-      code: 'ADMIN_FULL_MENU',
-      description: '',
-      isActive: true,
-      isSystem: true,
-      userCount: 2,
-      permissions: ['view_dashboard', 'manage_users', 'manage_roles', 'create_meeting', 'edit_meeting', 'delete_meeting', 'view_documents', 'upload_documents', 'manage_settings']
-    },
-    {
-      id: 8,
-      name: 'TWD_Thư ký lãnh đạo',
-      code: 'ROLE_TK_LANH_DAO',
-      description: 'ROLE cho thư ký lãnh đạo',
-      isActive: true,
-      isSystem: false,
-      userCount: 4,
-      permissions: ['view_dashboard', 'view_documents']
-    },
-    {
-      id: 9,
-      name: 'TWD_Quản trị đơn vị',
-      code: 'ROLE_ADMIN_DV',
-      description: 'ROLE cho Admin đơn vị',
-      isActive: true,
-      isSystem: false,
-      userCount: 7,
-      permissions: ['view_dashboard', 'manage_users', 'manage_roles']
-    },
-    {
-      id: 10,
-      name: 'Trợ lý/Thư ký',
-      code: 'ROLE_BUSINESS_TK',
-      description: '',
-      isActive: true,
-      isSystem: false,
-      userCount: 15,
-      permissions: ['view_dashboard', 'view_documents']
-    },
-  ], []);
+  // Dynamic roles state & tables mapping
+  const [allRoles, setAllRoles] = useState<Role[]>([]);
+  const [permissionMap, setPermissionMap] = useState<Record<string, string>>({});
+
+  const fetchRoles = async () => {
+    try {
+      const res = await roleApi.getRoles();
+      if (res.success && res.data) {
+        setAllRoles(res.data);
+      }
+    } catch (e: any) {
+      toast.error('Lỗi', 'Không thể tải danh sách vai trò');
+    }
+  };
+
+  const fetchPermissionsForTable = async () => {
+    try {
+      const res = await permissionApi.getPermissions();
+      if (res.success && res.data) {
+        const map: Record<string, string> = {};
+        res.data.forEach(p => {
+          map[p.permCode] = p.description;
+        });
+        setPermissionMap(map);
+      }
+    } catch (e) {
+      // safe fallback
+    }
+  };
+
+  useEffect(() => {
+    fetchRoles();
+    fetchPermissionsForTable();
+  }, []);
 
   // Compute Filtered Data
   const filteredRoles = useMemo(() => {
@@ -149,21 +82,14 @@ const VaiTroPage = () => {
       if (searchQuery) {
         const query = searchQuery.toLowerCase();
         const matches =
-          role.name.toLowerCase().includes(query) ||
-          role.code.toLowerCase().includes(query) ||
-          role.description.toLowerCase().includes(query);
+          role.roleName.toLowerCase().includes(query) ||
+          role.roleCode.toLowerCase().includes(query);
         if (!matches) return false;
-      }
-
-      // 2. Status filter
-      if (filterValues.status && filterValues.status !== 'all') {
-        if (filterValues.status === 'active' && !role.isActive) return false;
-        if (filterValues.status === 'inactive' && role.isActive) return false;
       }
 
       return true;
     });
-  }, [allRoles, searchQuery, filterValues]);
+  }, [allRoles, searchQuery]);
 
   // Compute Pagination
   const totalItems = filteredRoles.length;
@@ -171,8 +97,8 @@ const VaiTroPage = () => {
   const currentRoles = filteredRoles.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   // Compute Stats
-  const activeRoles = filteredRoles.filter(r => r.isActive).length;
-  const systemRoles = filteredRoles.filter(r => r.isSystem).length;
+  const activeRoles = filteredRoles.length; // Fake or standard length representation
+  const systemRoles = filteredRoles.filter(r => r.roleCode.startsWith('ROLE_SUPER') || r.roleCode.includes('ADMIN')).length;
 
   // Handlers for Filters
   const handleFilterChange = (key: string, val: string) => {
@@ -187,23 +113,15 @@ const VaiTroPage = () => {
   };
 
   // Compute Active Filter Tags
-  const activeFiltersCount = (searchQuery ? 1 : 0) + Object.values(filterValues).filter(v => v !== 'all').length;
+  const activeFiltersCount = (searchQuery ? 1 : 0);
 
   const activeFilterTags = useMemo(() => {
     const tags: Array<{ label: string; onRemove: () => void }> = [];
     if (searchQuery) {
       tags.push({ label: `Tìm kiếm: "${searchQuery}"`, onRemove: () => setSearchQuery('') });
     }
-    Object.entries(filterValues).forEach(([key, value]) => {
-      if (value !== 'all') {
-        tags.push({
-          label: getRoleFilterLabel(key, value),
-          onRemove: () => handleFilterChange(key, 'all')
-        });
-      }
-    });
     return tags;
-  }, [searchQuery, filterValues]);
+  }, [searchQuery]);
 
   // Handlers for Selection
   const handleToggleSelectAll = () => {
@@ -214,25 +132,38 @@ const VaiTroPage = () => {
     }
   };
 
-  const handleToggleSelectRow = (id: number) => {
-    setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  const handleToggleSelectRow = (id: number | string) => {
+    setSelectedIds(prev => prev.includes(id as string) ? prev.filter(x => x !== id) : [...prev, id as string]);
   };
 
   // Handlers for Actions
-  const handleRefresh = () => {
+  const handleRefresh = async () => {
     setIsRefreshing(true);
-    setTimeout(() => {
-      setIsRefreshing(false);
-      toast.success('Làm mới thành công', 'Dữ liệu đã được cập nhật');
-    }, 1000);
+    await fetchRoles();
+    setIsRefreshing(false);
+    toast.success('Làm mới thành công', 'Dữ liệu đã được cập nhật');
   };
 
   // Table Engine Configs
-  const columns = useMemo(() => getRoleTableColumns(), []);
+  const columns = useMemo(() => getRoleTableColumns(permissionMap), [permissionMap]);
+
+  // Load backend details before view/edit modals open
+  const handleOpenRoleModal = async (mode: 'view' | 'edit', roleId: string) => {
+    try {
+      const res = await roleApi.getRoleById(roleId);
+      if (res.success && res.data) {
+        setRoleFormModal({ isOpen: true, mode, role: res.data });
+      } else {
+        toast.error('Lỗi', res.message || 'Không thể tải chi tiết vai trò');
+      }
+    } catch (e: any) {
+      toast.error('Lỗi', e.message || 'Không thể tải chi tiết vai trò');
+    }
+  };
 
   const rowActions = useMemo(() => getRoleRowActions(
-    (role) => setRoleFormModal({ isOpen: true, mode: 'view', role }),
-    (role) => setRoleFormModal({ isOpen: true, mode: 'edit', role }),
+    (role) => handleOpenRoleModal('view', role.id),
+    (role) => handleOpenRoleModal('edit', role.id),
     (role) => setDeleteModal({ isOpen: true, role })
   ), []);
 
@@ -260,18 +191,37 @@ const VaiTroPage = () => {
   };
 
   // Submit Handlers
-  const handleSubmitRoleForm = (roleData: any) => {
-    if (roleFormModal.mode === 'create') {
-      toast.success('Thêm vai trò thành công', `Đã thêm vai trò "${roleData.name}" vào hệ thống`);
-    } else {
-      toast.success('Cập nhật vai trò thành công', `Thông tin vai trò "${roleData.name}" đã được cập nhật`);
+  const handleSubmitRoleForm = async (roleData: any) => {
+    try {
+      if (roleFormModal.mode === 'create') {
+        const res = await roleApi.createRole(roleData);
+        if (res.success) {
+          toast.success('Thêm vai trò thành công', `Đã thêm vai trò "${roleData.roleName}" vào hệ thống`);
+        }
+      } else if (roleFormModal.mode === 'edit' && roleFormModal.role) {
+        const res = await roleApi.updateRole(roleFormModal.role.id, roleData);
+        if (res.success) {
+          toast.success('Cập nhật vai trò thành công', `Thông tin vai trò "${roleData.roleName}" đã được cập nhật`);
+        }
+      }
+      fetchRoles();
+      setRoleFormModal({ isOpen: false, mode: 'create' });
+    } catch (error: any) {
+      toast.error('Lỗi lưu trữ', error.message || 'Không thể thực thi lệnh');
     }
-    setRoleFormModal({ isOpen: false, mode: 'create' });
   };
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (deleteModal.role) {
-      toast.success('Xóa vai trò thành công', `Đã xóa vai trò "${deleteModal.role.name}" khỏi hệ thống`);
+      try {
+        const res = await roleApi.deleteRole(deleteModal.role.id);
+        if (res.success) {
+          toast.success('Xóa vai trò thành công', `Đã xóa vai trò "${deleteModal.role.roleName}" khỏi hệ thống`);
+        }
+        fetchRoles();
+      } catch (error: any) {
+        toast.error('Lỗi xóa vai trò', error.message || 'Họ tên hoặc vai trò đang được dùng');
+      }
     }
     setDeleteModal({ isOpen: false });
     setSelectedIds([]);

@@ -6,4 +6,6 @@ import vn.acme.paperless_meeting.entity.VoteEligibility;
 import java.util.UUID;
 
 public interface VoteEligibilityRepository extends JpaRepository<VoteEligibility, UUID> {
+    long countByVoteSessionId(UUID voteSessionId);
+    boolean existsByVoteSessionIdAndUserIdAndEligibleTrue(UUID voteSessionId, UUID userId);
 }

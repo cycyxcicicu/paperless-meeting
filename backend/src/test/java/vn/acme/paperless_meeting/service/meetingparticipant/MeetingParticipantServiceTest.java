@@ -26,6 +26,7 @@ import vn.acme.paperless_meeting.mapper.meetingparticipant.MeetingGuestMapper;
 import vn.acme.paperless_meeting.mapper.meetingparticipant.MeetingParticipantMapper;
 import vn.acme.paperless_meeting.repository.*;
 import vn.acme.paperless_meeting.service.auth.CurrentUserService;
+import vn.acme.paperless_meeting.event.audit.AuditLogPublisher;
 
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -47,6 +48,8 @@ class MeetingParticipantServiceTest {
     MeetingGuestMapper meetingGuestMapper;
     @Mock
     CurrentUserService currentUserService;
+    @Mock
+    AuditLogPublisher auditLogPublisher;
 
     @InjectMocks
     MeetingParticipantService meetingParticipantService;

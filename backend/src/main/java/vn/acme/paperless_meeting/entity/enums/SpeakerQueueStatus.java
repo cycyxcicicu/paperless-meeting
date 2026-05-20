@@ -4,5 +4,7 @@ public enum SpeakerQueueStatus {
     QUEUED,
     SPEAKING,
     DONE,
-    CANCELLED
+    CANCELLED,
+    REJECTED,
+    EXPIRED
 }

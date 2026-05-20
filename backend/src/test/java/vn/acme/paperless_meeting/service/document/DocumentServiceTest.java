@@ -41,6 +41,7 @@ import vn.acme.paperless_meeting.repository.DocumentVersionRepository;
 import vn.acme.paperless_meeting.repository.MeetingDocumentRepository;
 import vn.acme.paperless_meeting.repository.MeetingRepository;
 import vn.acme.paperless_meeting.service.auth.CurrentUserService;
+import vn.acme.paperless_meeting.event.audit.AuditLogPublisher;
 
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -55,6 +56,7 @@ class DocumentServiceTest {
     @Mock CurrentUserService currentUserService;
     @Mock DocumentMapper documentMapper;
     @Mock MeetingDocumentMapper meetingDocumentMapper;
+    @Mock AuditLogPublisher auditLogPublisher;
 
     @InjectMocks
     DocumentService documentService;

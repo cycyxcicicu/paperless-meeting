@@ -42,6 +42,9 @@ import vn.acme.paperless_meeting.exceptions.ErrorCode;
 import vn.acme.paperless_meeting.mapper.meetingparticipant.MeetingParticipantMapper;
 import vn.acme.paperless_meeting.mapper.meetingparticipant.MeetingGuestMapper;
 import vn.acme.paperless_meeting.mapper.meeting.MeetingMapper;
+import vn.acme.paperless_meeting.entity.enums.AuditAction;
+import vn.acme.paperless_meeting.entity.enums.ResourceType;
+import vn.acme.paperless_meeting.event.audit.AuditLogPublisher;
 import vn.acme.paperless_meeting.repository.MeetingParticipantRepository;
 import vn.acme.paperless_meeting.repository.MeetingGuestRepository;
 import vn.acme.paperless_meeting.repository.MeetingRepository;
@@ -63,6 +66,7 @@ public class MeetingParticipantService {
     MeetingGuestMapper meetingGuestMapper;
     MeetingMapper meetingMapper;
     CurrentUserService currentUserService;
+    AuditLogPublisher auditLogPublisher;
 
     static final List<MeetingStatus> ACTIVE_MEETING_STATUSES = List.of(MeetingStatus.APPROVED, MeetingStatus.UPCOMING, MeetingStatus.IN_PROGRESS);
 
@@ -136,6 +140,14 @@ public class MeetingParticipantService {
 
             meetingParticipantRepository.save(participant);
             responses.add(meetingParticipantMapper.toResponse(participant));
+            
+            auditLogPublisher.publish(
+                    currentUserService.getCurrentActiveUser(),
+                    AuditAction.ADD_PARTICIPANT,
+                    ResourceType.PARTICIPANT,
+                    participant.getId(),
+                    Map.of("meetingId", String.valueOf(meetingId), "type", "INTERNAL", "userId", String.valueOf(request.getUserId()))
+            );
         }
 
         // Validate chair count limit
@@ -172,6 +184,14 @@ public class MeetingParticipantService {
 
             meetingGuestRepository.save(guest);
             responses.add(meetingGuestMapper.toResponse(guest));
+
+            auditLogPublisher.publish(
+                    currentUserService.getCurrentActiveUser(),
+                    AuditAction.ADD_PARTICIPANT,
+                    ResourceType.PARTICIPANT,
+                    guest.getId(),
+                    Map.of("meetingId", String.valueOf(meetingId), "type", "GUEST", "email", String.valueOf(request.getEmail()))
+            );
         }
 
         return responses;
@@ -472,9 +492,17 @@ public class MeetingParticipantService {
                 log.setNote(request.getNote());
                 log.setRecordedBy(currentUserService.getCurrentActiveUser());
                 attendanceLogRepository.save(log);
+            } else {
+                // Nếu đánh dấu vắng mặt/lý do khác, cập nhật log (nếu có)
+                attendanceLogRepository.findByMeetingIdAndUserId(meetingId, participant.getUser().getId())
+                        .ifPresent(log -> {
+                            log.setStatus(request.getAttendanceStatus());
+                            attendanceLogRepository.save(log);
+                        });
             }
 
             return meetingParticipantMapper.toAttendeeResponse(participant);
+
 
         } else {
             MeetingGuest guest = meetingGuestRepository.findById(attendeeId)
@@ -499,6 +527,12 @@ public class MeetingParticipantService {
                 log.setNote(request.getNote());
                 log.setRecordedBy(currentUserService.getCurrentActiveUser());
                 attendanceLogRepository.save(log);
+            } else {
+                 attendanceLogRepository.findByMeetingIdAndGuestId(meetingId, guest.getId())
+                        .ifPresent(log -> {
+                            log.setStatus(request.getAttendanceStatus());
+                            attendanceLogRepository.save(log);
+                        });
             }
 
             return meetingGuestMapper.toAttendeeResponse(guest);
@@ -515,10 +549,26 @@ public class MeetingParticipantService {
             MeetingParticipant participant = meetingParticipantRepository.findById(attendeeId)
                     .orElseThrow(() -> new AppException(ErrorCode.MEETING_PARTICIPANT_NOT_FOUND));
             meetingParticipantRepository.delete(participant);
+
+            auditLogPublisher.publish(
+                    currentUserService.getCurrentActiveUser(),
+                    AuditAction.REMOVE_PARTICIPANT,
+                    ResourceType.PARTICIPANT,
+                    attendeeId,
+                    Map.of("meetingId", String.valueOf(meetingId), "type", "INTERNAL")
+            );
         } else {
             MeetingGuest guest = meetingGuestRepository.findById(attendeeId)
                     .orElseThrow(() -> new AppException(ErrorCode.MEETING_PARTICIPANT_NOT_FOUND));
             meetingGuestRepository.delete(guest);
+
+            auditLogPublisher.publish(
+                    currentUserService.getCurrentActiveUser(),
+                    AuditAction.REMOVE_PARTICIPANT,
+                    ResourceType.PARTICIPANT,
+                    attendeeId,
+                    Map.of("meetingId", String.valueOf(meetingId), "type", "GUEST")
+            );
         }
     }
 }

@@ -43,6 +43,10 @@ import vn.acme.paperless_meeting.service.auth.CurrentUserService;
 import vn.acme.paperless_meeting.service.department.DepartmentService;
 import vn.acme.paperless_meeting.specification.meeting.MeetingSpecification;
 
+import vn.acme.paperless_meeting.event.audit.AuditLogPublisher;
+import vn.acme.paperless_meeting.entity.enums.AuditAction;
+import java.util.Map;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -55,10 +59,10 @@ public class MeetingService {
     DepartmentRepository departmentRepository;
     DepartmentService departmentService;
     LocationRepository locationRepository;
-    UserRepository userRepository;
     MeetingParticipantRepository meetingParticipantRepository;
     AgendaItemRepository agendaItemRepository;
     ApprovalService approvalService;
+    AuditLogPublisher auditLogPublisher;
 
     /**
      * Tìm kiếm và phân trang danh sách cuộc họp theo bộ lọc (từ khóa, trạng thái, thời gian).
@@ -163,6 +167,8 @@ public class MeetingService {
         creatorParticipant.setAttendanceStatus(AttendanceStatus.NOT_CHECKED_IN);
         meetingParticipantRepository.save(creatorParticipant);
 
+        auditLogPublisher.publish(caller, AuditAction.CREATE_MEETING, ResourceType.MEETING, savedMeeting.getId(), Map.of("title", String.valueOf(savedMeeting.getTitle())));
+
         return meetingMapper.toResponse(savedMeeting);
     }
 
@@ -194,7 +200,11 @@ public class MeetingService {
         meeting.setDepartment(department);
         meeting.setLocation(location);
 
-        return meetingMapper.toResponse(meetingRepository.save(meeting));
+        Meeting savedMeeting = meetingRepository.save(meeting);
+        
+        auditLogPublisher.publish(currentUserService.getCurrentActiveUser(), AuditAction.UPDATE_MEETING, ResourceType.MEETING, savedMeeting.getId(), Map.of("title", String.valueOf(savedMeeting.getTitle())));
+
+        return meetingMapper.toResponse(savedMeeting);
     }
 
     /**
@@ -285,9 +295,16 @@ public class MeetingService {
             throw new AppException(ErrorCode.BAD_REQUEST);
         }
 
+        // Tự động triệt tiêu phiếu trình duyệt nếu cuộc họp đang PENDING_APPROVAL
+        if (meeting.getStatus() == MeetingStatus.PENDING_APPROVAL) {
+            approvalService.cancelPendingApprovalByResource(ResourceType.MEETING, meeting.getId());
+        }
+
         meeting.setStatus(MeetingStatus.CANCELLED);
         meeting.setCancelReason(cancelReason);
         meetingRepository.save(meeting);
+
+        auditLogPublisher.publish(currentUserService.getCurrentActiveUser(), AuditAction.CANCEL_MEETING, ResourceType.MEETING, meeting.getId(), Map.of("title", String.valueOf(meeting.getTitle()), "cancelReason", cancelReason));
     }
 
     /**
@@ -304,6 +321,8 @@ public class MeetingService {
 
         meeting.setStatus(MeetingStatus.CLOSED);
         meetingRepository.save(meeting);
+
+        auditLogPublisher.publish(currentUserService.getCurrentActiveUser(), AuditAction.CLOSE_MEETING, ResourceType.MEETING, meeting.getId(), Map.of("title", String.valueOf(meeting.getTitle())));
     }
 
     /**
@@ -412,24 +431,5 @@ public class MeetingService {
         throw new AppException(ErrorCode.UNAUTHOZIZED);
     }
 
-    /**
-     * Kiểm tra quyền phê duyệt cuộc họp.
-     */
-    private void requireApprovePermission(Meeting meeting) {
-        if (currentUserService.hasRole(RoleName.SUPER_ADMIN)) return;
 
-        if (!currentUserService.hasRole(RoleName.DEPARTMENT_ADMIN)) {
-            throw new AppException(ErrorCode.UNAUTHOZIZED);
-        }
-
-        User caller = currentUserService.getCurrentActiveUser();
-        if (caller.getDepartment() == null || meeting.getDepartment() == null) {
-            throw new AppException(ErrorCode.UNAUTHOZIZED);
-        }
-
-        List<UUID> subDepts = departmentService.getAllSubDepartmentIds(caller.getDepartment().getId());
-        if (!subDepts.contains(meeting.getDepartment().getId())) {
-            throw new AppException(ErrorCode.UNAUTHOZIZED);
-        }
-    }
 }

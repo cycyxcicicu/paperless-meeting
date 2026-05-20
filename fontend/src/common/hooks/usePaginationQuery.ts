@@ -1,12 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '@/lib/api/axios';
-
-interface PaginationParams {
-  page: number;
-  size: number;
-  search?: string;
-  filters?: Record<string, any>;
-}
+import { ApiResponse, PageResponse } from '@/lib/api/types';
 
 interface PaginationResult<T> {
   data: T[];
@@ -16,22 +10,29 @@ interface PaginationResult<T> {
 }
 
 interface UsePaginationQueryOptions<T> {
-  endpoint: string;
+  // Ưu tiên dùng fetchFunction chuẩn để tập trung code API
+  fetchFunction?: (params: any) => Promise<ApiResponse<PageResponse<T>>>;
+  // Endpoint URL fallback (nếu truyền chuỗi url)
+  endpoint?: string; 
+  
   initialPage?: number;
   initialSize?: number;
   initialSearch?: string;
   initialFilters?: Record<string, any>;
   onSuccess?: (data: PaginationResult<T>) => void;
   onError?: (error: Error) => void;
-  // Set to true if you are using mock data and don't want to actually hit the API yet
+  
+  // Dùng dữ liệu mock nếu API chưa có sẵn
   mockMode?: boolean; 
   mockData?: T[];
 }
 
 /**
  * Hook chuẩn hóa việc gọi API danh sách có phân trang, tìm kiếm và lọc.
+ * Dễ dàng tái sử dụng ở mọi trang.
  */
 export function usePaginationQuery<T>({
+  fetchFunction,
   endpoint,
   initialPage = 1,
   initialSize = 10,
@@ -52,69 +53,105 @@ export function usePaginationQuery<T>({
   const [search, setSearch] = useState(initialSearch);
   const [filters, setFilters] = useState<Record<string, any>>(initialFilters);
 
+  // Dùng ref để giữ reference ổn định cho các cấu hình (ngăn infinite render loop)
+  const optionsRef = useRef({ fetchFunction, endpoint, mockMode, mockData, onSuccess, onError });
+  useEffect(() => {
+    optionsRef.current = { fetchFunction, endpoint, mockMode, mockData, onSuccess, onError };
+  });
+
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
 
+    const {
+      fetchFunction: currentFetchFunction,
+      endpoint: currentEndpoint,
+      mockMode: currentMockMode,
+      mockData: currentMockData,
+      onSuccess: currentOnSuccess,
+      onError: currentOnError
+    } = optionsRef.current;
+
     try {
-      if (mockMode) {
-        // Simulate API call for mock mode
+      if (currentMockMode) {
+        // Mock data flow
         await new Promise((resolve) => setTimeout(resolve, 500));
         
-        let filtered = [...mockData];
+        let filtered = [...currentMockData];
         if (search) {
-          // simple search
           filtered = filtered.filter(item => 
             JSON.stringify(item).toLowerCase().includes(search.toLowerCase())
           );
         }
         
+        const pageData = filtered.slice((page - 1) * size, page * size);
         setTotalItems(filtered.length);
-        setData(filtered.slice((page - 1) * size, page * size));
+        setData(pageData);
         
-        if (onSuccess) {
-          onSuccess({
-            data: filtered.slice((page - 1) * size, page * size),
+        if (currentOnSuccess) {
+          currentOnSuccess({
+            data: pageData,
             totalElements: filtered.length,
             totalPages: Math.ceil(filtered.length / size),
             currentPage: page
           });
         }
       } else {
-        // Real API call
-        const response = await api.get<any, PaginationResult<T>>(endpoint, {
-          params: {
-            page: page - 1, // backend is usually 0-indexed
-            size,
-            search,
-            ...filters,
-          },
-        });
+        // Real API Call via fetchFunction (Best Practice) or endpoint string.
+        const requestParams = {
+          page: page - 1, // backend 0-indexed assumed. Nếu là 1-indexed đổi thành page
+          size,
+          search,
+          ...filters,
+        };
+
+        let response: ApiResponse<PageResponse<T>>;
         
-        setData(response.data);
-        setTotalItems(response.totalElements);
-        if (onSuccess) onSuccess(response);
+        if (currentFetchFunction) {
+          response = await currentFetchFunction(requestParams);
+        } else if (currentEndpoint) {
+          response = await api.get(currentEndpoint, { params: requestParams });
+        } else {
+          throw new Error('Must provide either fetchFunction or endpoint.');
+        }
+        
+        // Theo chuẩn ApiResponse<PageResponse<T>>
+        const pageResponse = response.data; 
+        
+        if (response.success && pageResponse) {
+           setData(pageResponse.content || []);
+           setTotalItems(pageResponse.totalElements || 0);
+           
+           if (currentOnSuccess) {
+             currentOnSuccess({
+               data: pageResponse.content || [],
+               totalElements: pageResponse.totalElements || 0,
+               totalPages: pageResponse.totalPages || 0,
+               currentPage: page
+             });
+           }
+        } else {
+          throw new Error(response.message || 'API error');
+        }
       }
     } catch (err: any) {
       setError(err);
-      if (onError) onError(err);
+      if (currentOnError) currentOnError(err);
     } finally {
       setLoading(false);
     }
-  }, [endpoint, page, size, search, filters, mockMode, mockData, onSuccess, onError]);
+  }, [page, size, search, filters]);
 
-  // Fetch data automatically when params change
+  // Tự động gọi API khi dependencies thay đổi
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
-  const handlePageChange = (newPage: number) => {
-    setPage(newPage);
-  };
+  const handlePageChange = (newPage: number) => setPage(newPage);
 
   const handleSizeChange = (newSize: number) => {
     setSize(newSize);
-    setPage(1); // reset to page 1 when size changes
+    setPage(1); // reset về trang 1
   };
 
   const handleSearch = (query: string) => {
@@ -127,9 +164,7 @@ export function usePaginationQuery<T>({
     setPage(1);
   };
 
-  const refresh = () => {
-    fetchData();
-  };
+  const refresh = () => fetchData();
 
   return {
     data,

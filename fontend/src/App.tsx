@@ -1,7 +1,8 @@
 import { RouterProvider } from 'react-router';
 import { useEffect } from 'react';
 import { Toaster } from 'sonner';
-import { router } from './app/routes';
+import { router } from '@/app/routes';
+import { AuthProvider } from '@/app/context/AuthContext';
 
 function App() {
   useEffect(() => {
@@ -23,7 +24,7 @@ function App() {
   }, []);
 
   return (
-    <>
+    <AuthProvider>
       <RouterProvider router={router} />
       <Toaster
         position="top-right"
@@ -43,7 +44,7 @@ function App() {
           },
         }}
       />
-    </>
+    </AuthProvider>
   );
 }
 

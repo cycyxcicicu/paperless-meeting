@@ -8,9 +8,8 @@ interface DeleteRoleModalProps {
   onClose: () => void;
   onConfirm: () => void;
   role?: {
-    name: string;
-    code: string;
-    description?: string;
+    roleName: string;
+    roleCode: string;
   };
 }
 
@@ -46,22 +45,16 @@ export const DeleteRoleModal: React.FC<DeleteRoleModalProps> = ({
           Bạn có chắc chắn muốn xóa vai trò này? Hành động này không thể hoàn tác.
         </p>
 
-        {/* Role Info */}
         <div className="bg-red-50 border border-red-200 rounded-xl p-4 space-y-2">
           <div className="flex items-start gap-2">
             <span className="text-xs btn-primary text-gray-600 min-w-[80px]">Tên vai trò:</span>
-            <span className="text-sm btn-primary text-gray-900">{role.name}</span>
+            <span className="text-sm btn-primary text-gray-900">{role.roleName}</span>
           </div>
           <div className="flex items-start gap-2">
             <span className="text-xs btn-primary text-gray-600 min-w-[80px]">Mã vai trò:</span>
-            <code className="text-sm font-mono text-gray-900 bg-white px-2 py-0.5 rounded border border-red-200">{role.code}</code>
+            <code className="text-sm font-mono text-gray-900 bg-white px-2 py-0.5 rounded border border-red-200">{role.roleCode}</code>
           </div>
-          {role.description && (
-            <div className="flex items-start gap-2">
-              <span className="text-xs btn-primary text-gray-600 min-w-[80px]">Mô tả:</span>
-              <span className="text-sm text-gray-900">{role.description}</span>
-            </div>
-          )}
+
         </div>
       </div>
 

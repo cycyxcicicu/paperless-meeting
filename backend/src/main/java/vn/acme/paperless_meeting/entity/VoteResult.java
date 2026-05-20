@@ -27,7 +27,6 @@ import lombok.Setter;
                 @Index(columnList = "computed_by", name = "idx_voteresult_computed_by")
 })
 
-// CRITICAL AUDIT DATA - Do not cascade delete
 public class VoteResult {
 
         @Id

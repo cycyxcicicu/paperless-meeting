@@ -12,11 +12,19 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
-      // Alias @ to the src directory
       '@': path.resolve(__dirname, './src'),
     },
   },
-
+  server: {
+    port: 3000, // Khớp với cấu hình allowed origin của Backend
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8081/PaperlessMeeting',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, '')
+      }
+    }
+  },
   // File types to support raw imports. Never add .css, .tsx, or .ts files to this.
   assetsInclude: ['**/*.svg', '**/*.csv'],
 })

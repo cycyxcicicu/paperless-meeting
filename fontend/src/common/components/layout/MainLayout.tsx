@@ -7,25 +7,17 @@ import {
     QUAN_TRI_SIDEBAR_ITEMS,
     PHONG_HOP_SIDEBAR_ITEMS
 } from '@/app/constants/sidebar';
-import { ROUTE_PERMISSIONS } from '@/app/routes/config';
+import { hasRoutePermission } from '@/app/routes/config';
+import { useAuth } from '@/app/context/AuthContext';
 
 const MainLayout: React.FC = () => {
     const location = useLocation();
     const pathname = location.pathname;
+    const { user } = useAuth();
 
-    // Lấy quyền từ localStorage (tương tự ProtectedRoute)
-    const userRole = localStorage.getItem('userRole') || 'ADMIN';
-    const allowedPaths = ROUTE_PERMISSIONS[userRole] || [];
-
-    // Hàm kiểm tra xem path có được phép không
+    // Hàm kiểm tra xem path có được phép không (dùng logic mới)
     const hasPermission = (path: string) => {
-        return allowedPaths.some(allowed => {
-            if (allowed.endsWith('/*')) {
-                const basePath = allowed.slice(0, -2);
-                return path.startsWith(basePath);
-            }
-            return path === allowed;
-        });
+        return hasRoutePermission(user, path);
     };
 
     // Xác định sidebar items dựa trên route

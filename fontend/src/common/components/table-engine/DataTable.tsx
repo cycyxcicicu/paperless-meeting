@@ -7,9 +7,9 @@ interface DataTableProps<T> {
   config: TableEngineConfig<T>;
   
   // Selection (Optional)
-  selectedIds?: number[];
+  selectedIds?: (number | string)[];
   onToggleSelectAll?: () => void;
-  onToggleSelectRow?: (id: number) => void;
+  onToggleSelectRow?: (id: number | string) => void;
   
   // Pagination (Optional)
   currentPage?: number;

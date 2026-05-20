@@ -38,6 +38,10 @@ import vn.acme.paperless_meeting.repository.MinutesRepository;
 import vn.acme.paperless_meeting.service.auth.CurrentUserService;
 import vn.acme.paperless_meeting.service.department.DepartmentService;
 
+import vn.acme.paperless_meeting.event.audit.AuditLogPublisher;
+import vn.acme.paperless_meeting.entity.enums.AuditAction;
+import java.util.Map;
+
 @Service
 @RequiredArgsConstructor
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
@@ -51,6 +55,7 @@ public class ApprovalService {
     CurrentUserService currentUserService;
     DepartmentService departmentService;
     ApprovalMapper approvalMapper;
+    AuditLogPublisher auditLogPublisher;
 
     @Transactional
     public ApprovalRequestResponse submit(SubmitApprovalRequest request) {
@@ -75,6 +80,9 @@ public class ApprovalService {
         approvalStepRepository.save(firstStep);
 
         updateResourceStatusOnSubmit(request.getResourceType(), request.getResourceId());
+        
+        auditLogPublisher.publish(caller, AuditAction.SUBMIT_APPROVAL, request.getResourceType(), request.getResourceId(), Map.of("resourceType", request.getResourceType().name(), "approvalId", saved.getId()));
+
         return getById(saved.getId());
     }
 
@@ -95,6 +103,8 @@ public class ApprovalService {
         approvalRequest.setStatus(ApprovalStatus.APPROVED);
         approvalRequestRepository.save(approvalRequest);
         updateResourceStatusOnApprove(approvalRequest.getResourceType(), approvalRequest.getResourceId(), caller, null);
+
+        auditLogPublisher.publish(caller, AuditAction.APPROVE_RESOURCE, approvalRequest.getResourceType(), approvalRequest.getResourceId(), Map.of("approvalId", approvalRequest.getId(), "comment", request != null && request.getComment() != null ? request.getComment() : ""));
 
         return getById(approvalRequest.getId());
     }
@@ -118,7 +128,62 @@ public class ApprovalService {
         approvalRequestRepository.save(approvalRequest);
         updateResourceStatusOnReject(approvalRequest.getResourceType(), approvalRequest.getResourceId(), caller, reason);
 
+        auditLogPublisher.publish(caller, AuditAction.REJECT_RESOURCE, approvalRequest.getResourceType(), approvalRequest.getResourceId(), Map.of("approvalId", approvalRequest.getId(), "reason", reason != null ? reason : ""));
+
         return getById(approvalRequest.getId());
+    }
+
+    @Transactional
+    public void cancelApproval(UUID approvalId) {
+        ApprovalRequest approvalRequest = approvalRequestRepository.findById(approvalId)
+                .orElseThrow(() -> new AppException(ErrorCode.APPROVAL_REQUEST_NOT_FOUND));
+
+        User caller = currentUserService.getCurrentActiveUser();
+        if (approvalRequest.getRequestedBy() == null || !approvalRequest.getRequestedBy().getId().equals(caller.getId())) {
+            throw new AppException(ErrorCode.APPROVAL_CANCEL_FORBIDDEN);
+        }
+
+        if (approvalRequest.getStatus() != ApprovalStatus.PENDING) {
+            throw new AppException(ErrorCode.APPROVAL_STATUS_TRANSITION_INVALID);
+        }
+
+        ApprovalStep currentStep = getCurrentPendingStep(approvalRequest.getId());
+        currentStep.setDecision(ApprovalDecision.CANCELLED);
+        currentStep.setDecidedAt(LocalDateTime.now());
+        approvalStepRepository.save(currentStep);
+
+        approvalRequest.setStatus(ApprovalStatus.CANCELLED);
+        approvalRequestRepository.save(approvalRequest);
+
+        updateResourceStatusOnCancel(approvalRequest.getResourceType(), approvalRequest.getResourceId());
+    }
+
+    @Transactional
+    public void cancelPendingApprovalByResource(ResourceType resourceType, UUID resourceId) {
+        approvalRequestRepository.findFirstByResourceTypeAndResourceIdAndStatus(resourceType, resourceId, ApprovalStatus.PENDING)
+                .ifPresent(req -> {
+                    req.setStatus(ApprovalStatus.CANCELLED);
+                    approvalRequestRepository.save(req);
+
+                    try {
+                        ApprovalStep currentStep = getCurrentPendingStep(req.getId());
+                        currentStep.setDecision(ApprovalDecision.CANCELLED);
+                        currentStep.setDecidedAt(LocalDateTime.now());
+                        approvalStepRepository.save(currentStep);
+                    } catch (Exception e) {
+                        // Bỏ qua nếu không có step để cập nhật
+                    }
+                });
+    }
+
+    @Transactional(readOnly = true)
+    public List<ApprovalRequestResponse> getPendingApprovals(ResourceType resourceType) {
+        List<ApprovalRequest> requests = approvalRequestRepository.findAllPending(resourceType, ApprovalStatus.PENDING);
+        return requests.stream()
+                .filter(req -> hasApprovePermission(req.getResourceType(), req.getResourceId())) // Filter client side check permissions
+                .peek(this::sortSteps)
+                .map(this::mapToResponseWithTitle)
+                .toList();
     }
 
     @Transactional
@@ -155,7 +220,7 @@ public class ApprovalService {
         ApprovalRequest approvalRequest = approvalRequestRepository.findDetailById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.APPROVAL_REQUEST_NOT_FOUND));
         sortSteps(approvalRequest);
-        return approvalMapper.toResponse(approvalRequest);
+        return mapToResponseWithTitle(approvalRequest);
     }
 
     @Transactional(readOnly = true)
@@ -163,8 +228,27 @@ public class ApprovalService {
         return approvalRequestRepository.findAllByResourceTypeAndResourceIdOrderByRequestedAtDesc(resourceType, resourceId)
                 .stream()
                 .peek(this::sortSteps)
-                .map(approvalMapper::toResponse)
+                .map(this::mapToResponseWithTitle)
                 .toList();
+    }
+
+    private ApprovalRequestResponse mapToResponseWithTitle(ApprovalRequest entity) {
+        ApprovalRequestResponse response = approvalMapper.toResponse(entity);
+        response.setResourceTitle(getResourceTitle(entity.getResourceType(), entity.getResourceId()));
+        return response;
+    }
+
+    private String getResourceTitle(ResourceType resourceType, UUID resourceId) {
+        try {
+            return switch (resourceType) {
+                case MEETING -> getMeeting(resourceId).getTitle();
+                case DOCUMENT -> getDocument(resourceId).getTitle();
+                case MINUTES -> getMinutes(resourceId).getMeeting() != null ? getMinutes(resourceId).getMeeting().getTitle() + " (Biên bản)" : "Biên bản cuộc họp";
+                default -> null;
+            };
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private void validateNoPendingApproval(ResourceType resourceType, UUID resourceId) {
@@ -268,6 +352,27 @@ public class ApprovalService {
         }
     }
 
+    private void updateResourceStatusOnCancel(ResourceType resourceType, UUID resourceId) {
+        switch (resourceType) {
+            case MEETING -> {
+                Meeting meeting = getMeeting(resourceId);
+                meeting.setStatus(MeetingStatus.DRAFT);
+                meetingRepository.save(meeting);
+            }
+            case DOCUMENT -> {
+                Document document = getDocument(resourceId);
+                document.setStatus(DocumentStatus.DRAFT);
+                documentRepository.save(document);
+            }
+            case MINUTES -> {
+                Minutes minutes = getMinutes(resourceId);
+                minutes.setStatus(MinutesStatus.DRAFT);
+                minutesRepository.save(minutes);
+            }
+            default -> throw new AppException(ErrorCode.APPROVAL_RESOURCE_TYPE_UNSUPPORTED);
+        }
+    }
+
     private void validateMeetingSubmit(UUID resourceId) {
         Meeting meeting = getMeeting(resourceId);
         requireResourceOwnerOrAdmin(meeting.getCreatedBy(), meeting.getDepartment() != null ? meeting.getDepartment().getId() : null);
@@ -295,22 +400,26 @@ public class ApprovalService {
     }
 
     private void requireApprovePermission(ResourceType resourceType, UUID resourceId) {
+        if (!hasApprovePermission(resourceType, resourceId)) {
+            throw new AppException(ErrorCode.UNAUTHOZIZED);
+        }
+    }
+
+    private boolean hasApprovePermission(ResourceType resourceType, UUID resourceId) {
         if (currentUserService.hasRole(RoleName.SUPER_ADMIN)) {
-            return;
+            return true;
         }
         if (!currentUserService.hasRole(RoleName.DEPARTMENT_ADMIN)) {
-            throw new AppException(ErrorCode.UNAUTHOZIZED);
+            return false;
         }
 
         UUID resourceDeptId = getResourceDepartmentId(resourceType, resourceId);
         User caller = currentUserService.getCurrentActiveUser();
         if (caller.getDepartment() == null || resourceDeptId == null) {
-            throw new AppException(ErrorCode.UNAUTHOZIZED);
+            return false;
         }
         List<UUID> subDeptIds = departmentService.getAllSubDepartmentIds(caller.getDepartment().getId());
-        if (!subDeptIds.contains(resourceDeptId)) {
-            throw new AppException(ErrorCode.UNAUTHOZIZED);
-        }
+        return subDeptIds.contains(resourceDeptId);
     }
 
     private void requireResourceOwnerOrAdmin(User owner, UUID resourceDeptId) {

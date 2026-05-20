@@ -144,6 +144,7 @@ public enum ErrorCode implements BaseErrorCode {
         APPROVAL_STATUS_TRANSITION_INVALID(2054, "Trạng thái phê duyệt không hợp lệ", HttpStatus.BAD_REQUEST),
         APPROVAL_RESOURCE_TYPE_UNSUPPORTED(2055, "Loại tài nguyên chưa hỗ trợ phê duyệt", HttpStatus.BAD_REQUEST),
         APPROVAL_RESOURCE_NOT_FOUND(2056, "Không tìm thấy tài nguyên cần phê duyệt", HttpStatus.NOT_FOUND),
+        APPROVAL_CANCEL_FORBIDDEN(2057, "Chỉ người tạo yêu cầu mới được hủy", HttpStatus.FORBIDDEN),
         // DOCUMENT
         DOCUMENT_NOT_FOUND(2101, "Tài liệu không tồn tại", HttpStatus.NOT_FOUND),
         DOCUMENT_ALREADY_ATTACHED(2102, "Tài liệu đã được gắn vào cuộc họp này", HttpStatus.CONFLICT),

@@ -1,9 +1,10 @@
 import * as z from 'zod';
 
 export const userFormValidationSchema = z.object({
+  formMode: z.string().optional(),
   username: z.string()
     .min(1, 'Vui lòng nhập tên đăng nhập')
-    .regex(/^[a-zA-Z0-9]+$/, 'Tên đăng nhập chỉ được chứa chữ cái không dấu và số, không chứa khoảng trắng hay ký tự đặc biệt'),
+    .regex(/^[a-zA-Z0-9._-]+$/, 'Tên đăng nhập chỉ được chứa chữ cái không dấu, số, dấu chấm (.), gạch ngang (-) và gạch dưới (_)'),
   password: z.string().optional(),
   fullName: z.string()
     .min(1, 'Vui lòng nhập họ và tên')
@@ -19,23 +20,22 @@ export const userFormValidationSchema = z.object({
   status: z.enum(['active', 'inactive']),
   avatar: z.any().optional(),
 }).superRefine((data, ctx) => {
-  // Logic validation đặc biệt: Mật khẩu chỉ bắt buộc khi trường này được mount (chế độ create)
-  // Nhờ shouldUnregister: true, khi ở chế độ edit trường password sẽ bị ẩn và không có trong data
-  if ('password' in data) {
+  // Logic validation đặc biệt: Mật khẩu chỉ bắt buộc khi create
+  if (data.formMode !== 'edit' && data.formMode !== 'view') {
     if (!data.password || data.password.trim() === '') {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Vui lòng nhập mật khẩu',
-        path: ['password']
-      });
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Vui lòng nhập mật khẩu', path: ['password'] });
     } else {
       const isStrong = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9\s])\S{8,}$/.test(data.password);
       if (!isStrong) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: 'Mật khẩu phải từ 8 ký tự, không chứa khoảng trắng, gồm chữ hoa, chữ thường, số và ký tự đặc biệt',
-          path: ['password']
-        });
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Mật khẩu phải từ 8 ký tự, không chứa khoảng trắng, gồm chữ hoa, chữ thường, số và ký tự đặc biệt', path: ['password'] });
+      }
+    }
+  } else {
+    // Ở chế độ edit, không bắt buộc nhập mật khẩu. Nếu nhập thì mới validate.
+    if (data.password && data.password.trim() !== '') {
+      const isStrong = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9\s])\S{8,}$/.test(data.password);
+      if (!isStrong) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Mật khẩu phải từ 8 ký tự, không chứa khoảng trắng, gồm chữ hoa, chữ thường, số và ký tự đặc biệt', path: ['password'] });
       }
     }
   }

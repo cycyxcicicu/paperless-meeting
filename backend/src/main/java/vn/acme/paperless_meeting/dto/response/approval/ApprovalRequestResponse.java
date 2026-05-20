@@ -18,6 +18,7 @@ public class ApprovalRequestResponse {
     private UUID id;
     private ResourceType resourceType;
     private UUID resourceId;
+    private String resourceTitle;
     private LocalDateTime requestedAt;
     private ApprovalStatus status;
     private String note;

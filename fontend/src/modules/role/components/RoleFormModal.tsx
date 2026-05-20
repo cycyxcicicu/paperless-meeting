@@ -1,9 +1,10 @@
-import React, { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm, FormProvider } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Shield } from 'lucide-react';
 import { Button } from '@/common/components/ui/button';
 import { Modal } from '@/common/components/ui/modal';
+import { permissionApi } from '../services/permission.api';
 
 // Form Engine
 import { DynamicFormRenderer } from '@/common/components/form-engine/DynamicFormRenderer';
@@ -15,11 +16,10 @@ import { mapRoleInitialData, mapRoleSubmitPayload } from '../form/roleForm.mappe
 type ModalMode = 'create' | 'edit' | 'view';
 
 export interface RoleFormData {
-  id?: number;
-  name: string;
-  code: string;
-  description: string;
-  permissions?: string[];
+  id?: string;
+  roleName: string;
+  roleCode: string;
+  permCodes?: string[];
 }
 
 interface RoleFormModalProps {
@@ -39,6 +39,8 @@ export const RoleFormModal: React.FC<RoleFormModalProps> = ({
 }) => {
   const isViewMode = mode === 'view';
   const isCreateMode = mode === 'create';
+  
+  const [permissionOptions, setPermissionOptions] = useState<{value: string, label: string}[]>([]);
 
   const methods = useForm<any>({
     resolver: zodResolver(roleFormValidationSchema),
@@ -55,6 +57,25 @@ export const RoleFormModal: React.FC<RoleFormModalProps> = ({
       } else {
         methods.reset(mapRoleInitialData(null));
         methods.clearErrors();
+      }
+      
+      // Load dynamically from backend when modal opens
+      const fetchOptions = async () => {
+        try {
+          const res = await permissionApi.getPermissions();
+          if (res.success && res.data) {
+             setPermissionOptions(res.data.map(p => ({
+               value: p.permCode,
+               label: p.description || p.permCode
+             })));
+          }
+        } catch (e) {
+          // fallback
+        }
+      };
+      
+      if (permissionOptions.length === 0) {
+        fetchOptions();
       }
     }
   }, [initialData, mode, isOpen, methods]);
@@ -84,7 +105,7 @@ export const RoleFormModal: React.FC<RoleFormModalProps> = ({
     }
   };
 
-  const groups = createRoleFormSchema();
+  const groups = createRoleFormSchema({ permissionOptions });
 
   return (
     <Modal

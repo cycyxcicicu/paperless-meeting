@@ -1,20 +1,54 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
+import { useForm, FormProvider } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
 import { Button } from '@/common/components/ui/button';
-import { Input } from '@/common/components/ui/input';
-import { Checkbox } from '@/common/components/ui/checkbox';
+import { FormInput } from '@/common/components/form/FormInput';
 import { ImageWithFallback } from '@/common/components/ui/ImageWithFallback';
 import { useNavigate } from 'react-router';
+import { useAuth } from '@/app/context/AuthContext';
+import { api } from '@/lib/api/axios';
+import { toast } from 'sonner';
+
+const loginSchema = z.object({
+  username: z.string().min(1, 'Vui lòng nhập tên đăng nhập'),
+  password: z.string().min(1, 'Vui lòng nhập mật khẩu'),
+});
+
+type LoginValues = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [rememberMe, setRememberMe] = useState(false);
+  const { fetchUser } = useAuth();
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    // Mock login - chuyển đến trang chủ
-    navigate('/');
+  const methods = useForm<LoginValues>({
+    resolver: zodResolver(loginSchema),
+    defaultValues: {
+      username: '',
+      password: '',
+    }
+  });
+
+  const handleLogin = async (data: LoginValues) => {
+    setIsLoading(true);
+    try {
+      await api.post('/auth/login', data);
+
+      // Fetch user profile immediately
+      await fetchUser();
+
+      navigate('/');
+    } catch (err: any) {
+      console.error(err);
+      let errMsg = err?.response?.data?.message;
+      if (!errMsg || errMsg === 'Bad credentials' || err?.response?.status === 401) {
+        errMsg = 'Tên đăng nhập hoặc mật khẩu không chính xác.';
+      }
+      toast.error(errMsg);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -30,7 +64,7 @@ export default function LoginPage() {
             />
             {/* Overlay đỏ nhẹ */}
             <div className="absolute inset-0 bg-[#C8102E] bg-opacity-[0.08]"></div>
-            
+
             {/* Nội dung trên overlay */}
             <div className="absolute inset-0 flex flex-col justify-end p-12 text-white">
               <div className="bg-[#C8102E] bg-opacity-90 rounded-xl p-8">
@@ -38,8 +72,8 @@ export default function LoginPage() {
                   Hệ thống quản lý phòng họp không giấy
                 </h2>
                 <p className="text-sm opacity-95 leading-relaxed">
-                  Giải pháp số hóa quản lý phiên họp, tài liệu và biểu quyết 
-                  cho Ủy ban nhân dân thành phố Hải Phòng. Bảo mật cao, 
+                  Giải pháp số hóa quản lý phiên họp, tài liệu và biểu quyết
+                  cho Ủy ban nhân dân thành phố Hải Phòng. Bảo mật cao,
                   hiệu quả và chính thống.
                 </p>
               </div>
@@ -52,8 +86,8 @@ export default function LoginPage() {
             <div className="mb-10 text-center">
               <div className="inline-flex items-center justify-center w-20 h-20 bg-[#C8102E] rounded-xl mb-6">
                 <svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M24 4L6 13V22C6 32.5 13.84 42.24 24 44C34.16 42.24 42 32.5 42 22V13L24 4Z" fill="white" fillOpacity="0.95"/>
-                  <path d="M24 12L14 17V24C14 30.5 18.42 36.62 24 38C29.58 36.62 34 30.5 34 24V17L24 12Z" fill="#C8102E"/>
+                  <path d="M24 4L6 13V22C6 32.5 13.84 42.24 24 44C34.16 42.24 42 32.5 42 22V13L24 4Z" fill="white" fillOpacity="0.95" />
+                  <path d="M24 12L14 17V24C14 30.5 18.42 36.62 24 38C29.58 36.62 34 30.5 34 24V17L24 12Z" fill="#C8102E" />
                 </svg>
               </div>
               <h1 className="text-[#111827] mb-2 uppercase tracking-tight">
@@ -67,89 +101,37 @@ export default function LoginPage() {
               </p>
             </div>
 
-            {/* Form đăng nhập */}
-            <form onSubmit={handleLogin} className="space-y-6">
-              <div className="space-y-2">
-                <label htmlFor="username" className="block text-sm body text-[#111827]">
-                  Tên đăng nhập
-                </label>
-                <Input
-                  id="username"
-                  type="text"
+            {/* Form đăng nhập (Refactored to RHF) */}
+            <FormProvider {...methods}>
+              <form onSubmit={methods.handleSubmit(handleLogin)} className="space-y-6">
+                <FormInput
+                  name="username"
+                  label="Tên đăng nhập"
                   placeholder="Nhập tên đăng nhập"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
+                  className="[&>input]:h-11 [&>input]:rounded-xl"
                   required
-                  className="h-11 rounded-xl border-[#E5E7EB] focus:border-[#C8102E]"
                 />
-              </div>
 
-              <div className="space-y-2">
-                <label htmlFor="password" className="block text-sm body text-[#111827]">
-                  Mật khẩu
-                </label>
-                <Input
-                  id="password"
+                <FormInput
+                  name="password"
+                  label="Mật khẩu"
                   type="password"
                   placeholder="Nhập mật khẩu"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  className="[&>input]:h-11 [&>input]:rounded-xl"
                   required
-                  className="h-11 rounded-xl border-[#E5E7EB] focus:border-[#C8102E]"
                 />
-              </div>
 
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Checkbox
-                    id="remember"
-                    checked={rememberMe}
-                    onCheckedChange={(checked) => setRememberMe(checked === true)}
-                  />
-                  <label
-                    htmlFor="remember"
-                    className="text-sm text-[#6B7280] cursor-pointer select-none"
-                  >
-                    Ghi nhớ đăng nhập
-                  </label>
-                </div>
-                <a href="#" className="text-sm text-[#C8102E] hover:underline">
-                  Quên mật khẩu?
-                </a>
-              </div>
-
-              <Button
-                type="submit"
-                variant="primary"
-                size="lg"
-                className="w-full h-12"
-              >
-                Đăng nhập
-              </Button>
-
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-[#E5E7EB]"></div>
-                </div>
-                <div className="relative flex justify-center text-xs">
-                  <span className="bg-white px-4 text-[#9CA3AF]">hoặc</span>
-                </div>
-              </div>
-
-              <Button
-                type="button"
-                variant="secondary"
-                size="lg"
-                className="w-full h-12"
-                onClick={() => {}}
-              >
-                <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                  <path d="M7 7h10M7 12h10M7 17h7"/>
-                </svg>
-                Đăng nhập bằng mã QR
-              </Button>
-            </form>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  size="lg"
+                  className="w-full h-12 !mt-10"
+                  disabled={isLoading}
+                >
+                  {isLoading ? 'Đang đăng nhập...' : 'Đăng nhập'}
+                </Button>
+              </form>
+            </FormProvider>
 
             {/* Footer */}
             <div className="mt-10 pt-8 border-t border-[#E5E7EB]">

@@ -13,6 +13,8 @@ export interface User {
   status: 'active' | 'inactive';
 }
 
+export type UserFormData = Omit<User, 'id'>;
+
 // Hàm khởi tạo Cấu hình Cột
 export const getUserTableColumns = (): ColumnDef<User>[] => [
   {
@@ -48,26 +50,42 @@ export const getUserTableColumns = (): ColumnDef<User>[] => [
   {
     key: 'position',
     header: 'Chức vụ',
-    render: (row) => <TableTooltip text={row.position} maxLength={25} />,
+    render: (row) => {
+      let val = row.position;
+      if (typeof val === 'object' && val !== null) {
+        val = (val as any).positionName || (val as any).name || (val as any).title || '';
+      }
+      return <TableTooltip text={val as string} maxLength={25} />;
+    }
   },
   {
     key: 'department',
     header: 'Đơn vị',
-    render: (row) => <TableTooltip text={row.department} maxLength={30} />,
+    render: (row) => {
+      let val = row.department;
+      if (typeof val === 'object' && val !== null) {
+        val = (val as any).deptName || (val as any).name || (val as any).title || '';
+      }
+      return <TableTooltip text={val as string} maxLength={30} />;
+    }
   },
   {
     key: 'status',
     header: 'Trạng thái',
     align: 'center',
-    render: (row) => (
-      <span className={`inline-flex items-center px-3 py-1 text-xs btn-primary rounded-full border ${
-        row.status === 'active' 
-          ? 'bg-gradient-to-r from-emerald-50 to-emerald-100 text-emerald-700 border-emerald-200'
-          : 'bg-gradient-to-r from-gray-50 to-gray-100 text-gray-600 border-gray-200'
-      }`}>
-        {row.status === 'active' ? 'Hoạt động' : 'Ngừng hoạt động'}
-      </span>
-    ),
+    render: (row) => {
+      const statusStr = String(row.status || '').toUpperCase();
+      const isActive = statusStr === 'ACTIVE' || statusStr === '1' || statusStr === 'HOẠT ĐỘNG';
+      return (
+        <span className={`inline-flex items-center px-3 py-1 text-xs btn-primary rounded-full border ${
+          isActive 
+            ? 'bg-gradient-to-r from-emerald-50 to-emerald-100 text-emerald-700 border-emerald-200'
+            : 'bg-gradient-to-r from-gray-50 to-gray-100 text-gray-600 border-gray-200'
+        }`}>
+          {isActive ? 'Hoạt động' : 'Ngừng hoạt động'}
+        </span>
+      );
+    }
   },
 ];
 

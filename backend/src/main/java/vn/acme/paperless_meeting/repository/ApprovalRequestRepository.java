@@ -40,4 +40,18 @@ public interface ApprovalRequestRepository extends JpaRepository<ApprovalRequest
     java.util.List<ApprovalRequest> findAllByResourceTypeAndResourceIdOrderByRequestedAtDesc(
             @Param("resourceType") ResourceType resourceType,
             @Param("resourceId") UUID resourceId);
+
+    @Query("""
+            SELECT ar FROM ApprovalRequest ar
+            LEFT JOIN FETCH ar.requestedBy rb
+            LEFT JOIN FETCH ar.approvalStepList aps
+            LEFT JOIN FETCH aps.approverUser au
+            LEFT JOIN FETCH aps.approverRole apr
+            WHERE (:resourceType IS NULL OR ar.resourceType = :resourceType)
+              AND ar.status = :status
+            ORDER BY ar.requestedAt ASC
+            """)
+    java.util.List<ApprovalRequest> findAllPending(
+            @Param("resourceType") ResourceType resourceType,
+            @Param("status") ApprovalStatus status);
 }

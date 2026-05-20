@@ -24,8 +24,8 @@ export interface BulkActionDef {
   label: string;
   icon?: ReactNode;
   variant?: 'default' | 'danger' | 'primary';
-  onClick: (selectedIds: number[]) => void;
-  show?: (selectedIds: number[]) => boolean;
+  onClick: (selectedIds: (number | string)[]) => void;
+  show?: (selectedIds: (number | string)[]) => boolean;
 }
 
 export type FilterType = 'select' | 'searchable-select' | 'date';

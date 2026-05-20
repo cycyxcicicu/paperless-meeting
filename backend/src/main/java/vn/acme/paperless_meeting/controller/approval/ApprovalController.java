@@ -86,4 +86,25 @@ public class ApprovalController {
                 .data(approvalService.getHistory(resourceType, resourceId))
                 .build();
     }
+
+    @Operation(summary = "Hủy yêu cầu duyệt đang chờ")
+    @PutMapping("/{approvalId}/cancel")
+    public ApiResponse<String> cancel(@PathVariable UUID approvalId) {
+        approvalService.cancelApproval(approvalId);
+        return ApiResponse.<String>builder()
+                .success(true)
+                .message("Hủy yêu cầu thành công")
+                .data("Hủy yêu cầu thành công")
+                .build();
+    }
+
+    @Operation(summary = "Lấy danh sách các yêu cầu đang chờ duyệt")
+    @GetMapping("/pending")
+    public ApiResponse<List<ApprovalRequestResponse>> getPending(@RequestParam(required = false) ResourceType resourceType) {
+        return ApiResponse.<List<ApprovalRequestResponse>>builder()
+                .success(true)
+                .message("Lấy danh sách yêu cầu chờ duyệt thành công")
+                .data(approvalService.getPendingApprovals(resourceType))
+                .build();
+    }
 }

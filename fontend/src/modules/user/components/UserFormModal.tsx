@@ -11,6 +11,7 @@ import { createUserFormSchema } from '../form/userForm.schema';
 import { userFormValidationSchema } from '../form/userForm.validation';
 import { mapUserInitialData, mapUserSubmitPayload } from '../form/userForm.mapper';
 import { FormMode } from '@/common/components/form-engine/form.types';
+import { roleApi } from '@/modules/role/services/role.api';
 
 export type ModalMode = 'create' | 'edit' | 'view';
 
@@ -54,6 +55,8 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
   const isCreateMode = mode === 'create';
   
   const [avatarPreview, setAvatarPreview] = useState<string>('');
+  
+  const [dynamicRoleOptions, setDynamicRoleOptions] = useState<{value: string; label: string}[]>([]);
 
   const methods = useForm<any>({
     resolver: zodResolver(userFormValidationSchema),
@@ -65,16 +68,32 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       if (initialData && mode !== 'create') {
-        methods.reset(mapUserInitialData(initialData, defaultUnitId));
+        methods.reset({ ...mapUserInitialData(initialData, defaultUnitId), formMode: mode });
         if (typeof initialData.avatar === 'string' && initialData.avatar) {
           setAvatarPreview(initialData.avatar);
         } else {
           setAvatarPreview('');
         }
       } else {
-        methods.reset(mapUserInitialData(null, defaultUnitId));
+        methods.reset({ ...mapUserInitialData(null, defaultUnitId), formMode: 'create' });
         setAvatarPreview('');
       }
+
+      // Load động sách sách Vai trò từ Backend
+      const fetchRoleOptions = async () => {
+        try {
+          const res = await roleApi.getRoles();
+          if (res.success && res.data) {
+            setDynamicRoleOptions(res.data.map(r => ({
+              value: r.id as string,
+              label: r.roleName
+            })));
+          }
+        } catch (e) {
+          // Bỏ qua nếu lỗi, giữ options mặc định
+        }
+      };
+      fetchRoleOptions();
     }
   }, [initialData, mode, isOpen, defaultUnitId, methods]);
 
@@ -130,7 +149,12 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
     }
   };
 
-  // Options data (Dependencies for schema)
+  // Chiết xuất động Option từ vật thể Đơn vị gửi từ backend (nếu chưa có trong list Mock)
+  const rawDept = (initialData as any)?.department;
+  const dynDeptOption = (typeof rawDept === 'object' && rawDept !== null)
+    ? { value: String(rawDept.id || rawDept.code || rawDept.value || ''), label: String(rawDept.deptName || rawDept.name || '') }
+    : null;
+
   const baseDepartmentOptions = [
     { value: '1', label: 'Văn phòng UBND thành phố Hải Phòng' },
     { value: '2', label: 'Sở Tài chính' },
@@ -144,21 +168,48 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
     { value: '10', label: 'Sở Văn hóa và Thể thao' },
   ];
 
-  // Nếu có lockedUnit, chèn nó vào đầu danh sách để select hiển thị đúng label
-  const departmentOptions = lockedUnit
-    ? [lockedUnit, ...baseDepartmentOptions.filter(o => o.value !== lockedUnit.value)]
-    : baseDepartmentOptions;
+  let departmentOptions = baseDepartmentOptions;
+  if (dynDeptOption && dynDeptOption.value && !departmentOptions.some(o => o.value === dynDeptOption.value)) {
+    departmentOptions = [dynDeptOption, ...departmentOptions];
+  }
+
+  // Tương tự chèn động Chức vụ
+  const rawPos = (initialData as any)?.position;
+  const dynPosOption = (typeof rawPos === 'object' && rawPos !== null)
+    ? { value: String(rawPos.id || rawPos.code || rawPos.value || ''), label: String(rawPos.positionName || rawPos.name || '') }
+    : null;
+
+  let positionOptions = [
+    { value: 'giam-doc', label: 'Giám đốc' },
+    { value: 'pho-giam-doc', label: 'Phó Giám đốc' },
+    { value: 'truong-phong', label: 'Trưởng phòng' },
+    { value: 'pho-phong', label: 'Phó phòng' },
+    { value: 'chuyen-vien', label: 'Chuyên viên' },
+    { value: 'nhan-vien', label: 'Nhân viên' },
+  ];
+  if (dynPosOption && dynPosOption.value && !positionOptions.some(o => o.value === dynPosOption.value)) {
+    positionOptions = [dynPosOption, ...positionOptions];
+  }
+
+  // Tương tự chèn động Vai trò
+  const rawRole = (initialData as any)?.role;
+  const dynRoleOption = (typeof rawRole === 'object' && rawRole !== null)
+    ? { value: String(rawRole.id || rawRole.code || rawRole.value || ''), label: String(rawRole.name || rawRole.roleName || rawRole.label || '') }
+    : null;
+
+  let roleOptions = [...dynamicRoleOptions];
+  if (dynRoleOption && dynRoleOption.value && !roleOptions.some(o => o.value === dynRoleOption.value)) {
+    roleOptions = [dynRoleOption, ...roleOptions];
+  }
+
+  if (lockedUnit) {
+    departmentOptions = [lockedUnit, ...departmentOptions.filter(o => o.value !== lockedUnit.value)];
+  }
 
   const deps = {
-    positionOptions: [
-      { value: 'giam-doc', label: 'Giám đốc' },
-      { value: 'pho-giam-doc', label: 'Phó Giám đốc' },
-      { value: 'truong-phong', label: 'Trưởng phòng' },
-      { value: 'pho-phong', label: 'Phó phòng' },
-      { value: 'chuyen-vien', label: 'Chuyên viên' },
-      { value: 'nhan-vien', label: 'Nhân viên' },
-    ],
+    positionOptions,
     departmentOptions,
+    roleOptions,
     statusOptions: [
       { value: 'active', label: 'Hoạt động' },
       { value: 'inactive', label: 'Ngừng hoạt động' },

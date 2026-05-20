@@ -11,29 +11,30 @@ interface TableTooltipProps {
  * Được thiết kế để sử dụng trong các ô của DataTable.
  */
 export const TableTooltip: React.FC<TableTooltipProps> = ({ 
-  text, 
+  text: rawText, 
   maxLength = 40,
   className = "text-sm text-gray-600"
 }) => {
+  // Chuyển đổi dữ liệu phòng vệ tránh crash khi BE trả về Object, Number hoặc Null
+  let text = '';
+  if (rawText === null || rawText === undefined) {
+    text = '---';
+  } else if (typeof rawText === 'object') {
+    const obj = rawText as any;
+    text = obj.name || obj.title || obj.label || JSON.stringify(rawText);
+  } else {
+    text = String(rawText);
+  }
+
   if (!text || text.length <= maxLength) {
-    return <span className={className}>{text || '---'}</span>;
+    return <span className={className}>{text}</span>;
   }
 
   const truncated = text.substring(0, maxLength) + '...';
 
   return (
-    <div className="relative group inline-block">
-      <span className={`${className} cursor-help`}>
-        {truncated}
-      </span>
-      {/* Custom Tooltip Container */}
-      <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block z-50 min-w-[250px] max-w-[450px]">
-        <div className="bg-white text-gray-800 text-xs rounded-xl shadow-xl border border-gray-200 p-3 leading-relaxed whitespace-normal animate-in fade-in zoom-in duration-200">
-          {text}
-          {/* Arrow */}
-          <div className="absolute left-4 top-full w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] border-t-white"></div>
-        </div>
-      </div>
-    </div>
+    <span className={`${className} cursor-help`} title={text}>
+      {truncated}
+    </span>
   );
 };

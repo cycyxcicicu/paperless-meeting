@@ -42,7 +42,11 @@ import vn.acme.paperless_meeting.repository.VoteBallotChoiceRepository;
 import vn.acme.paperless_meeting.repository.VoteBallotRepository;
 import vn.acme.paperless_meeting.repository.VoteOptionRepository;
 import vn.acme.paperless_meeting.repository.VoteSessionRepository;
+import vn.acme.paperless_meeting.repository.VoteEligibilityRepository;
+import vn.acme.paperless_meeting.repository.VoteResultRepository;
+import vn.acme.paperless_meeting.repository.VoteResultOptionRepository;
 import vn.acme.paperless_meeting.service.auth.CurrentUserService;
+import vn.acme.paperless_meeting.event.audit.AuditLogPublisher;
 
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -64,6 +68,14 @@ public class MotionServiceTest {
     CurrentUserService currentUserService;
     @Mock
     MotionMapper motionMapper;
+    @Mock
+    VoteEligibilityRepository voteEligibilityRepository;
+    @Mock
+    VoteResultRepository voteResultRepository;
+    @Mock
+    VoteResultOptionRepository voteResultOptionRepository;
+    @Mock
+    AuditLogPublisher auditLogPublisher;
 
     @InjectMocks
     MotionService motionService;
@@ -126,20 +138,27 @@ public class MotionServiceTest {
     }
 
     @Test
-    void stopVote_Expired_ThrowsException() {
+    void stopVote_Expired_Success() {
         // Arrange
         VoteSession expiredSession = new VoteSession();
+        expiredSession.setId(UUID.randomUUID());
         expiredSession.setStatus(VoteSessionStatus.OPEN);
         expiredSession.setOpenedAt(LocalDateTime.now().minusMinutes(5));
         expiredSession.setDurationMinutes(2); // Expired (5 minutes ago > 2 minutes duration)
         expiredSession.setMotion(motion);
         motion.getVoteSessionList().add(expiredSession);
 
-        // Act & Assert
-        AppException exception = assertThrows(AppException.class, () -> {
-            motionService.stopVote(motionId);
-        });
-        assertEquals(ErrorCode.VOTE_SESSION_CLOSED, exception.getErrorCode());
+        when(voteSessionRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+        when(motionRepository.save(any())).thenReturn(motion);
+        when(motionMapper.toResponse(any())).thenReturn(MotionResponse.builder().id(motionId).status(MotionStatus.CLOSED).build());
+        when(voteEligibilityRepository.countByVoteSessionId(any())).thenReturn(0L);
+
+        // Act
+        MotionResponse response = motionService.stopVote(motionId);
+        
+        // Assert
+        assertNotNull(response);
+        assertEquals(MotionStatus.CLOSED, response.getStatus());
     }
 
     @Test

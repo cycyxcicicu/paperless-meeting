@@ -3,6 +3,7 @@ import { FormFieldGroup } from '@/common/components/form-engine/form.types';
 export const createUserFormSchema = (deps: {
   departmentOptions: { value: string; label: string }[];
   positionOptions: { value: string; label: string }[];
+  roleOptions: { value: string; label: string }[];
   statusOptions: { value: string; label: string }[];
   isSelfProfile?: boolean;
   /** Khóa field đơn vị ở cả create lẫn edit, chỉ hiển thị */
@@ -97,6 +98,15 @@ export const createUserFormSchema = (deps: {
           options: deps.statusOptions,
           required: true,
           disabled: ({ mode }) => mode === 'view' || isSelfProfile, // Khóa khi là hồ sơ cá nhân
+          col: 'col-span-1',
+        },
+        {
+          key: 'role',
+          label: 'Vai trò (Phân quyền)',
+          type: 'select',
+          options: deps.roleOptions,
+          required: true,
+          disabled: ({ mode }) => mode === 'view' || isSelfProfile,
           col: 'col-span-1',
         },
       ],

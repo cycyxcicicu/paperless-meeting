@@ -17,6 +17,9 @@ import { Link, useLocation } from "react-router";
 import { cn } from '@/common/utils/cn';
 import { LazyScrollContainer } from "@/common/components/ui/LazyScrollContainer";
 
+import { useAuth } from "@/app/context/AuthContext";
+import { hasRoutePermission } from "@/app/routes/config";
+
 const TopBar = () => {
     const location = useLocation();
     const [showUserMenu, setShowUserMenu] = useState(false);
@@ -26,9 +29,11 @@ const TopBar = () => {
     const [showProfile, setShowProfile] = useState(false);
     const [showChangePassword, setShowChangePassword] = useState(false);
 
-    // Mock User Data (Sử dụng cấu trúc UserFormData)
-    const currentUser: any = {
-        id: 999,
+    const { user, logout } = useAuth();
+
+    // Dữ liệu người dùng thực tế lấy từ Context (bọc fallback để tránh lỗi layout)
+    const currentUser: any = user || {
+        id: "999",
         username: "admin",
         fullName: "Super Admin",
         email: "admin@haiphong.gov.vn",
@@ -117,7 +122,7 @@ const TopBar = () => {
 
                 {/* Main Navigation */}
                 <nav className="flex items-center gap-1 flex-1 overflow-x-auto px-[38px] py-[0px] scrollbar-hide">
-                    {mainModules.map((module) => {
+                    {mainModules.filter(m => hasRoutePermission(user, m.path)).map((module) => {
                         const isActive =
                             module.path === "/"
                                 ? location.pathname === "/"
@@ -282,7 +287,7 @@ const TopBar = () => {
                                     {currentUser.fullName}
                                 </span>
                                 <span className="text-[10px] btn-primary text-gray-500 leading-tight">
-                                    Quản trị hệ thống
+                                    {currentUser?.role?.roleName}
                                 </span>
                             </div>
                             <ChevronDown
@@ -341,7 +346,10 @@ const TopBar = () => {
                                     <div className="h-px bg-gray-100 my-1" />
 
                                     <div className="p-2">
-                                        <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm btn-primary text-red-600 hover:bg-red-50 transition-all group text-left">
+                                        <button 
+                                            onClick={logout}
+                                            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm btn-primary text-red-600 hover:bg-red-50 transition-all group text-left"
+                                        >
                                             <LogOut className="h-4 w-4" strokeWidth={2.5} />
                                             <span>Đăng xuất</span>
                                         </button>

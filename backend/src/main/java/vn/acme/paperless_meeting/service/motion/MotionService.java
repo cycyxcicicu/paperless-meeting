@@ -29,6 +29,10 @@ import vn.acme.paperless_meeting.entity.enums.MotionStatus;
 import vn.acme.paperless_meeting.entity.enums.ParticipantRole;
 import vn.acme.paperless_meeting.entity.enums.VoteSessionStatus;
 import vn.acme.paperless_meeting.entity.enums.VoteType;
+import vn.acme.paperless_meeting.entity.enums.AuditAction;
+import vn.acme.paperless_meeting.entity.enums.ResourceType;
+import vn.acme.paperless_meeting.event.audit.AuditLogPublisher;
+import java.util.Map;
 import vn.acme.paperless_meeting.exceptions.AppException;
 import vn.acme.paperless_meeting.exceptions.ErrorCode;
 import vn.acme.paperless_meeting.mapper.motion.MotionMapper;
@@ -39,6 +43,11 @@ import vn.acme.paperless_meeting.repository.VoteBallotChoiceRepository;
 import vn.acme.paperless_meeting.repository.VoteBallotRepository;
 import vn.acme.paperless_meeting.repository.VoteOptionRepository;
 import vn.acme.paperless_meeting.repository.VoteSessionRepository;
+import vn.acme.paperless_meeting.repository.VoteEligibilityRepository;
+import vn.acme.paperless_meeting.repository.VoteResultRepository;
+import vn.acme.paperless_meeting.repository.VoteResultOptionRepository;
+import vn.acme.paperless_meeting.entity.VoteResult;
+import vn.acme.paperless_meeting.entity.VoteResultOption;
 import vn.acme.paperless_meeting.service.auth.CurrentUserService;
 
 @Service
@@ -53,8 +62,12 @@ public class MotionService {
     VoteOptionRepository voteOptionRepository;
     VoteBallotRepository voteBallotRepository;
     VoteBallotChoiceRepository voteBallotChoiceRepository;
+    VoteEligibilityRepository voteEligibilityRepository;
+    VoteResultRepository voteResultRepository;
+    VoteResultOptionRepository voteResultOptionRepository;
     CurrentUserService currentUserService;
     MotionMapper motionMapper;
+    AuditLogPublisher auditLogPublisher;
 
     /**
      * Tạo mới một vấn đề biểu quyết
@@ -91,8 +104,20 @@ public class MotionService {
         motion.setCreatedBy(caller);
         motion.setStatus(MotionStatus.DRAFT);
         motion.setCreatedAt(LocalDateTime.now());
+        Motion savedMotion = motionRepository.save(motion);
 
-        return motionMapper.toResponse(motionRepository.save(motion));
+        auditLogPublisher.publish(
+                caller,
+                AuditAction.CREATE_MOTION,
+                ResourceType.MOTION,
+                savedMotion.getId(),
+                Map.of(
+                        "title", String.valueOf(savedMotion.getTitle()),
+                        "description", String.valueOf(savedMotion.getDescription())
+                )
+        );
+
+        return motionMapper.toResponse(savedMotion);
     }
 
     /**
@@ -127,7 +152,20 @@ public class MotionService {
         }
 
         motionMapper.updateEntity(request, motion);
-        return motionMapper.toResponse(motionRepository.save(motion));
+        Motion savedMotion = motionRepository.save(motion);
+
+        auditLogPublisher.publish(
+                caller,
+                AuditAction.UPDATE_MOTION,
+                ResourceType.MOTION,
+                savedMotion.getId(),
+                Map.of(
+                        "title", String.valueOf(savedMotion.getTitle()),
+                        "description", String.valueOf(savedMotion.getDescription())
+                )
+        );
+
+        return motionMapper.toResponse(savedMotion);
     }
 
     /**
@@ -162,6 +200,17 @@ public class MotionService {
         }
 
         motionRepository.delete(motion);
+
+        auditLogPublisher.publish(
+                caller,
+                AuditAction.DELETE_MOTION,
+                ResourceType.MOTION,
+                motion.getId(),
+                Map.of(
+                        "title", String.valueOf(motion.getTitle()),
+                        "description", String.valueOf(motion.getDescription())
+                )
+        );
     }
 
     /**
@@ -228,7 +277,19 @@ public class MotionService {
         voteOptionRepository.save(optNo);
 
         motion.setStatus(MotionStatus.SUBMITTED);
-        return motionMapper.toResponse(motionRepository.save(motion));
+        Motion savedMotion = motionRepository.save(motion);
+
+        auditLogPublisher.publish(
+                caller,
+                AuditAction.OPEN_VOTE,
+                ResourceType.MOTION,
+                savedMotion.getId(),
+                Map.of(
+                        "durationMinutes", String.valueOf(durationMinutes)
+                )
+        );
+
+        return motionMapper.toResponse(savedMotion);
     }
 
     /**
@@ -259,18 +320,71 @@ public class MotionService {
         if (activeSession.getOpenedAt() != null && activeSession.getDurationMinutes() != null) {
             LocalDateTime expireTime = activeSession.getOpenedAt().plusMinutes(activeSession.getDurationMinutes());
             if (LocalDateTime.now().isAfter(expireTime)) {
-                // Fix bug: Không save rồi throw (toàn bộ transaction sẽ bị rollback, save vô nghĩa).
-                // Chỉ throw — VoteStatusJob chạy mỗi 5 giây sẽ tự dọn và đóng phiên.
-                throw new AppException(ErrorCode.VOTE_SESSION_CLOSED);
+                // Đã quá giờ thì vẫn tiếp tục update trạng thái CLOSED
             }
         }
 
-        activeSession.setClosedAt(LocalDateTime.now());
+        completeVoteSessionInternal(activeSession, LocalDateTime.now());
+
+        auditLogPublisher.publish(
+                caller,
+                AuditAction.CLOSE_VOTE,
+                ResourceType.MOTION,
+                motion.getId(),
+                Map.of(
+                        "title", String.valueOf(motion.getTitle())
+                )
+        );
+
+        return motionMapper.toResponse(motionRepository.findById(id).orElseThrow());
+    }
+
+    @Transactional
+    public void completeVoteSession(VoteSession session) {
+        completeVoteSessionInternal(session, LocalDateTime.now());
+    }
+
+    private void completeVoteSessionInternal(VoteSession activeSession, LocalDateTime closeTime) {
+        if (activeSession.getStatus() == VoteSessionStatus.CLOSED) return;
+
+        activeSession.setClosedAt(closeTime);
         activeSession.setStatus(VoteSessionStatus.CLOSED);
         voteSessionRepository.save(activeSession);
 
-        motion.setStatus(MotionStatus.CLOSED);
-        return motionMapper.toResponse(motionRepository.save(motion));
+        Motion motion = activeSession.getMotion();
+        if (motion != null) {
+            motion.setStatus(MotionStatus.CLOSED);
+            motionRepository.save(motion);
+        }
+
+        // 1. Lưu VoteResult
+        VoteStatisticsResponse stats = getVoteStatisticsInternal(activeSession, motion);
+        VoteResult result = new VoteResult();
+        result.setId(activeSession.getId());
+        result.setVoteSession(activeSession);
+        result.setTotalEligible((long) stats.getTotalVoters());
+        result.setTotalCast((long) stats.getVotedCount());
+        result.setTotalValid((long) stats.getVotedCount());
+        result.setPassed(stats.getYesCount() > stats.getNoCount());
+        result.setComputedAt(LocalDateTime.now());
+        try {
+            result.setComputedBy(currentUserService.getCurrentActiveUser());
+        } catch (Exception e) {
+            // Có thể null nếu gọi từ background job
+        }
+        voteResultRepository.save(result);
+
+        // 2. Lưu VoteResultOption
+        List<VoteOption> options = voteOptionRepository.findByVoteSessionIdOrderByOrderNoAsc(activeSession.getId());
+        for (VoteOption option : options) {
+            long count = voteBallotChoiceRepository.countValidChoicesByOption(option.getId());
+            VoteResultOption vro = new VoteResultOption();
+            vro.setVoteSession(activeSession);
+            vro.setOption(option);
+            vro.setVoteCount(count);
+            vro.setWeightSum(java.math.BigDecimal.valueOf(count));
+            voteResultOptionRepository.save(vro);
+        }
     }
 
     /**
@@ -312,6 +426,15 @@ public class MotionService {
             throw new AppException(ErrorCode.VOTE_ROLE_NOT_ALLOWED);
         }
 
+        // Kiểm tra Whitelist (VoteEligibility)
+        long eligibilityCount = voteEligibilityRepository.countByVoteSessionId(activeSession.getId());
+        if (eligibilityCount > 0) {
+            boolean isEligible = voteEligibilityRepository.existsByVoteSessionIdAndUserIdAndEligibleTrue(activeSession.getId(), caller.getId());
+            if (!isEligible) {
+                throw new AppException(ErrorCode.VOTE_ROLE_NOT_ALLOWED);
+            }
+        }
+
         // 3. Kiểm tra xem người dùng này đã biểu quyết chưa (chống vote trùng)
         boolean alreadyVoted = voteBallotRepository.existsByVoteSessionIdAndUserId(activeSession.getId(), caller.getId());
         if (alreadyVoted) {
@@ -340,6 +463,16 @@ public class MotionService {
         choice.setOption(option);
         voteBallotChoiceRepository.save(choice);
 
+        auditLogPublisher.publish(
+                caller,
+                AuditAction.CAST_VOTE,
+                ResourceType.MOTION,
+                motion.getId(),
+                Map.of(
+                        "optionLabel", String.valueOf(option.getLabel())
+                )
+        );
+
         return motionMapper.toResponse(motion);
     }
 
@@ -358,36 +491,37 @@ public class MotionService {
 
         if (session == null) {
             return VoteStatisticsResponse.builder()
-                    .totalVoters(0)
-                    .votedCount(0)
-                    .notVotedCount(0)
-                    .yesCount(0)
-                    .noCount(0)
-                    .build();
+                    .totalVoters(0).votedCount(0).notVotedCount(0).yesCount(0).noCount(0).build();
         }
 
-        // 1. Tính tổng số đại biểu tham gia cuộc họp có quyền biểu quyết (chỉ vai trò PARTICIPANT)
-        int totalVoters = (int) meetingParticipantRepository.countByMeetingIdAndParticipantRole(
-                motion.getMeeting().getId(), ParticipantRole.PARTICIPANT);
+        return getVoteStatisticsInternal(session, motion);
+    }
 
-        // 2. Tính số lượng người đã bỏ phiếu hợp lệ — COUNT tại DB thay vì kéo toàn bộ list lên RAM
+    private VoteStatisticsResponse getVoteStatisticsInternal(VoteSession session, Motion motion) {
+        // 1. Tính tổng cử tri hợp lệ
+        int totalVoters = 0;
+        long eligibilityCount = voteEligibilityRepository.countByVoteSessionId(session.getId());
+        if (eligibilityCount > 0) {
+            totalVoters = (int) eligibilityCount;
+        } else {
+            totalVoters = (int) meetingParticipantRepository.countByMeetingIdAndParticipantRole(
+                    motion.getMeeting().getId(), ParticipantRole.PARTICIPANT);
+        }
+
+        // 2. Số lượng người đã bỏ phiếu hợp lệ
         int votedCount = (int) voteBallotChoiceRepository.countValidBallotsBySession(session.getId());
 
-        // 3. Tính số người chưa bỏ phiếu
+        // 3. Số người chưa bỏ phiếu
         int notVotedCount = Math.max(0, totalVoters - votedCount);
 
-        // 4. Tính số phiếu Đồng ý (CÓ) và Không đồng ý (KHÔNG) — COUNT tại DB theo từng option
-        //    Dựa tuyệt đối vào orderNo (1 = CÓ, 2 = KHÔNG) để tránh lỗi bảng mã ký tự tiếng Việt
+        // 4. Đếm chi tiết vote
         int yesCount = 0;
         int noCount = 0;
         List<VoteOption> options = voteOptionRepository.findByVoteSessionIdOrderByOrderNoAsc(session.getId());
         for (VoteOption option : options) {
             long count = voteBallotChoiceRepository.countValidChoicesByOption(option.getId());
-            if (Integer.valueOf(1).equals(option.getOrderNo())) {
-                yesCount = (int) count;
-            } else if (Integer.valueOf(2).equals(option.getOrderNo())) {
-                noCount = (int) count;
-            }
+            if (Integer.valueOf(1).equals(option.getOrderNo())) yesCount = (int) count;
+            else if (Integer.valueOf(2).equals(option.getOrderNo())) noCount = (int) count;
         }
 
         return VoteStatisticsResponse.builder()

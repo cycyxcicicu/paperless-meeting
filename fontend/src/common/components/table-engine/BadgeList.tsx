@@ -1,4 +1,5 @@
 import React from 'react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/common/components/ui/tooltip';
 
 export interface BadgeItem {
   key: string;
@@ -40,23 +41,29 @@ export const BadgeList: React.FC<BadgeListProps> = ({
       ))}
 
       {hidden.length > 0 && (
-        <span className="relative group">
-          <span className="inline-flex px-2 py-0.5 text-[10px] btn-primary rounded-md bg-gray-50 text-gray-500 border border-gray-100 cursor-pointer hover:bg-gray-100 transition-colors">
-            +{hidden.length}
-          </span>
-          {/* Tooltip */}
-          <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block z-50 min-w-[180px]">
-            <div className="bg-white text-gray-800 text-xs rounded-xl shadow-lg border border-gray-200 p-2.5 space-y-1">
-              {hidden.map(item => (
-                <div key={item.key} className="flex items-center gap-1.5 py-0.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0"></span>
-                  {item.label}
-                </div>
-              ))}
-              <div className="absolute left-3 top-full w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] border-t-white"></div>
-            </div>
-          </div>
-        </span>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="inline-flex px-2 py-0.5 text-[10px] btn-primary rounded-md bg-gray-50 text-gray-500 border border-gray-100 cursor-pointer hover:bg-gray-100 transition-colors">
+                +{hidden.length}
+              </span>
+            </TooltipTrigger>
+            <TooltipContent 
+              side="bottom" 
+              showArrow={false}
+              className="bg-white text-gray-800 border border-gray-200 p-2 shadow-xl rounded-xl max-h-[200px] overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-gray-200 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-gray-300 pointer-events-auto"
+            >
+              <div className="space-y-1 min-w-[180px]">
+                {hidden.map(item => (
+                  <div key={item.key} className="flex items-center gap-1.5 py-1 px-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0"></span>
+                    <span className="text-xs text-left leading-relaxed">{item.label}</span>
+                  </div>
+                ))}
+              </div>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       )}
 
       {items.length === 0 && (

@@ -24,6 +24,11 @@ import vn.acme.paperless_meeting.entity.User;
 import vn.acme.paperless_meeting.entity.enums.DocumentStatus;
 import vn.acme.paperless_meeting.entity.enums.DocumentType;
 import vn.acme.paperless_meeting.entity.enums.MeetingStatus;
+import vn.acme.paperless_meeting.entity.enums.AuditAction;
+import vn.acme.paperless_meeting.entity.enums.ResourceType;
+import vn.acme.paperless_meeting.event.audit.AuditLogPublisher;
+import java.util.Map;
+import vn.acme.paperless_meeting.entity.enums.MeetingStatus;
 import vn.acme.paperless_meeting.exceptions.AppException;
 import vn.acme.paperless_meeting.exceptions.ErrorCode;
 import vn.acme.paperless_meeting.mapper.document.DocumentMapper;
@@ -49,6 +54,7 @@ public class DocumentService {
     CurrentUserService currentUserService;
     DocumentMapper documentMapper;
     MeetingDocumentMapper meetingDocumentMapper;
+    AuditLogPublisher auditLogPublisher;
 
     // ========== NHÓM A — Document CRUD ==========
 
@@ -90,6 +96,18 @@ public class DocumentService {
         DocumentVersion savedVersion = documentVersionRepository.save(version);
         savedDoc.setCurrentVersion(savedVersion);
         documentRepository.save(savedDoc);
+
+        auditLogPublisher.publish(
+                caller,
+                AuditAction.UPLOAD_DOCUMENT,
+                ResourceType.DOCUMENT,
+                savedDoc.getId(),
+                Map.of(
+                        "title", String.valueOf(savedDoc.getTitle()),
+                        "docType", String.valueOf(savedDoc.getDocType()),
+                        "fileName", String.valueOf(savedVersion.getFileName())
+                )
+        );
 
         return documentMapper.toResponse(savedDoc);
     }
@@ -149,6 +167,16 @@ public class DocumentService {
 
         // Soft-delete (nhờ @SQLDelete trên entity)
         documentRepository.delete(document);
+
+        auditLogPublisher.publish(
+                caller,
+                AuditAction.DELETE_DOCUMENT,
+                ResourceType.DOCUMENT,
+                document.getId(),
+                Map.of(
+                        "title", String.valueOf(document.getTitle())
+                )
+        );
     }
 
     // ========== NHÓM B — Meeting Document ==========
@@ -191,6 +219,18 @@ public class DocumentService {
         }
 
         MeetingDocument saved = meetingDocumentRepository.save(meetingDoc);
+
+        auditLogPublisher.publish(
+                currentUserService.getCurrentActiveUser(),
+                AuditAction.ATTACH_DOCUMENT,
+                ResourceType.DOCUMENT,
+                document.getId(),
+                Map.of(
+                        "meetingId", String.valueOf(meetingId),
+                        "usageType", String.valueOf(request.getUsageType())
+                )
+        );
+
         return meetingDocumentMapper.toResponse(saved);
     }
 
@@ -216,6 +256,16 @@ public class DocumentService {
         MeetingDocument meetingDoc = meetingDocumentRepository.findByMeetingIdAndId(meetingId, meetingDocId)
                 .orElseThrow(() -> new AppException(ErrorCode.DOCUMENT_MEETING_NOT_FOUND));
         meetingDocumentRepository.delete(meetingDoc);
+
+        auditLogPublisher.publish(
+                currentUserService.getCurrentActiveUser(),
+                AuditAction.DETACH_DOCUMENT,
+                ResourceType.DOCUMENT,
+                meetingDoc.getDocument().getId(),
+                Map.of(
+                        "meetingId", String.valueOf(meetingId)
+                )
+        );
     }
 
     /**
@@ -244,6 +294,18 @@ public class DocumentService {
         }
 
         MeetingDocument saved = meetingDocumentRepository.save(meetingDoc);
+
+        auditLogPublisher.publish(
+                currentUserService.getCurrentActiveUser(),
+                AuditAction.UPDATE_DOCUMENT,
+                ResourceType.DOCUMENT,
+                meetingDoc.getDocument().getId(),
+                Map.of(
+                        "meetingId", String.valueOf(meetingId),
+                        "usageType", String.valueOf(request.getUsageType())
+                )
+        );
+
         return meetingDocumentMapper.toResponse(saved);
     }
 

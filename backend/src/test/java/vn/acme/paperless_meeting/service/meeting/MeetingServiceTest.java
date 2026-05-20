@@ -59,6 +59,8 @@ class MeetingServiceTest {
     MeetingParticipantRepository meetingParticipantRepository;
     @Mock
     ApprovalService approvalService;
+    @Mock
+    vn.acme.paperless_meeting.event.audit.AuditLogPublisher auditLogPublisher;
 
     @InjectMocks
     MeetingService meetingService;

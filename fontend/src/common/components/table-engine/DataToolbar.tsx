@@ -27,7 +27,7 @@ interface DataToolbarProps {
   exportDisabled?: boolean;
   
   // Bulk Actions
-  selectedIds?: number[];
+  selectedIds?: (number | string)[];
   totalItems?: number;
   onSelectAll?: () => void;
   bulkActions?: BulkActionDef[];

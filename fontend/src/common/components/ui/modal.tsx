@@ -23,6 +23,7 @@ export function Modal({ isOpen, onClose, title, description, children, className
     >
       <DialogContent 
         className={className}
+        hideCloseButton={preventClose}
         // Chặn phím Esc và click ra ngoài nếu preventClose = true
         onPointerDownOutside={(e) => preventClose && e.preventDefault()}
         onEscapeKeyDown={(e) => preventClose && e.preventDefault()}

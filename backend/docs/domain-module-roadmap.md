@@ -6,9 +6,9 @@
 
 ## Tổng quan tiến độ hiện tại
 
-**Cập nhật lần cuối**: 2026-05-19 03:26
+**Cập nhật lần cuối**: 2026-05-21 00:00
 
-**Tiến độ backend ước tính**: **~72% hoàn thành**.
+**Tiến độ backend ước tính**: **~85% hoàn thành**.
 
 Core nghiệp vụ chính đã hoàn thiện đủ để frontend bắt đầu tích hợp:
 
@@ -16,10 +16,11 @@ Core nghiệp vụ chính đã hoàn thiện đủ để frontend bắt đầu t
 - Meeting CRUD và workflow submit / approve / reject / cancel / close đã hoạt động.
 - Participant / guest RSVP / attendance đã có API và public token flow.
 - Agenda Item đã có CRUD, quy trình chuẩn bị tài liệu, duyệt / từ chối tài liệu.
-- Motion & Vote đã có API tạo biểu quyết, mở / đóng phiên, bỏ phiếu và thống kê.
+- Motion & Vote đã có API tạo biểu quyết, mở / đóng phiên, bỏ phiếu và kiểm duyệt kết quả đóng phiên an toàn.
 - Document API đã tích hợp MinIO, upload file, versioning và attach vào meeting.
+- Speaker Queue đã hoàn thiện luồng đăng ký phát biểu, chỉ định và kiểm soát phiên báo cáo (REST API).
 - Swagger/OpenAPI annotation đã bổ sung cho các controller chính.
-- Unit test hiện đã chạy thành công, gần nhất ghi nhận **68/68 tests passed**.
+- Unit test hiện đã chạy thành công, gần nhất ghi nhận **126/126 tests passed (Coverage Speaker, Vote hoàn thiện)**.
 
 Các phần còn thiếu chủ yếu là module hỗ trợ vận hành:
 
@@ -233,7 +234,18 @@ Các phần còn thiếu chủ yếu là module hỗ trợ vận hành:
 
 ---
 
-## Plan 7: Notification/Reminder (chi tiết triển khai WebSocket + Email Cloud)
+## Plan 7: Speaker Queue & Vote Completion
+
+**Mục tiêu**: Hoàn thiện tính năng Xin phát biểu (Speaker Queue) xếp hàng cho đại biểu và Hoàn tất module Biểu quyết (giới hạn danh sách trắng cử tri, tính kết quả).
+
+**Hiện trạng**: **Đã hoàn thành**.
+- **Vote**: Áp dụng `VoteEligibility` check (danh sách trắng) + Tự động đóng chốt kết quả đỗ/trượt (`VoteResult`).
+- **Speaker**: Chủ tọa có thể thao tác với Hàng chờ, Chỉ đích danh người nói, Ngắt người nói ép buộc. Quét ngầm tự động huỷ pending/expired session.
+- **Verification**: Đã cung cấp đầy đủ Unit Test chạy báo pass toàn bộ.
+
+---
+
+## Plan 8: Notification/Reminder (chi tiết triển khai WebSocket + Email Cloud)
 
 **Mục tiêu**:
 1. Có **in-app notification** cho người dùng (notification bell).
@@ -243,7 +255,7 @@ Các phần còn thiếu chủ yếu là module hỗ trợ vận hành:
 
 **Entity có sẵn**: `Notification` (type, content, channel, status, scheduledAt, sentAt, readAt, refType, refId).
 
-### 7.1 Phạm vi nghiệp vụ (events cần bắn thông báo)
+### 8.1 Phạm vi nghiệp vụ (events cần bắn thông báo)
 
 **Bắt buộc (phase đầu):**
 - Meeting: `SUBMITTED`, `APPROVED`, `REJECTED`, `CANCELLED`, `PUBLISHED`, `CLOSED`.
@@ -255,7 +267,7 @@ Các phần còn thiếu chủ yếu là module hỗ trợ vận hành:
 - Nhắc lịch họp trước 24h, 2h, 15 phút (configurable).
 - Nhắc phiên biểu quyết sắp đóng (ví dụ còn 5 phút).
 
-### 7.2 Kiến trúc kỹ thuật đề xuất
+### 8.2 Kiến trúc kỹ thuật đề xuất
 
 ```text
 Business Service (Meeting/Agenda/Participant/Motion)
@@ -273,7 +285,7 @@ NotificationOrchestrator
 - Chỉ publish event, Notification module xử lý đa kênh.
 - WebSocket gửi nhanh; Email gửi async để không block API chính.
 
-### 7.3 Thiết kế WebSocket (Spring)
+### 8.3 Thiết kế WebSocket (Spring)
 
 - Endpoint handshake: `/ws`.
 - Dùng STOMP (`/app`, `/topic`, `/user`).
@@ -291,7 +303,7 @@ NotificationOrchestrator
 - Dùng JWT token ở handshake header.
 - Chỉ cho subscribe queue của chính user.
 
-### 7.4 Email Cloud (đề xuất)
+### 8.4 Email Cloud (đề xuất)
 
 Nên implement interface:
 - `EmailSenderPort`
@@ -309,7 +321,7 @@ Adapters:
 
 **Khuyến nghị hiện tại**: bắt đầu với **Brevo/SendGrid**, khi ổn định chuyển **SES** nếu traffic tăng.
 
-### 7.5 API cần bổ sung
+### 8.5 API cần bổ sung
 
 | Method | Endpoint | Chức năng |
 |---|---|---|
@@ -319,7 +331,7 @@ Adapters:
 | PUT | `/notifications/read-all` | Đánh dấu đọc toàn bộ |
 | POST | `/notifications/test` | Test gửi notification (admin/dev only) |
 
-### 7.6 Trạng thái & retry policy
+### 8.6 Trạng thái & retry policy
 
 **Status đề xuất**:
 - `PENDING` (vừa tạo)
@@ -331,24 +343,24 @@ Adapters:
 - retry tối đa 3 lần (1m, 5m, 15m).
 - quá 3 lần: giữ `FAILED`, ghi error message để theo dõi.
 
-### 7.7 Kế hoạch triển khai theo sprint
+### 8.7 Kế hoạch triển khai theo sprint
 
-**Phase 7A (2-3 ngày): In-app + API cơ bản**
+**Phase 8A (2-3 ngày): In-app + API cơ bản**
 - `NotificationService`, `NotificationController`, repository query paging.
 - API list/read/read-all/unread-count.
 - Tạo notification khi `approve/reject/invite`.
 
-**Phase 7B (1-2 ngày): WebSocket realtime**
+**Phase 8B (1-2 ngày): WebSocket realtime**
 - `WebSocketConfig`, JWT handshake interceptor.
 - Push event vào `/user/queue/notifications`.
 - FE bell nhận realtime + cập nhật unread badge.
 
-**Phase 7C (2 ngày): Email Cloud + Reminder scheduler**
+**Phase 8C (2 ngày): Email Cloud + Reminder scheduler**
 - Implement `EmailSenderPort` + adapter cloud.
 - Scheduler nhắc lịch trước họp.
 - Retry policy + logging.
 
-### 7.8 Tiêu chí hoàn thành (Definition of Done)
+### 8.8 Tiêu chí hoàn thành (Definition of Done)
 
 - User nhận được notification trên UI **ngay lập tức** khi có event.
 - Reload trang vẫn thấy lịch sử notification từ DB.
@@ -356,7 +368,7 @@ Adapters:
 - Email reminder gửi thành công >95% (môi trường test/staging).
 - Có test cho mapper/service/retry logic và permission API.
 
-### 7.9 Phương án A/B/C cập nhật
+### 8.9 Phương án A/B/C cập nhật
 
 ### Phương án A — In-app notification
 - **Scope**: API list/read/read-all + lưu DB.
@@ -374,7 +386,7 @@ Adapters:
 
 ---
 
-## Plan 8: Audit Log
+## Plan 9: Audit Log
 
 **Entity có sẵn**: `AuditLog` (action, resourceType, resourceId, metaJson, actorUser, retentionUntil).
 **Hiện trạng**: Chỉ có entity.
@@ -394,7 +406,7 @@ Adapters:
 
 ---
 
-## Plan 9: Frontend Integration + Test Data + Swagger
+## Plan 10: Frontend Integration + Test Data + Swagger
 
 **Mục tiêu**: FE có đủ dữ liệu mẫu và tài liệu API để ghép.
 
@@ -422,10 +434,11 @@ Adapters:
 | Plan 3 | Meeting Participant APIs | ✅ Done | 100% | Internal attendees, guests, RSVP, attendance, public token endpoints |
 | Plan 4 | Agenda Item APIs | ✅ Done | 100% | CRUD + prep request + submit/approve/reject docs |
 | Plan 5 | Meeting Document/File APIs | ✅ Done | 100% | MinIO upload, validation file type/size, document versioning, attach to meeting |
-| Plan 6 | Approval Workflow | ✅ Done/MVP | 100% | Meeting approval đang nằm trong MeetingService; chưa tách ApprovalService riêng |
-| Plan 7 | Notification/Reminder | ❌ Not started | 0% | Entity có sẵn, chưa có Service/API |
-| Plan 8 | Audit Log | ❌ Not started | 0% | Entity có sẵn, chưa có Service/API |
-| Plan 9 | Frontend Integration + Test Data + Swagger | ⚠️ Partial | 50% | Swagger annotation đã có; seed data/Postman collection chưa hoàn thiện |
+| Plan 6 | Approval Workflow | ✅ Done | 100% | Đã tách rời ApprovalService và áp dụng thực thể ApprovalRequest/ApprovalStep |
+| Plan 7 | Speaker Queue & Vote | ✅ Done | 100% | Hoàn tất hàng chờ Speaker và thống kê kết quả biểu quyết (Whitelisting check & VoteResult) |
+| Plan 8 | Notification/Reminder | ❌ Not started | 0% | Entity có sẵn, chưa có Service/API |
+| Plan 9 | Audit Log | ❌ Not started | 0% | Entity có sẵn, chưa có Service/API |
+| Plan 10| Frontend Integration + Test Data + Swagger | ⚠️ Partial | 50% | Swagger annotation đã có; seed data/Postman collection chưa hoàn thiện |
 
 **Tiến độ tổng thể ước tính: ~72%.**
 
@@ -442,7 +455,8 @@ Adapters:
 | Agenda Item | 9 | Nội dung họp và quy trình chuẩn bị tài liệu |
 | Motion & Vote | 8 | Biểu quyết và thống kê |
 | Document | 8 | Upload MinIO, versioning, attach/detach |
-| **Tổng** | **~79** | Đủ để FE tích hợp core workflow |
+| Speaker | 5 | Chức năng xin phát biểu, chỉ định
+| **Tổng** | **~84** | Đủ để FE tích hợp core workflow |
 
 ---
 

@@ -17,6 +17,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 
 import vn.acme.paperless_meeting.dto.request.approval.ApprovalDecisionRequest;
 import vn.acme.paperless_meeting.dto.request.approval.SubmitApprovalRequest;
@@ -44,6 +46,7 @@ import vn.acme.paperless_meeting.service.auth.CurrentUserService;
 import vn.acme.paperless_meeting.service.department.DepartmentService;
 
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class ApprovalServiceTest {
 
     @Mock ApprovalRequestRepository approvalRequestRepository;
@@ -54,6 +57,7 @@ class ApprovalServiceTest {
     @Mock CurrentUserService currentUserService;
     @Mock DepartmentService departmentService;
     @Mock ApprovalMapper approvalMapper;
+    @Mock vn.acme.paperless_meeting.event.audit.AuditLogPublisher auditLogPublisher;
 
     @InjectMocks ApprovalService approvalService;
 

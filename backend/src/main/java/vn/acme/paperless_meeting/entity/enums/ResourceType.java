@@ -15,5 +15,8 @@ public enum ResourceType {
     VOTE_SESSION,
     AGENDA,
     VOTE,
-    NOTIFICATION
+    NOTIFICATION,
+    SPEAKER,
+    PARTICIPANT,
+    MOTION
 }

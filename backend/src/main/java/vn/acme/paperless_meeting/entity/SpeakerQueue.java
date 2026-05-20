@@ -44,6 +44,10 @@ public class SpeakerQueue {
     @Enumerated(EnumType.STRING)
     @Column(name = "priority")
     private SpeakerQueuePriority priority;
+
+    @Column(name = "sort_order")
+    private Integer sortOrder;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "queue_status")
     private SpeakerQueueStatus queueStatus;
