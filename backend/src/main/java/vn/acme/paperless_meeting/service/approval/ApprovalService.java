@@ -19,6 +19,7 @@ import vn.acme.paperless_meeting.entity.ApprovalStep;
 import vn.acme.paperless_meeting.entity.Document;
 import vn.acme.paperless_meeting.entity.Meeting;
 import vn.acme.paperless_meeting.entity.Minutes;
+import vn.acme.paperless_meeting.entity.Role;
 import vn.acme.paperless_meeting.entity.User;
 import vn.acme.paperless_meeting.entity.enums.ApprovalDecision;
 import vn.acme.paperless_meeting.entity.enums.ApprovalStatus;
@@ -35,6 +36,8 @@ import vn.acme.paperless_meeting.repository.ApprovalStepRepository;
 import vn.acme.paperless_meeting.repository.DocumentRepository;
 import vn.acme.paperless_meeting.repository.MeetingRepository;
 import vn.acme.paperless_meeting.repository.MinutesRepository;
+import vn.acme.paperless_meeting.repository.RoleRepository;
+import vn.acme.paperless_meeting.repository.UserRepository;
 import vn.acme.paperless_meeting.service.auth.CurrentUserService;
 import vn.acme.paperless_meeting.service.department.DepartmentService;
 
@@ -52,6 +55,8 @@ public class ApprovalService {
     MeetingRepository meetingRepository;
     DocumentRepository documentRepository;
     MinutesRepository minutesRepository;
+    UserRepository userRepository;
+    RoleRepository roleRepository;
     CurrentUserService currentUserService;
     DepartmentService departmentService;
     ApprovalMapper approvalMapper;
@@ -77,6 +82,17 @@ public class ApprovalService {
         firstStep.setApprovalRequest(saved);
         firstStep.setStepNo(1);
         firstStep.setDecision(ApprovalDecision.PENDING);
+        
+        if (request.getApproverUserId() != null) {
+            User approver = userRepository.findById(request.getApproverUserId())
+                    .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
+            firstStep.setApproverUser(approver);
+        } else if (request.getApproverRoleId() != null) {
+            Role approverRole = roleRepository.findById(request.getApproverRoleId())
+                    .orElseThrow(() -> new AppException(ErrorCode.ROLE_NOT_EXIST));
+            firstStep.setApproverRole(approverRole);
+        }
+
         approvalStepRepository.save(firstStep);
 
         updateResourceStatusOnSubmit(request.getResourceType(), request.getResourceId());
@@ -89,7 +105,7 @@ public class ApprovalService {
     @Transactional
     public ApprovalRequestResponse approve(UUID approvalId, ApprovalDecisionRequest request) {
         ApprovalRequest approvalRequest = getPendingApproval(approvalId);
-        requireApprovePermission(approvalRequest.getResourceType(), approvalRequest.getResourceId());
+        requireApprovePermission(approvalRequest);
 
         ApprovalStep currentStep = getCurrentPendingStep(approvalRequest.getId());
         User caller = currentUserService.getCurrentActiveUser();
@@ -112,7 +128,7 @@ public class ApprovalService {
     @Transactional
     public ApprovalRequestResponse reject(UUID approvalId, ApprovalDecisionRequest request) {
         ApprovalRequest approvalRequest = getPendingApproval(approvalId);
-        requireApprovePermission(approvalRequest.getResourceType(), approvalRequest.getResourceId());
+        requireApprovePermission(approvalRequest);
 
         String reason = resolveRejectReason(request);
         ApprovalStep currentStep = getCurrentPendingStep(approvalRequest.getId());
@@ -180,18 +196,20 @@ public class ApprovalService {
     public List<ApprovalRequestResponse> getPendingApprovals(ResourceType resourceType) {
         List<ApprovalRequest> requests = approvalRequestRepository.findAllPending(resourceType, ApprovalStatus.PENDING);
         return requests.stream()
-                .filter(req -> hasApprovePermission(req.getResourceType(), req.getResourceId())) // Filter client side check permissions
+                .filter(this::hasApprovePermission) // Filter client side check permissions
                 .peek(this::sortSteps)
                 .map(this::mapToResponseWithTitle)
                 .toList();
     }
 
     @Transactional
-    public ApprovalRequestResponse submitResource(ResourceType resourceType, UUID resourceId, String note) {
+    public ApprovalRequestResponse submitResource(ResourceType resourceType, UUID resourceId, String note, UUID approverUserId, UUID approverRoleId) {
         SubmitApprovalRequest request = new SubmitApprovalRequest();
         request.setResourceType(resourceType);
         request.setResourceId(resourceId);
         request.setNote(note);
+        request.setApproverUserId(approverUserId);
+        request.setApproverRoleId(approverRoleId);
         return submit(request);
     }
 
@@ -399,27 +417,50 @@ public class ApprovalService {
         }
     }
 
-    private void requireApprovePermission(ResourceType resourceType, UUID resourceId) {
-        if (!hasApprovePermission(resourceType, resourceId)) {
+    private void requireApprovePermission(ApprovalRequest approvalRequest) {
+        if (!hasApprovePermission(approvalRequest)) {
             throw new AppException(ErrorCode.UNAUTHOZIZED);
         }
     }
 
-    private boolean hasApprovePermission(ResourceType resourceType, UUID resourceId) {
+    private boolean hasApprovePermission(ApprovalRequest approvalRequest) {
+        User caller = currentUserService.getCurrentActiveUser();
+
+        // Luôn cho phép SUPER_ADMIN
         if (currentUserService.hasRole(RoleName.SUPER_ADMIN)) {
             return true;
         }
-        if (!currentUserService.hasRole(RoleName.DEPARTMENT_ADMIN)) {
+
+        try {
+            ApprovalStep currentStep = getCurrentPendingStep(approvalRequest.getId());
+
+            // 1. Kiểm tra đích danh User -> Phải bắt buộc trùng ID
+            if (currentStep.getApproverUser() != null) {
+                return currentStep.getApproverUser().getId().equals(caller.getId());
+            }
+
+            // 2. Kiểm tra đích danh Role -> Phải có Role đó và thỏa mãn quyền theo Department
+            if (currentStep.getApproverRole() != null) {
+                if (caller.getRole() == null || caller.getRole().getId() == null || !caller.getRole().getId().equals(currentStep.getApproverRole().getId())) {
+                    return false;
+                }
+                if (!currentUserService.hasRole(RoleName.DEPARTMENT_ADMIN)) {
+                    return false;
+                }
+                UUID resourceDeptId = getResourceDepartmentId(approvalRequest.getResourceType(), approvalRequest.getResourceId());
+                if (caller.getDepartment() == null || resourceDeptId == null) {
+                    return false;
+                }
+                List<UUID> subDeptIds = departmentService.getAllSubDepartmentIds(caller.getDepartment().getId());
+                return subDeptIds.contains(resourceDeptId);
+            }
+        } catch (AppException e) {
+            // Không lấy được step PENDING
             return false;
         }
 
-        UUID resourceDeptId = getResourceDepartmentId(resourceType, resourceId);
-        User caller = currentUserService.getCurrentActiveUser();
-        if (caller.getDepartment() == null || resourceDeptId == null) {
-            return false;
-        }
-        List<UUID> subDeptIds = departmentService.getAllSubDepartmentIds(caller.getDepartment().getId());
-        return subDeptIds.contains(resourceDeptId);
+        // Trường hợp lỗi dữ liệu (không có đích danh)
+        return false;
     }
 
     private void requireResourceOwnerOrAdmin(User owner, UUID resourceDeptId) {

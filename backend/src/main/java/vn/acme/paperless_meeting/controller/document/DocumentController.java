@@ -153,4 +153,38 @@ public class DocumentController {
                 .data(response)
                 .build());
     }
+
+    // ========== NHÓM C — Advanced Features (Proxy/UploadAttach) ==========
+    
+    @Operation(summary = "Lấy file qua liên kết bảo mật (Stream Redirect)", description = "Sử dụng Proxy/Redirect URL sau khi hệ thống đã check ACL và sở hữu file.")
+    @GetMapping("/documents/{id}/download")
+    public ResponseEntity<Void> downloadDocument(@PathVariable UUID id) {
+        String presignedUrl = documentService.getDownloadUrl(id);
+        return ResponseEntity.status(HttpStatus.FOUND)
+                .location(java.net.URI.create(presignedUrl))
+                .build();
+    }
+
+    @Operation(summary = "Tải file và gán vào cuộc họp trong 1 giao dịch", description = "Vừa upload file vừa attach vào Meeting hoặc AgendaItem, tránh tình trạng rác file hoặc thiếu Transaction.")
+    @PostMapping(value = "/meetings/{meetingId}/documents/upload-and-attach", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<ApiResponse<MeetingDocumentResponse>> uploadAndAttachToMeeting(
+            @PathVariable UUID meetingId,
+            @RequestParam(required = false) UUID agendaItemId,
+            @RequestPart("file") MultipartFile file,
+            @RequestParam(required = false) String title,
+            @RequestParam(required = false) String docType,
+            @RequestParam(required = false) String note,
+            @RequestParam(required = false) vn.acme.paperless_meeting.entity.enums.MeetingDocumentUsageType usageType,
+            @RequestParam(required = false) Boolean requiredBeforeMeeting,
+            @RequestParam(required = false) Boolean isConfidential) {
+
+        MeetingDocumentResponse response = documentService.uploadAndAttach(meetingId, agendaItemId, file, title, docType, note, usageType, requiredBeforeMeeting, isConfidential);
+        return ResponseEntity.status(HttpStatus.CREATED).body(
+                ApiResponse.<MeetingDocumentResponse>builder()
+                        .success(true)
+                        .code(201)
+                        .message("Tải lên và gán tài liệu thành công")
+                        .data(response)
+                        .build());
+    }
 }

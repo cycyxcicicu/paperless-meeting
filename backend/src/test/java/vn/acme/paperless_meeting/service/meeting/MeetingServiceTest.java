@@ -36,6 +36,8 @@ import vn.acme.paperless_meeting.repository.UserRepository;
 import vn.acme.paperless_meeting.service.approval.ApprovalService;
 import vn.acme.paperless_meeting.service.auth.CurrentUserService;
 import vn.acme.paperless_meeting.service.department.DepartmentService;
+import vn.acme.paperless_meeting.service.speaker.SpeakerService;
+import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -61,6 +63,10 @@ class MeetingServiceTest {
     ApprovalService approvalService;
     @Mock
     vn.acme.paperless_meeting.event.audit.AuditLogPublisher auditLogPublisher;
+    @Mock
+    SpeakerService speakerService;
+    @Mock
+    vn.acme.paperless_meeting.service.motion.MotionService motionService;
 
     @InjectMocks
     MeetingService meetingService;
@@ -108,6 +114,11 @@ class MeetingServiceTest {
         request.setLateAfterMinutes(15);
 
         lenient().when(currentUserService.hasAuthority("MEETING_CREATE")).thenReturn(true);
+
+        // Inject speakerService mock vào MeetingService (vì dùng setter injection, Mockito @InjectMocks không tự gọi setter)
+        ReflectionTestUtils.setField(meetingService, "speakerService", speakerService);
+        // Inject motionService mock vào MeetingService (dùng setter injection)
+        ReflectionTestUtils.setField(meetingService, "motionService", motionService);
     }
 
     @Test
@@ -226,14 +237,14 @@ class MeetingServiceTest {
         when(currentUserService.getCurrentActiveUser()).thenReturn(caller);
         when(meetingParticipantRepository.countByMeetingIdAndParticipantRole(meetingId, ParticipantRole.CHAIR)).thenReturn(2L);
         when(meetingParticipantRepository.countByMeetingIdAndParticipantRole(meetingId, ParticipantRole.SECRETARY)).thenReturn(1L);
-        when(approvalService.submitResource(ResourceType.MEETING, meetingId, null))
+        when(approvalService.submitResource(ResourceType.MEETING, meetingId, null, null, null))
                 .thenReturn(ApprovalRequestResponse.builder().build());
 
         // Act
         meetingService.submitForApproval(meetingId);
 
         // Assert
-        verify(approvalService, times(1)).submitResource(ResourceType.MEETING, meetingId, null);
+        verify(approvalService, times(1)).submitResource(ResourceType.MEETING, meetingId, null, null, null);
     }
 
     @Test
@@ -586,6 +597,8 @@ class MeetingServiceTest {
         when(meetingRepository.findById(meetingId)).thenReturn(Optional.of(meeting));
         when(currentUserService.getCurrentActiveUser()).thenReturn(caller);
         when(currentUserService.hasRole(RoleName.SUPER_ADMIN)).thenReturn(false);
+        doNothing().when(speakerService).closeAllQueuesAndTurns(meetingId);
+        doNothing().when(motionService).closeAllOpenVoteSessions(meetingId);
 
         // Act
         meetingService.close(meetingId);
@@ -593,5 +606,86 @@ class MeetingServiceTest {
         // Assert
         assertEquals(MeetingStatus.CLOSED, meeting.getStatus());
         verify(meetingRepository, times(1)).save(meeting);
+        verify(speakerService, times(1)).closeAllQueuesAndTurns(meetingId);
+        verify(motionService, times(1)).closeAllOpenVoteSessions(meetingId);
+    }
+
+    // =====================================================================
+    // BỔ SUNG: rsvpDeadline, delete, restore
+    // =====================================================================
+
+    @Test
+    void create_WhenRsvpDeadlineAfterStartTime_ShouldThrowException() {
+        // Arrange
+        request.setStartTime(LocalDateTime.now().plusMinutes(60));
+        request.setRsvpDeadline(LocalDateTime.now().plusMinutes(70));
+
+        when(currentUserService.hasAuthority("MEETING_CREATE")).thenReturn(true);
+
+        // Act & Assert
+        AppException ex = assertThrows(AppException.class, () -> {
+            meetingService.create(request);
+        });
+        assertEquals(ErrorCode.MEETING_INVALID_RSVP_DEADLINE, ex.getErrorCode());
+    }
+
+    @Test
+    void delete_WhenStatusNotDraft_ShouldThrowException() {
+        // Arrange
+        meeting.setStatus(MeetingStatus.UPCOMING);
+        when(meetingRepository.findById(meetingId)).thenReturn(Optional.of(meeting));
+        when(currentUserService.getCurrentActiveUser()).thenReturn(caller);
+        when(currentUserService.hasRole(RoleName.SUPER_ADMIN)).thenReturn(false);
+
+        // Act & Assert
+        AppException ex = assertThrows(AppException.class, () -> {
+            meetingService.delete(meetingId);
+        });
+        assertEquals(ErrorCode.MEETING_ONLY_DRAFT_ALLOWED, ex.getErrorCode());
+    }
+
+    @Test
+    void delete_Successful() {
+        // Arrange
+        meeting.setStatus(MeetingStatus.DRAFT);
+        when(meetingRepository.findById(meetingId)).thenReturn(Optional.of(meeting));
+        when(currentUserService.getCurrentActiveUser()).thenReturn(caller);
+        when(currentUserService.hasRole(RoleName.SUPER_ADMIN)).thenReturn(false);
+
+        // Act
+        meetingService.delete(meetingId);
+
+        // Assert
+        verify(meetingRepository, times(1)).delete(meeting);
+    }
+
+    @Test
+    void restore_WhenNotDeleted_ShouldThrowException() {
+        // Arrange
+        meeting.setIsDeleted(false); // not deleted yet
+        when(meetingRepository.findByIdIncludingDeleted(meetingId)).thenReturn(Optional.of(meeting));
+        when(currentUserService.getCurrentActiveUser()).thenReturn(caller);
+        when(currentUserService.hasRole(RoleName.SUPER_ADMIN)).thenReturn(false);
+
+        // Act & Assert
+        AppException ex = assertThrows(AppException.class, () -> {
+            meetingService.restore(meetingId);
+        });
+        assertEquals(ErrorCode.BAD_REQUEST, ex.getErrorCode());
+    }
+
+    @Test
+    void restore_Successful() {
+        // Arrange
+        meeting.setIsDeleted(true);
+        when(meetingRepository.findByIdIncludingDeleted(meetingId)).thenReturn(Optional.of(meeting));
+        when(currentUserService.getCurrentActiveUser()).thenReturn(caller);
+        when(currentUserService.hasRole(RoleName.SUPER_ADMIN)).thenReturn(false);
+
+        // Act
+        meetingService.restore(meetingId);
+
+        // Assert
+        verify(meetingRepository, times(1)).restoreMeetingNative(meetingId);
     }
 }

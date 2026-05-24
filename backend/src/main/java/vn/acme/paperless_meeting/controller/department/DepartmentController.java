@@ -21,6 +21,9 @@ import vn.acme.paperless_meeting.dto.base.ApiResponse;
 import vn.acme.paperless_meeting.dto.base.PageResponse;
 import vn.acme.paperless_meeting.dto.request.department.DepartmentUpsertRequest;
 import vn.acme.paperless_meeting.dto.response.department.DepartmentResponse;
+import vn.acme.paperless_meeting.dto.response.department.DepartmentChildResponse;
+import vn.acme.paperless_meeting.dto.response.department.DepartmentStatsResponse;
+import vn.acme.paperless_meeting.dto.response.department.DepartmentTreeResponse;
 import vn.acme.paperless_meeting.service.department.DepartmentService;
 
 @RestController
@@ -39,6 +42,15 @@ public class DepartmentController {
                 .build();
     }
 
+    @GetMapping("/tree")
+    public ApiResponse<List<DepartmentTreeResponse>> getTree() {
+        return ApiResponse.<List<DepartmentTreeResponse>>builder()
+                .success(true)
+                .message("Lấy cấu trúc phòng ban thành công")
+                .data(departmentService.getTree())
+                .build();
+    }
+
     @GetMapping("/{id}")
     public ApiResponse<DepartmentResponse> findById(@PathVariable UUID id) {
         return ApiResponse.<DepartmentResponse>builder()
@@ -48,12 +60,21 @@ public class DepartmentController {
                 .build();
     }
 
+    @GetMapping("/stats")
+    public ApiResponse<DepartmentStatsResponse> getStats() {
+        return ApiResponse.<DepartmentStatsResponse>builder()
+                .success(true)
+                .message("Lấy thống kê phòng ban thành công")
+                .data(departmentService.getDepartmentStats())
+                .build();
+    }
+
     @GetMapping("/{id}/children")
-    public ApiResponse<PageResponse<DepartmentResponse>> getChildrenPage(
+    public ApiResponse<PageResponse<DepartmentChildResponse>> getChildrenPage(
             @PathVariable UUID id,
             @RequestParam(required = false) String keyword,
             org.springframework.data.domain.Pageable pageable) {
-        return ApiResponse.<PageResponse<DepartmentResponse>>builder()
+        return ApiResponse.<PageResponse<DepartmentChildResponse>>builder()
                 .success(true)
                 .message("Lấy danh sách phòng con thành công")
                 .data(departmentService.getChildrenPage(id, keyword, pageable))

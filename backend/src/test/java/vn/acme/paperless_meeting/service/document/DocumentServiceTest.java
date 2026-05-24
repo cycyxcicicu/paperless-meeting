@@ -385,6 +385,7 @@ class DocumentServiceTest {
 
     @Test
     void detachFromMeeting_Success() {
+        when(meetingRepository.findById(meetingId)).thenReturn(Optional.of(meeting));
         when(meetingDocumentRepository.findByMeetingIdAndId(meetingId, meetingDocId))
                 .thenReturn(Optional.of(meetingDoc));
 
@@ -394,6 +395,7 @@ class DocumentServiceTest {
 
     @Test
     void detachFromMeeting_NotFound_ThrowsException() {
+        when(meetingRepository.findById(meetingId)).thenReturn(Optional.of(meeting));
         when(meetingDocumentRepository.findByMeetingIdAndId(meetingId, meetingDocId))
                 .thenReturn(Optional.empty());
 

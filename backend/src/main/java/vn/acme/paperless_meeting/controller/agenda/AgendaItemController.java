@@ -120,4 +120,34 @@ public class AgendaItemController {
         return ResponseEntity.ok(ApiResponse.<List<MeetingResponse>>builder()
                 .data(agendaItemService.getAssignedPreparationMeetings()).build());
     }
+
+    @Operation(summary = "Bắt đầu điều hành nội dung cuộc họp",
+               description = "Chuyển trạng thái nội dung cuộc họp sang IN_PROGRESS. Chỉ chủ tọa cuộc họp thực hiện được khi cuộc họp đang IN_PROGRESS.")
+    @PostMapping("/meetings/{meetingId}/agenda-items/{id}/start")
+    public ResponseEntity<ApiResponse<AgendaItemResponse>> startAgenda(
+            @PathVariable UUID meetingId, @PathVariable UUID id) {
+        return ResponseEntity.ok(ApiResponse.<AgendaItemResponse>builder()
+                .data(agendaItemService.startAgenda(meetingId, id))
+                .message("Đã bắt đầu điều hành nội dung cuộc họp thành công").build());
+    }
+
+    @Operation(summary = "Hoàn tất điều hành nội dung cuộc họp",
+               description = "Chuyển trạng thái nội dung cuộc họp sang DONE. Chỉ chủ tọa cuộc họp thực hiện được khi cuộc họp đang IN_PROGRESS.")
+    @PostMapping("/meetings/{meetingId}/agenda-items/{id}/complete")
+    public ResponseEntity<ApiResponse<AgendaItemResponse>> completeAgenda(
+            @PathVariable UUID meetingId, @PathVariable UUID id) {
+        return ResponseEntity.ok(ApiResponse.<AgendaItemResponse>builder()
+                .data(agendaItemService.completeAgenda(meetingId, id))
+                .message("Đã hoàn tất điều hành nội dung cuộc họp thành công").build());
+    }
+
+    @Operation(summary = "Bỏ qua điều hành nội dung cuộc họp",
+               description = "Chuyển trạng thái nội dung cuộc họp sang SKIPPED. Chỉ chủ tọa cuộc họp thực hiện được khi cuộc họp đang IN_PROGRESS.")
+    @PostMapping("/meetings/{meetingId}/agenda-items/{id}/skip")
+    public ResponseEntity<ApiResponse<AgendaItemResponse>> skipAgenda(
+            @PathVariable UUID meetingId, @PathVariable UUID id) {
+        return ResponseEntity.ok(ApiResponse.<AgendaItemResponse>builder()
+                .data(agendaItemService.skipAgenda(meetingId, id))
+                .message("Đã bỏ qua điều hành nội dung cuộc họp thành công").build());
+    }
 }

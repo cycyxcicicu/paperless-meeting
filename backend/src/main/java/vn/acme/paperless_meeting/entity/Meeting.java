@@ -65,6 +65,9 @@ public class Meeting extends SoftDeletable {
     private LocalDateTime startTime;
     @Column(name = "end_time")
     private LocalDateTime endTime;
+    
+    @Column(name = "rsvp_deadline")
+    private LocalDateTime rsvpDeadline;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status")

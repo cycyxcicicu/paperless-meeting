@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -16,6 +17,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import vn.acme.paperless_meeting.dto.request.role.RoleUpsertRequest;
 import vn.acme.paperless_meeting.dto.response.role.RoleResponse;
+import vn.acme.paperless_meeting.dto.response.role.RoleStatsResponse;
+
 import java.util.Arrays;
 import vn.acme.paperless_meeting.entity.Permission;
 import vn.acme.paperless_meeting.entity.Role;
@@ -41,10 +44,29 @@ public class RoleService {
     UserRepository userRepository;
 
   
-    public List<RoleResponse> findAll() {
-        return roleRepository.findAll().stream()
+    public List<RoleResponse> findAll(String keyword) {
+        List<Role> roles;
+        if (keyword != null && !keyword.trim().isEmpty()) {
+            roles = roleRepository.findAllByKeyword(keyword.trim());
+        } else {
+            roles = roleRepository.findAll();
+        }
+        return roles.stream()
                 .map(roleMapper::toResponse)
                 .toList();
+    }
+
+    public RoleStatsResponse getRoleStats() {
+        long totalRoles = roleRepository.count();
+        long activeRoles = roleRepository.countRolesInUse(); 
+
+        long usersWithoutRole = userRepository.countByRoleIsNull();
+
+        return RoleStatsResponse.builder()
+                .totalRoles(totalRoles)
+                .activeRoles(activeRoles)
+                .usersWithoutRole(usersWithoutRole)
+                .build();
     }
 
   
@@ -123,16 +145,24 @@ public class RoleService {
 
         if (request.getPermCodes() != null) {
             Set<Permission> perms = permissionRepository.findByPermCodeIn(request.getPermCodes());
-            role.getRolePermissionSet().clear();
+            Set<UUID> newPermIds = perms.stream().map(Permission::getId).collect(Collectors.toSet());
+            
+            role.getRolePermissionSet().removeIf(rp -> !newPermIds.contains(rp.getPermission().getId()));
+            
+            Set<UUID> existingPermIds = role.getRolePermissionSet().stream()
+                    .map(rp -> rp.getPermission().getId())
+                    .collect(Collectors.toSet());
+
             for (Permission p : perms) {
-                RolePermission rp = new RolePermission();
-                rp.setRole(role);
-                rp.setPermission(p);
-
-                role.getRolePermissionSet().add(rp);
-                p.getRolePermissionList().add(rp);
+                if (!existingPermIds.contains(p.getId())) {
+                    RolePermission rp = new RolePermission();
+                    rp.setRole(role);
+                    rp.setPermission(p);
+    
+                    role.getRolePermissionSet().add(rp);
+                    p.getRolePermissionList().add(rp);
+                }
             }
-
         }
         return roleMapper.toResponse(roleRepository.save(role));
     }
@@ -141,14 +171,14 @@ public class RoleService {
     public void delete(UUID id) {
         Role role = getRole(id);
 
-        boolean isCoreRole = Arrays.stream(RoleName.values()).anyMatch(rn -> rn.name().equals(role.getRoleCode()));
-        if (isCoreRole) {
-            throw new AppException(ErrorCode.SYSTEM_ROLE_PROTECTED);
-        }
-
         // Kiểm tra xem Role đã được sử dụng chưa
         if (userRepository.existsByRole_Id(id)) {
             throw new AppException(ErrorCode.ROLE_IN_USE);
+        }
+
+        boolean isCoreRole = Arrays.stream(RoleName.values()).anyMatch(rn -> rn.name().equals(role.getRoleCode()));
+        if (isCoreRole) {
+            throw new AppException(ErrorCode.SYSTEM_ROLE_PROTECTED);
         }
 
         User deletedBy = null;

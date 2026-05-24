@@ -8,4 +8,6 @@ export const positionFormValidationSchema = z.object({
     .min(1, 'Vui lòng nhập mã chức vụ')
     .regex(/^[a-zA-Z0-9]*$/, 'Mã chức vụ chỉ được chứa chữ và số'),
   description: z.string().optional().default(''),
+  ordinal: z.coerce.number().min(0, "Thứ tự không thể âm"),
+  leader: z.enum(['yes', 'no']),
 });

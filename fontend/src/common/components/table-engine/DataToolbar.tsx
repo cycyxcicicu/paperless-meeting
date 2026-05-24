@@ -63,6 +63,35 @@ export const DataToolbar: React.FC<DataToolbarProps> = ({
   primaryAction,
 }) => {
   const showSearch = searchQuery !== undefined && onSearchChange !== undefined;
+  
+  // Local state to prevent API spam on every keystroke
+  const [localSearchQuery, setLocalSearchQuery] = React.useState(searchQuery || '');
+  React.useEffect(() => {
+    setLocalSearchQuery(searchQuery || '');
+  }, [searchQuery]);
+
+  // Global Debounced Search logic for all lists
+  React.useEffect(() => {
+    if (localSearchQuery === (searchQuery || '')) return;
+    if (!onSearchChange) return;
+
+    const handler = setTimeout(() => {
+      const trimmed = localSearchQuery.trim();
+      setLocalSearchQuery(trimmed);
+      onSearchChange(trimmed);
+    }, 500);
+
+    return () => clearTimeout(handler);
+  }, [localSearchQuery, searchQuery, onSearchChange]);
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && onSearchChange) {
+      const trimmed = localSearchQuery.trim();
+      setLocalSearchQuery(trimmed);
+      onSearchChange(trimmed);
+    }
+  };
+
   return (
     <div className="flex flex-col">
       {/* Main Toolbar */}
@@ -75,8 +104,9 @@ export const DataToolbar: React.FC<DataToolbarProps> = ({
               <input
                 type="text"
                 placeholder={searchPlaceholder}
-                value={searchQuery}
-                onChange={(e) => onSearchChange(e.target.value)}
+                value={localSearchQuery}
+                onChange={(e) => setLocalSearchQuery(e.target.value)}
+                onKeyDown={handleKeyDown}
                 className="w-full h-11 pl-12 pr-4 text-sm bg-gray-50 border border-gray-300 rounded-xl text-gray-900 placeholder:text-gray-500 focus:outline-none focus:border-[#C8102E] focus:ring-2 focus:ring-[#C8102E]/20 transition-all"
               />
             </div>
@@ -179,7 +209,7 @@ export const DataToolbar: React.FC<DataToolbarProps> = ({
       {showFilters && filters.length > 0 && (
         <div className="px-6 py-5 bg-gradient-to-br from-gray-50 to-white border-b border-gray-200/60">
           <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {filters.map((filter) => (
                 <CustomDropdown
                   key={filter.key}

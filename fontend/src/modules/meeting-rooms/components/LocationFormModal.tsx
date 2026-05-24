@@ -29,34 +29,38 @@ export const LocationFormModal: React.FC<LocationFormModalProps> = ({
     resolver: zodResolver(meetingRoomValidationSchema),
     defaultValues: {
       name: '',
-      code: '',
-      building: '',
-      floor: '',
+      roomCode: '',
+      address: '',
       capacity: 0,
-      status: 'active',
+      isActive: true,
     }
   });
 
   useEffect(() => {
     if (isOpen) {
       if (initialData) {
-        methods.reset(initialData);
+        methods.reset({
+          ...initialData,
+          isActive: initialData.isActive !== undefined ? String(initialData.isActive) : 'true',
+        });
       } else {
         methods.reset({
           name: '',
-          code: '',
-          building: '',
-          floor: '',
+          roomCode: '',
+          address: '',
           capacity: 0,
-          status: 'active',
+          isActive: 'true',
         });
       }
     }
   }, [isOpen, initialData, methods]);
 
-  const onFormSubmit = (data: MeetingRoomFormData) => {
-    onSubmit(data);
-    onClose();
+  const onFormSubmit = async (data: MeetingRoomFormData) => {
+    try {
+      await onSubmit(data);
+    } catch (error) {
+      // Keep modal open on submission error
+    }
   };
 
   const getTitle = () => {

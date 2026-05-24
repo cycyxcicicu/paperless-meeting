@@ -150,6 +150,7 @@ class UserServiceTest {
     void update_whenPositionBelongsToOtherDepartment_shouldThrow() {
         when(positionRepository.findById(positionId)).thenReturn(Optional.of(otherPosition));
         when(departmentRepository.findById(departmentId)).thenReturn(Optional.of(department));
+        lenient().when(currentUserService.hasRole(RoleName.SUPER_ADMIN)).thenReturn(false);
 
         AppException exception = assertThrows(AppException.class, () -> userService.update(userId, request));
 
@@ -241,6 +242,7 @@ class UserServiceTest {
         when(userRepository.existsByEmail(createRequest.getEmail())).thenReturn(false);
         when(userRepository.existsByPhone(createRequest.getPhone())).thenReturn(false);
         when(roleRepository.findById(roleId)).thenReturn(Optional.of(role));
+        lenient().when(currentUserService.hasRole(RoleName.SUPER_ADMIN)).thenReturn(false);
 
         AppValidationException exception = assertThrows(AppValidationException.class, () -> userService.create(createRequest));
 

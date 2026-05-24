@@ -1,17 +1,21 @@
 import { useState, useEffect } from "react";
-import {
-    treeData as initialTreeData,
-    allUnits,
-    unitDetailsDatabase,
-    allUnitUsers,
-    TreeNode,
-} from "../data/mockData";
 import { toast } from "@/lib/toast";
 import { Info, Building2, Users } from "lucide-react";
+import { departmentApi, DepartmentResponse, DepartmentTreeResponse, DepartmentUpsertRequest } from "../services/department.api";
+import { userApi } from "@/modules/user/services/user.api";
+import { TreeNode } from "../types";
+import { useAuth } from "@/app/context/AuthContext";
 
 export type TabKey = "info" | "child-units" | "users";
 
 export function useDonVi() {
+    const { user } = useAuth();
+    const roleCode = user?.role?.roleCode || "USER";
+
+    const canEditUnit = roleCode === "SUPER_ADMIN" || roleCode === "DEPARTMENT_ADMIN";
+    const canDeleteUnit = roleCode === "SUPER_ADMIN" || roleCode === "DEPARTMENT_ADMIN";
+    const canAddUnit = roleCode === "SUPER_ADMIN" || roleCode === "DEPARTMENT_ADMIN";
+
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedTreeNode, setSelectedTreeNode] = useState<string>("root");
 
@@ -49,46 +53,165 @@ export function useDonVi() {
         unitId?: string;
     }>({ isOpen: false });
 
-    const [treeData, setTreeData] = useState<TreeNode[]>(initialTreeData);
+    // Server state
+    const [rawTree, setRawTree] = useState<DepartmentTreeResponse[]>([]);
+    const [detailedUnit, setDetailedUnit] = useState<DepartmentResponse | null>(null);
+    const [treeData, setTreeData] = useState<TreeNode[]>([]);
+    const [stats, setStats] = useState({ totalUnits: 0, activeUnits: 0 });
+    const [currentUnitUsers, setCurrentUnitUsers] = useState<any[]>([]);
+    const [userPage, setUserPage] = useState(1);
+    const [userPageSize, setUserPageSize] = useState(5);
+    const [userSearch, setUserSearch] = useState("");
+    const [userTotal, setUserTotal] = useState(0);
 
-    // Auto-select first unit on mount
-    useEffect(() => {
-        const rootNode = treeData[0];
-        if (rootNode && rootNode.code) {
-            setSelectedTreeNode(rootNode.id);
-            setSelectedUnitId(rootNode.code);
-            setIsPanelOpen(true);
-            setActiveTab("info");
+    const [currentChildUnits, setCurrentChildUnits] = useState<any[]>([]);
+
+    const loadStats = async () => {
+        try {
+            const res = await departmentApi.getStats();
+            if (res.success && res.data) {
+                setStats(res.data);
+            }
+        } catch (e) {
+            console.error(e);
         }
+    };
+
+    const loadUnitDetails = async (unitId: string) => {
+        setIsLoadingDetail(true);
+        try {
+            const res = await departmentApi.getById(unitId);
+            if (res.success && res.data) {
+                setDetailedUnit(res.data);
+            }
+        } catch (e) {
+            toast.error("Lỗi", "Không thể tải chi tiết định danh đơn vị");
+        }
+        setIsLoadingDetail(false);
+    };
+
+    const loadTree = async () => {
+        try {
+            const res = await departmentApi.getTree();
+            if (res.success && res.data) {
+                setRawTree(res.data);
+                
+                const mapNode = (d: DepartmentTreeResponse, level: number): TreeNode => ({
+                    id: d.id,
+                    name: d.deptName,
+                    code: d.code,
+                    level: level,
+                    isExpanded: level < 2,
+                    children: d.children ? d.children.map(child => mapNode(child, level + 1)) : []
+                });
+                
+                const uiTree = res.data.map(d => mapNode(d, 0));
+                setTreeData(uiTree);
+
+                if (uiTree.length > 0 && !selectedUnitId) {
+                    const rootNode = uiTree[0];
+                    setSelectedTreeNode(rootNode.id);
+                    setSelectedUnitId(rootNode.id);
+                    setIsPanelOpen(true);
+                    setActiveTab("info");
+                }
+            }
+        } catch (e) {
+            toast.error("Lỗi", "Không thể tải cấu trúc đơn vị");
+        }
+    };
+
+    useEffect(() => {
+        loadTree();
+        loadStats();
     }, []);
 
-    // Filter units
-    const filteredUnits = allUnits.filter((unit) => {
-        if (searchQuery) {
-            const query = searchQuery.toLowerCase();
-            const matchesSearch =
-                unit.name.toLowerCase().includes(query) ||
-                unit.code.toLowerCase().includes(query) ||
-                unit.address.toLowerCase().includes(query);
-            if (!matchesSearch) return false;
+    const loadUnitUsers = async (deptId: string, page = 1, size = 5, keyword = "") => {
+        try {
+            const res = await userApi.getUsers({ 
+                departmentId: deptId,
+                page: page - 1,
+                size: size,
+                keyword: keyword
+            });
+            if (res.success && res.data) {
+                setCurrentUnitUsers(res.data.content);
+                setUserTotal(res.data.totalElements);
+            }
+        } catch (e) {
+            toast.error("Lỗi", "Không thể tải danh sách nhân sự");
         }
-        if (filterStatus !== "all") {
-            if (filterStatus === "active" && !unit.isActive) return false;
-            if (filterStatus === "inactive" && unit.isActive) return false;
-        }
-        return true;
-    });
-
-    const totalItems = filteredUnits.length;
-    const activeUnits = filteredUnits.filter((u) => u.isActive).length;
-
-    const getActiveFiltersCount = () => {
-        let count = 0;
-        if (searchQuery) count++;
-        if (filterStatus !== "all") count++;
-        return count;
     };
-    const activeFiltersCount = getActiveFiltersCount();
+
+    const loadUnitChildren = async (deptId: string) => {
+        try {
+            const res = await departmentApi.getChildrenPage(deptId);
+            if (res.success && res.data) {
+                const mapped = res.data.content.map(child => ({
+                    id: child.id,
+                    name: child.deptName,
+                    code: child.code,
+                    address: child.headquartersAddress || "",
+                    phone: child.phoneNumber || "",
+                    totalMembers: child.totalMembers,
+                    isActive: child.status === 'ACTIVE',
+                }));
+                setCurrentChildUnits(mapped);
+            }
+        } catch (e) {
+            toast.error("Lỗi", "Không thể tải cấu trúc bộ phận trực thuộc");
+        }
+    };
+
+    useEffect(() => {
+        if (selectedUnitId) {
+            setUserPage(1);
+            setUserSearch("");
+            loadUnitDetails(selectedUnitId);
+            loadUnitChildren(selectedUnitId);
+        }
+    }, [selectedUnitId]);
+
+    // Separate effect for loaded users tracking pagination & search
+    useEffect(() => {
+        if (selectedUnitId) {
+            const timeoutId = setTimeout(() => {
+                loadUnitUsers(selectedUnitId, userPage, userPageSize, userSearch);
+            }, 300);
+            return () => clearTimeout(timeoutId);
+        }
+    }, [selectedUnitId, userPage, userPageSize, userSearch]);
+
+    const activeFiltersCount = (searchQuery ? 1 : 0) + (filterStatus !== "all" ? 1 : 0);
+
+    // --- Helper Maps ---
+    const getUnitMap = (nodes: DepartmentTreeResponse[]): Record<string, DepartmentTreeResponse> => {
+        const map: Record<string, DepartmentTreeResponse> = {};
+        const recurse = (node: DepartmentTreeResponse) => {
+            map[node.id] = node;
+            if (node.children) node.children.forEach(recurse);
+        };
+        nodes.forEach(recurse);
+        return map;
+    };
+    const unitMap = getUnitMap(rawTree);
+
+    const currentUnitDetails = detailedUnit ? {
+        id: detailedUnit.id,
+        name: detailedUnit.deptName,
+        code: detailedUnit.code,
+        address: detailedUnit.headquartersAddress || "",
+        phone: detailedUnit.phoneNumber || "",
+        email: detailedUnit.email || "",
+        establishedDate: detailedUnit.establishedDate || "",
+        director: detailedUnit.director || "",
+        description: detailedUnit.description || "",
+        isActive: detailedUnit.status === 'ACTIVE',
+        totalMembers: detailedUnit.totalMembers,
+        totalChildUnits: detailedUnit.totalChildUnits,
+        parentId: detailedUnit.parentDepartmentId,
+        parentName: detailedUnit.parentDepartmentId ? unitMap[detailedUnit.parentDepartmentId]?.deptName : ""
+    } : null;
 
     // --- Tree helpers ---
     const toggleTreeNode = (nodeId: string, nodes: TreeNode[]): TreeNode[] =>
@@ -109,55 +232,18 @@ export function useDonVi() {
         return null;
     };
 
-    const findNodeByCode = (nodes: TreeNode[], code: string): TreeNode | null => {
-        for (const node of nodes) {
-            if (node.code === code) return node;
-            if (node.children) {
-                const found = findNodeByCode(node.children, code);
-                if (found) return found;
-            }
-        }
-        return null;
-    };
-
-    const addNodeToTree = (tree: TreeNode[], parentId: string, newNode: TreeNode): TreeNode[] =>
-        tree.map((node) => {
-            if (node.id === parentId) {
-                return { ...node, children: [...(node.children || []), newNode], isExpanded: true };
-            }
-            if (node.children) return { ...node, children: addNodeToTree(node.children, parentId, newNode) };
-            return node;
-        });
-
-    const updateNodeInTree = (tree: TreeNode[], nodeId: string, updates: Partial<TreeNode>): TreeNode[] =>
-        tree.map((node) => {
-            if (node.id === nodeId) return { ...node, ...updates };
-            if (node.children) return { ...node, children: updateNodeInTree(node.children, nodeId, updates) };
-            return node;
-        });
-
-    const deleteNodeFromTree = (tree: TreeNode[], nodeId: string): TreeNode[] =>
-        tree.reduce((acc, node) => {
-            if (node.id === nodeId) return acc;
-            if (node.children) return [...acc, { ...node, children: deleteNodeFromTree(node.children, nodeId) }];
-            return [...acc, node];
-        }, [] as TreeNode[]);
-
     // --- Tree handlers ---
     const handleTreeNodeToggle = (nodeId: string) => setTreeData(toggleTreeNode(nodeId, treeData));
 
-    const handleViewDetails = (unitCode: string) => {
-        setIsLoadingDetail(true);
-        setSelectedUnitId(unitCode);
+    const handleViewDetails = (unitId: string) => {
+        setSelectedUnitId(unitId);
         setIsPanelOpen(true);
         setActiveTab("info");
-        setTimeout(() => setIsLoadingDetail(false), 200);
     };
 
     const handleTreeNodeClick = (nodeId: string) => {
         setSelectedTreeNode(nodeId);
-        const node = findNodeById(treeData, nodeId);
-        if (node && node.code) handleViewDetails(node.code);
+        handleViewDetails(nodeId);
     };
 
     const handleClosePanel = () => {
@@ -165,63 +251,44 @@ export function useDonVi() {
         setTimeout(() => setSelectedUnitId(null), 300);
     };
 
-    // --- Derived data ---
     const selectedNode = findNodeById(treeData, selectedTreeNode);
-    const currentUnitDetails = selectedUnitId ? unitDetailsDatabase[selectedUnitId] : null;
-
-    const getChildUnitsFromTree = (unitId: string | null): any[] => {
-        if (!unitId) return [];
-        const node = findNodeByCode(treeData, unitId);
-        if (!node || !node.children) return [];
-        return node.children.map((child) => {
-            let numericId: number;
-            const parsedId = parseInt(child.id);
-            if (!isNaN(parsedId)) {
-                numericId = parsedId;
-            } else {
-                numericId = child.id.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
-            }
-            const detail = unitDetailsDatabase[child.code];
-            return {
-                id: numericId,
-                name: child.name,
-                code: child.code,
-                address: detail?.address || "",
-                phone: detail?.phone || "",
-                email: detail?.email || "",
-                foundedDate: detail?.establishedDate || "",
-                director: detail?.director || "",
-                totalMembers: detail?.totalMembers || 0,
-                totalChildUnits: detail?.totalChildUnits || 0,
-                isActive: detail?.isActive !== undefined ? detail.isActive : true,
-            };
-        });
-    };
-
-    const currentChildUnits = getChildUnitsFromTree(selectedUnitId);
-    const currentUnitUsers = selectedUnitId ? allUnitUsers[selectedUnitId] || [] : [];
-
-    const selectedDetailNode = findNodeByCode(treeData, selectedUnitId || "UBND_HP");
-    const level = selectedDetailNode?.level || 0;
+    const actualLevel = selectedNode?.level || 0;
+    
+    // Nếu là DEPARTMENT_ADMIN, gốc cây thư mục (level 0) của họ thực chất là cấp Sở.
+    // Việc cộng thêm 1 giúp đồng bộ thuật ngữ hiển thị cho cả 2 vai trò.
+    const conceptualLevel = roleCode === "DEPARTMENT_ADMIN" ? actualLevel + 1 : actualLevel;
 
     let infoLabel = "Thông tin đơn vị";
     let childrenLabel = "Đơn vị trực thuộc";
     let childUnitTypeLabel = "đơn vị trực thuộc";
-    if (level === 1) {
+    if (conceptualLevel === 1) {
         infoLabel = "Thông tin sở";
         childrenLabel = "Phòng ban trực thuộc";
         childUnitTypeLabel = "phòng ban trực thuộc";
-    } else if (level >= 2) {
+    } else if (conceptualLevel === 2) {
         infoLabel = "Thông tin phòng ban";
         childrenLabel = "Bộ phận trực thuộc";
         childUnitTypeLabel = "bộ phận trực thuộc";
+    } else if (conceptualLevel >= 3) {
+        infoLabel = "Thông tin bộ phận";
     }
 
-    const detailTabs = [
+    const detailTabs: any[] = [
         { key: "info" as TabKey, label: infoLabel, icon: Info },
-        { key: "child-units" as TabKey, label: childrenLabel, icon: Building2, count: currentChildUnits.length },
-        { key: "users" as TabKey, label: "Danh sách nhân sự", icon: Users, count: currentUnitUsers.length },
     ];
+    
+    if (conceptualLevel < 3) {
+        detailTabs.push({ key: "child-units" as TabKey, label: childrenLabel, icon: Building2, count: currentUnitDetails?.totalChildUnits || currentChildUnits.length });
+    }
+    
+    detailTabs.push({ key: "users" as TabKey, label: "Danh sách nhân sự", icon: Users, count: currentUnitDetails?.totalMembers || userTotal });
+
+    // Fallback if the user was on the child-units tab and clicks a deep unit where it's hidden
+    useEffect(() => {
+        if (conceptualLevel >= 3 && activeTab === "child-units") {
+            setActiveTab("info");
+        }
+    }, [conceptualLevel, activeTab]);
 
     // --- User modal handlers ---
     const handleAddUser = () =>
@@ -236,82 +303,115 @@ export function useDonVi() {
     const handleDeleteUser = (userId: number) => setDeleteUserModal({ isOpen: true, userId });
 
     const handleCloseUserFormModal = () => setUserFormModal({ isOpen: false, mode: "create" });
-
     const handleCloseDeleteUserModal = () => setDeleteUserModal({ isOpen: false });
 
-    const handleSubmitUserForm = (userData: any) => {
-        if (userFormModal.mode === "create") {
-            toast.success("Thêm người dùng thành công", `Đã thêm người dùng ${userData.fullName} vào hệ thống`);
-        } else if (userFormModal.mode === "edit") {
-            toast.success("Cập nhật người dùng thành công", `Thông tin người dùng ${userData.fullName} đã được cập nhật`);
+    const handleSubmitUserForm = async (userData: any) => {
+        try {
+            if (userFormModal.mode === "create") {
+                const response = await userApi.createUser(userData);
+                if (response.success) {
+                    toast.success("Thành công", "Thêm nhân sự thành công");
+                } else {
+                    throw new Error(response.message || "Không thể khởi tạo nhân sự");
+                }
+            } else if (userFormModal.mode === "edit") {
+                if (!userData.id) {
+                    throw new Error("Không tìm thấy mã số id nhân viên cần chỉnh sửa");
+                }
+                const response = await userApi.updateUser(userData.id, userData);
+                if (response.success) {
+                    toast.success("Thành công", "Cập nhật nhân sự thành công");
+                } else {
+                    throw new Error(response.message || "Không thể cập nhật nhân sự");
+                }
+            }
+            handleCloseUserFormModal();
+            if (selectedUnitId) {
+                loadUnitUsers(selectedUnitId, userPage, userPageSize, userSearch);
+                loadUnitDetails(selectedUnitId);
+            }
+        } catch (error: any) {
+            toast.error("Lỗi thao tác", error.message || "Có lỗi xảy ra trong quá trình lưu dữ liệu");
+            throw error;
         }
-        handleCloseUserFormModal();
     };
 
-    const handleConfirmDeleteUser = () => {
-        const user = currentUnitUsers.find((u) => u.id === deleteUserModal.userId);
-        if (user) {
-            toast.success("Xóa người dùng thành công", `Đã xóa người dùng ${user.fullName} khỏi hệ thống`);
+    const handleConfirmDeleteUser = async () => {
+        try {
+            if (deleteUserModal.userId) {
+                await userApi.deleteUser(deleteUserModal.userId);
+                toast.success("Thành công", "Đã xóa nhân sự");
+                if (selectedUnitId) {
+                    loadUnitUsers(selectedUnitId, userPage, userPageSize, userSearch);
+                    loadUnitDetails(selectedUnitId);
+                }
+            }
+        } catch (e) {
+            toast.error("Lỗi", "Không thể xóa nhân sự");
         }
         handleCloseDeleteUserModal();
     };
 
     // --- Unit modal handlers ---
     const handleOpenAddUnitModal = () => setUnitFormModal({ isOpen: true, mode: "create" });
-
-    const handleOpenEditUnitModal = (unitId: number) => {
-        const node = findNodeByCode(treeData, selectedUnitId || "UBND_HP");
-        if (node?.children) {
-            const child = node.children.find((c) => {
-                const parsedId = parseInt(c.id);
-                if (!isNaN(parsedId)) return parsedId === unitId;
-                return c.id.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0) === unitId;
-            });
-            if (child) setUnitFormModal({ isOpen: true, mode: "edit", unitId: child.id });
-        }
-    };
-
-    const handleOpenDeleteUnitModal = (unitId: number) => {
-        const node = findNodeByCode(treeData, selectedUnitId || "UBND_HP");
-        if (node?.children) {
-            const child = node.children.find((c) => {
-                const parsedId = parseInt(c.id);
-                if (!isNaN(parsedId)) return parsedId === unitId;
-                return c.id.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0) === unitId;
-            });
-            if (child) setDeleteUnitModal({ isOpen: true, unitId: child.id });
-        }
-    };
-
+    const handleOpenEditUnitModal = (unitId: string) => setUnitFormModal({ isOpen: true, mode: "edit", unitId });
+    const handleOpenDeleteUnitModal = (unitId: string) => setDeleteUnitModal({ isOpen: true, unitId });
     const handleCloseUnitFormModal = () => setUnitFormModal({ isOpen: false, mode: "create" });
     const handleCloseDeleteUnitModal = () => setDeleteUnitModal({ isOpen: false });
 
-    const handleSubmitUnitForm = (unitData: any) => {
-        if (unitFormModal.mode === "create") {
-            const newId = `${selectedUnitId}-${Date.now()}`;
-            const parentNode = findNodeById(treeData, selectedUnitId || "root");
-            const parentLevel = parentNode?.level ?? 0;
-            const newNode: TreeNode = { id: newId, name: unitData.name, code: unitData.code, level: parentLevel + 1 };
-            setTreeData(addNodeToTree(treeData, selectedUnitId || "root", newNode));
-            toast.success("Thêm đơn vị thành công", `Đã thêm đơn vị "${unitData.name}" vào hệ thống`);
-        } else if (unitFormModal.mode === "edit" && unitFormModal.unitId) {
-            setTreeData(updateNodeInTree(treeData, unitFormModal.unitId, { name: unitData.name, code: unitData.code }));
-            toast.success("Cập nhật đơn vị thành công", `Thông tin đơn vị "${unitData.name}" đã được cập nhật`);
+    const handleSubmitUnitForm = async (unitData: any) => {
+        try {
+            const req: DepartmentUpsertRequest = {
+                deptName: unitData.name,
+                code: unitData.code,
+                status: unitData.status === 'active' ? 'ACTIVE' : 'INACTIVE',
+                establishedDate: unitData.establishedDate,
+                phoneNumber: unitData.phone,
+                email: unitData.email,
+                headquartersAddress: unitData.address,
+                description: unitData.description,
+                parentDepartmentId: selectedUnitId || null,
+            };
+
+            if (unitFormModal.mode === "create") {
+                await departmentApi.create(req);
+                toast.success("Thành công", "Đã thêm đơn vị");
+            } else if (unitFormModal.mode === "edit" && unitFormModal.unitId) {
+                await departmentApi.update(unitFormModal.unitId, req);
+                toast.success("Thành công", "Đã cập nhật đơn vị");
+            }
+            loadTree();
+            loadStats();
+            if (selectedUnitId) {
+                loadUnitDetails(selectedUnitId);
+                loadUnitChildren(selectedUnitId);
+            }
+            handleCloseUnitFormModal();
+        } catch (e: any) {
+            toast.error("Lỗi", e.message || "Có lỗi xảy ra");
+            throw e;
         }
-        handleCloseUnitFormModal();
     };
 
-    const handleConfirmDeleteUnit = () => {
+    const handleConfirmDeleteUnit = async () => {
         if (!deleteUnitModal.unitId) return;
-        const unitToDelete = findNodeById(treeData, deleteUnitModal.unitId);
-        const unitName = unitToDelete?.name || "đơn vị";
-        setTreeData(deleteNodeFromTree(treeData, deleteUnitModal.unitId));
-        if (selectedUnitId === deleteUnitModal.unitId) {
-            setSelectedUnitId(null);
-            setIsPanelOpen(false);
-            setSelectedTreeNode("root");
+        try {
+            await departmentApi.delete(deleteUnitModal.unitId);
+            toast.success("Thành công", "Đã xóa đơn vị");
+            
+            if (selectedUnitId === deleteUnitModal.unitId) {
+                setSelectedUnitId(null);
+                setIsPanelOpen(false);
+                setSelectedTreeNode("root");
+            } else if (selectedUnitId) {
+                loadUnitDetails(selectedUnitId);
+                loadUnitChildren(selectedUnitId);
+            }
+            loadTree();
+            loadStats();
+        } catch (e) {
+            toast.error("Lỗi", "Không thể xóa đơn vị");
         }
-        toast.success("Xóa đơn vị thành công", `Đã xóa đơn vị "${unitName}" khỏi hệ thống`);
         handleCloseDeleteUnitModal();
     };
 
@@ -338,20 +438,42 @@ export function useDonVi() {
           }
         : undefined;
 
-    const unitForForm = unitFormModal.unitId ? findNodeById(treeData, unitFormModal.unitId) : undefined;
+    const getDetailedUnitForForm = (id: string | undefined) => {
+        if (!id || !detailedUnit) return undefined;
+        if (detailedUnit.id === id) return detailedUnit;
+        const child = detailedUnit.children?.find(c => c.id === id);
+        if (child) return child;
+        return undefined;
+    };
+    
+    const unitForForm = getDetailedUnitForForm(unitFormModal.unitId);
     const unitFormData = unitForForm
-        ? { id: unitForForm.id, name: unitForForm.name, code: unitForForm.code, address: "", phone: "", email: "", foundedDate: "", status: "active" as "active" | "inactive", description: "" }
+        ? { id: unitForForm.id, name: unitForForm.deptName, code: unitForForm.code, address: unitForForm.headquartersAddress || "", phone: unitForForm.phoneNumber || "", email: unitForForm.email || "", foundedDate: unitForForm.establishedDate || "", status: (unitForForm.status === 'ACTIVE' ? "active" : "inactive") as "active" | "inactive", description: unitForForm.description || "" }
         : undefined;
 
-    const unitToDelete = deleteUnitModal.unitId ? findNodeById(treeData, deleteUnitModal.unitId) : undefined;
-    const deleteUnitData = unitToDelete ? { name: unitToDelete.name, code: unitToDelete.code } : undefined;
+    const unitToDelete = deleteUnitModal.unitId ? unitMap[deleteUnitModal.unitId] : undefined;
+    const deleteUnitData = unitToDelete ? { name: unitToDelete.deptName, code: unitToDelete.code } : undefined;
 
-    // Locked unit info: truyền vào UserFormModal để khóa cứng field Đơn vị
     const lockedUnit = selectedUnitId && currentUnitDetails
         ? { value: selectedUnitId, label: currentUnitDetails.name }
         : undefined;
 
+    // --- Dynamic User Permissions ---
+    // Cả SUPER_ADMIN và DEPARTMENT_ADMIN đều được phép sửa/xóa nhân sự
+    const canEditUser = roleCode === "SUPER_ADMIN" || roleCode === "DEPARTMENT_ADMIN";
+    const canDeleteUser = roleCode === "SUPER_ADMIN" || roleCode === "DEPARTMENT_ADMIN";
+
+    // Quyền thêm mới nhân dụng chỉ hiện hữu khi admin đang chọn xem đúng cấp Đơn Vị cha (Sở / UBND)
+    // Ẩn hoàn toàn khi đứng ở các phòng bộ con để tránh dữ liệu phân bổ sai lệch cấu trúc phẳng
+    const isTopLevelUnit = currentUnitDetails && (
+        !currentUnitDetails.parentId || 
+        currentUnitDetails.parentName === "UBND thành phố Hải Phòng"
+    );
+    const canAddUser = (roleCode === "SUPER_ADMIN" && !!isTopLevelUnit) || (roleCode === "DEPARTMENT_ADMIN");
+
     return {
+        // Permissions
+        canEditUser, canDeleteUser, canAddUser, canEditUnit, canDeleteUnit, canAddUnit,
         // State
         searchQuery, setSearchQuery,
         filterStatus, setFilterStatus,
@@ -361,11 +483,14 @@ export function useDonVi() {
         isLoadingDetail,
         treeData,
         // Derived
-        totalItems, activeUnits, activeFiltersCount,
+        totalItems: stats.totalUnits,
+        activeUnits: stats.activeUnits,
+        activeFiltersCount,
         selectedNode,
         currentUnitDetails,
         currentChildUnits,
         currentUnitUsers,
+        userTotal, userPage, setUserPage, userPageSize, setUserPageSize, userSearch, setUserSearch,
         childUnitTypeLabel,
         detailTabs,
         // Modal state
@@ -381,7 +506,6 @@ export function useDonVi() {
         handleOpenAddUnitModal, handleOpenEditUnitModal, handleOpenDeleteUnitModal,
         handleCloseUnitFormModal, handleCloseDeleteUnitModal,
         handleSubmitUnitForm, handleConfirmDeleteUnit,
-        // Tree helpers (needed for rendering)
         findNodeById,
     };
 }

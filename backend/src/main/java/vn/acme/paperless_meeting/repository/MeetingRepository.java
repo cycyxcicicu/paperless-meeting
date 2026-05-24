@@ -25,6 +25,8 @@ public interface MeetingRepository extends JpaRepository<Meeting, UUID>, JpaSpec
     @Query("SELECT m FROM Meeting m WHERE m.status = :status AND m.startTime <= :now")
     List<Meeting> findMeetingsToStart(@Param("status") vn.acme.paperless_meeting.entity.enums.MeetingStatus status, @Param("now") LocalDateTime now);
 
+    List<Meeting> findByStatusAndStartTimeBetween(vn.acme.paperless_meeting.entity.enums.MeetingStatus status, LocalDateTime start, LocalDateTime end);
+
     @Query("""
                 select case when count(m) > 0 then true else false end
                 from Meeting m
@@ -39,4 +41,11 @@ public interface MeetingRepository extends JpaRepository<Meeting, UUID>, JpaSpec
             @Param("statuses") List<vn.acme.paperless_meeting.entity.enums.MeetingStatus> statuses,
             @Param("startTime") LocalDateTime startTime,
             @Param("endTime") LocalDateTime endTime);
+
+    @Query(value = "SELECT * FROM meetings WHERE id = :id", nativeQuery = true)
+    Optional<Meeting> findByIdIncludingDeleted(@Param("id") UUID id);
+
+    @org.springframework.data.jpa.repository.Modifying
+    @Query(value = "UPDATE meetings SET is_deleted = false, deleted_at = null WHERE id = :id", nativeQuery = true)
+    void restoreMeetingNative(@Param("id") UUID id);
 }

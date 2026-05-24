@@ -484,6 +484,14 @@ public class MotionService {
         Motion motion = motionRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.MOTION_NOT_FOUND));
 
+        User caller = currentUserService.getCurrentActiveUser();
+        
+        // VOTE-12: Chỉ có người tham gia cuộc họp (Participant) mới được quyền xem kết quả VoteSession.
+        boolean isParticipant = meetingParticipantRepository.existsByMeetingIdAndUserId(motion.getMeeting().getId(), caller.getId());
+        if (!isParticipant) {
+            throw new AppException(ErrorCode.UNAUTHOZIZED);
+        }
+
         VoteSession session = motion.getVoteSessionList().stream()
                 .filter(s -> s.getStatus() == VoteSessionStatus.OPEN || s.getStatus() == VoteSessionStatus.CLOSED)
                 .findFirst()
@@ -531,5 +539,17 @@ public class MotionService {
                 .yesCount(yesCount)
                 .noCount(noCount)
                 .build();
+    }
+
+    /**
+     * Tự động đóng tất cả các phiên biểu quyết còn mở (khi cuộc họp kết thúc)
+     */
+    @Transactional
+    public void closeAllOpenVoteSessions(UUID meetingId) {
+        List<VoteSession> openSessions = voteSessionRepository.findByMeetingIdAndStatus(meetingId, VoteSessionStatus.OPEN);
+        LocalDateTime now = LocalDateTime.now();
+        for (VoteSession session : openSessions) {
+            completeVoteSessionInternal(session, now);
+        }
     }
 }

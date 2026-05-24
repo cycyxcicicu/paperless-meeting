@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -21,10 +22,12 @@ import vn.acme.paperless_meeting.dto.base.PageResponse;
 import vn.acme.paperless_meeting.dto.request.user.UserCreateRequest;
 import vn.acme.paperless_meeting.dto.request.user.UserUpdateRequest;
 import vn.acme.paperless_meeting.dto.response.user.UserResponse;
+import vn.acme.paperless_meeting.dto.response.user.UserStatsResponse;
 import vn.acme.paperless_meeting.entity.Department;
 import vn.acme.paperless_meeting.entity.Position;
 import vn.acme.paperless_meeting.entity.Role;
 import vn.acme.paperless_meeting.entity.User;
+import vn.acme.paperless_meeting.entity.enums.PositionRole;
 import vn.acme.paperless_meeting.entity.enums.RoleName;
 import vn.acme.paperless_meeting.entity.enums.UserStatus;
 import vn.acme.paperless_meeting.exceptions.AppException;
@@ -50,7 +53,7 @@ public class UserService {
     PositionRepository positionRepository;
     CurrentUserService currentUserService;
 
-    private record CreateUserValidatedData(
+    record CreateUserValidatedData(
             Department department,
             Position position,
             Role role) {
@@ -99,16 +102,6 @@ public class UserService {
             }
         }
 
-        Position position = null;
-        if (positionId == null) {
-            errors.put("positionId", ErrorCode.POSITION_ID_REQUIRED.getMessage());
-        } else {
-            position = positionRepository.findById(positionId).orElse(null);
-            if (position == null) {
-                errors.put("positionId", ErrorCode.POSITION_NOT_EXIST.getMessage());
-            }
-        }
-
         Role role = null;
         if (roleId == null) {
             errors.put("roleId", ErrorCode.ROLE_ID_REQUIRED.getMessage());
@@ -118,16 +111,67 @@ public class UserService {
                 errors.put("roleId", ErrorCode.ROLE_NOT_EXIST.getMessage());
             } else {
                 if (currentUserService.hasRole(RoleName.DEPARTMENT_ADMIN) &&
-                        !role.getRoleName().equals(RoleName.USER.name())) {
+                        !RoleName.USER.name().equals(role.getRoleCode())) {
                     errors.put("roleId", "Department Admin chỉ có thể tạo người dùng với vai trò USER");
                 }
             }
         }
 
+        if (role != null && departmentId != null && RoleName.DEPARTMENT_ADMIN.name().equals(role.getRoleCode())) {
+            if (department != null && department.getParentDepartment() != null && department.getParentDepartment().getParentDepartment() != null) {
+                errors.put("roleId", "Không thể tạo Admin đơn vị ở cấp phòng/ban. Chỉ được tạo ở cấp Đơn vị.");
+            } else {
+                boolean adminExists = userRepository.existsByDepartmentIdAndRole_RoleCode(departmentId, RoleName.DEPARTMENT_ADMIN.name());
+                if (adminExists) {
+                    errors.put("roleId", "Đơn vị này đã có tài khoản Admin đơn vị (tối đa 1 admin/đơn vị)");
+                }
+            }
+        }
+
+        Position position = null;
+        boolean isDepartmentAdmin = role != null && RoleName.DEPARTMENT_ADMIN.name().equals(role.getRoleCode());
+        if (positionId == null) {
+            if (!isDepartmentAdmin) {
+                errors.put("positionId", ErrorCode.POSITION_ID_REQUIRED.getMessage());
+            }
+        } else {
+            position = positionRepository.findById(positionId).orElse(null);
+            if (position == null) {
+                errors.put("positionId", ErrorCode.POSITION_NOT_EXIST.getMessage());
+            }
+        }
+
         if (department != null && position != null) {
-            if (position.getDepartment() == null ||
-                    !department.getId().equals(position.getDepartment().getId())) {
-                errors.put("positionId", ErrorCode.POSITION_DEPARTMENT_MISMATCH.getMessage());
+            // Cho phép các chức vụ hệ thống (department == null) được gán ở tất cả các đơn vị
+            if (position.getDepartment() != null) {
+                UUID posDeptId = position.getDepartment().getId();
+                UUID targetDeptId = department.getId();
+                
+                if (!targetDeptId.equals(posDeptId)) {
+                    User currentUser = currentUserService.getCurrentActiveUser();
+                    boolean isAllowed = false;
+                    if (currentUserService.hasRole(RoleName.SUPER_ADMIN)) {
+                        isAllowed = true;
+                    } else if (currentUserService.hasRole(RoleName.DEPARTMENT_ADMIN)) {
+                        UUID callerDeptId = currentUser.getDepartment() != null ? currentUser.getDepartment().getId() : null;
+                        if (callerDeptId != null) {
+                            List<UUID> allowedIds = getAllSubDepartmentIds(callerDeptId);
+                            if (allowedIds.contains(targetDeptId) && allowedIds.contains(posDeptId)) {
+                                isAllowed = true;
+                            }
+                        }
+                    }
+                    if (!isAllowed) {
+                        errors.put("positionId", ErrorCode.POSITION_DEPARTMENT_MISMATCH.getMessage());
+                    }
+                }
+            }
+            if (!errors.containsKey("positionId")) {
+                try {
+                    validatePositionLimits(null, department, position);
+                } catch (AppValidationException e) {
+                    errors.putAll(e.getFieldErrors());
+                }
             }
         }
 
@@ -139,32 +183,48 @@ public class UserService {
     }
 
     @Transactional(readOnly = true)
-    public PageResponse<UserResponse> findAll(String keyword, String statusStr, String role, UUID departmentId,
+    public PageResponse<UserResponse> findAll(String keyword, String statusStr, UUID departmentId, String roleCodeStr,
             Pageable pageable) {
-
-        User caller = currentUserService.getCurrentActiveUser();
 
         if (currentUserService.hasRole(RoleName.USER)) {
             throw new AppException(ErrorCode.UNAUTHOZIZED);
         }
 
+        User caller = currentUserService.getCurrentActiveUser();
         List<UUID> searchDeptIds = null;
-
-        if (currentUserService.hasRole(RoleName.DEPARTMENT_ADMIN)) {
-            UUID adminDeptId = caller.getDepartment() != null ? caller.getDepartment().getId() : null;
-            if (adminDeptId == null)
-                throw new AppException(ErrorCode.DEPARTMENT_NOT_EXIST);
-
-            if (departmentId == null) {
-                searchDeptIds = getAllSubDepartmentIds(adminDeptId);
-            } else {
-                requireAdminAccessToDepartment(caller, departmentId);
-                searchDeptIds = List.of(departmentId);
+        RoleName roleFilter = null;
+        if (roleCodeStr != null && !roleCodeStr.isBlank()) {
+            try {
+                roleFilter = RoleName.valueOf(roleCodeStr.trim().toUpperCase());
+            } catch (IllegalArgumentException ex) {
+                // Ignore invalid
             }
-        } else {
-            // SUPER_ADMIN
+        }
+
+        if (currentUserService.hasRole(RoleName.SUPER_ADMIN)) {
+            // SUPER_ADMIN có thể truyền xuống role tùy ý để lọc (thường là lọc DEPARTMENT_ADMIN từ trang list).
+            // Nếu không truyền roleFilter VÀ không truyền departmentId => Tự động khóa thành DEPARTMENT_ADMIN
+            if (roleFilter == null && departmentId == null) {
+                roleFilter = RoleName.DEPARTMENT_ADMIN;
+            }
             if (departmentId != null) {
                 searchDeptIds = List.of(departmentId);
+            }
+        } else if (currentUserService.hasRole(RoleName.DEPARTMENT_ADMIN)) {
+            // DEPARTMENT_ADMIN: lấy người dùng trong cây đơn vị mình quản lý
+            UUID callerDeptId = caller.getDepartment() != null ? caller.getDepartment().getId() : null;
+            if (callerDeptId == null) {
+                throw new AppException(ErrorCode.UNAUTHOZIZED);
+            }
+            List<UUID> allowedDeptIds = getAllSubDepartmentIds(callerDeptId);
+
+            if (departmentId != null) {
+                if (!allowedDeptIds.contains(departmentId)) {
+                    throw new AppException(ErrorCode.UNAUTHOZIZED);
+                }
+                searchDeptIds = List.of(departmentId);
+            } else {
+                searchDeptIds = allowedDeptIds;
             }
         }
 
@@ -177,7 +237,7 @@ public class UserService {
             }
         }
 
-        Specification<User> spec = UserSpecification.build(keyword, status, role, searchDeptIds);
+        Specification<User> spec = UserSpecification.build(keyword, status, roleFilter, searchDeptIds);
 
         Page<User> page = userRepository.findAll(spec, pageable);
 
@@ -199,6 +259,42 @@ public class UserService {
                 .build();
 
         return resp;
+    }
+
+
+    @Transactional(readOnly = true)
+    public UserStatsResponse getStats() {
+        if (currentUserService.hasRole(RoleName.SUPER_ADMIN)) {
+            // SUPER_ADMIN: stats về tài khoản DEPARTMENT_ADMIN
+            long total = userRepository.countByRole_RoleCode(RoleName.DEPARTMENT_ADMIN.name());
+            long active = userRepository.countByRole_RoleCodeAndStatus(RoleName.DEPARTMENT_ADMIN.name(), UserStatus.ACTIVE);
+            long inactive = userRepository.countByRole_RoleCodeAndStatus(RoleName.DEPARTMENT_ADMIN.name(), UserStatus.INACTIVE);
+            return UserStatsResponse.builder()
+                    .totalUsers(total)
+                    .activeUsers(active)
+                    .inactiveUsers(inactive)
+                    .build();
+        }
+
+        if (currentUserService.hasRole(RoleName.DEPARTMENT_ADMIN)) {
+            User caller = currentUserService.getCurrentActiveUser();
+            UUID callerDeptId = caller.getDepartment() != null ? caller.getDepartment().getId() : null;
+            if (callerDeptId == null) {
+                return UserStatsResponse.builder()
+                        .totalUsers(0).activeUsers(0).inactiveUsers(0).build();
+            }
+            List<UUID> allowedDeptIds = getAllSubDepartmentIds(callerDeptId);
+            long total = userRepository.countByDepartmentIdIn(allowedDeptIds);
+            long active = userRepository.countByStatusAndDepartmentIdIn(UserStatus.ACTIVE, allowedDeptIds);
+            long inactive = total - active;
+            return UserStatsResponse.builder()
+                    .totalUsers(total)
+                    .activeUsers(active)
+                    .inactiveUsers(inactive)
+                    .build();
+        }
+
+        throw new AppException(ErrorCode.UNAUTHOZIZED);
     }
 
     @Transactional(readOnly = true)
@@ -238,7 +334,7 @@ public class UserService {
         if (!isRegularUser) {
             // Chặn Admin cấp dưới thao tác lên SUPER_ADMIN
             if (currentUserService.hasRole(RoleName.DEPARTMENT_ADMIN) &&
-                    user.getRole() != null && user.getRole().getRoleName().equals(RoleName.SUPER_ADMIN.name())) {
+                    user.getRole() != null && user.getRole().getRoleCode().equals(RoleName.SUPER_ADMIN.name())) {
                 throw new AppException(ErrorCode.UNAUTHOZIZED);
             }
 
@@ -259,10 +355,10 @@ public class UserService {
         }
 
         if (isRegularUser) {
-            if (user.getDepartment() == null || !request.getDepartmentId().equals(user.getDepartment().getId()) ||
-                    user.getPosition() == null || !request.getPositionId().equals(user.getPosition().getId()) ||
-                    user.getRole() == null || !request.getRoleId().equals(user.getRole().getId()) ||
-                    !request.getStatus().equals(user.getStatus())) {
+            if (user.getDepartment() == null || !java.util.Objects.equals(request.getDepartmentId(), user.getDepartment().getId()) ||
+                    !java.util.Objects.equals(request.getPositionId(), user.getPosition() != null ? user.getPosition().getId() : null) ||
+                    user.getRole() == null || !java.util.Objects.equals(request.getRoleId(), user.getRole().getId()) ||
+                    !java.util.Objects.equals(request.getStatus(), user.getStatus())) {
                 throw new AppException(ErrorCode.UNAUTHOZIZED);
             }
         }
@@ -273,21 +369,39 @@ public class UserService {
 
         validateDuplicatedFields(request.getUsername(), request.getEmail(), request.getPhone(), id);
 
-        Position position = validatePosition(request.getPositionId(), department.getId());
+        Role role = roleRepository.findById(request.getRoleId())
+                .orElseThrow(() -> new AppException(ErrorCode.ROLE_NOT_EXIST));
+
+        boolean isDepartmentAdmin = RoleName.DEPARTMENT_ADMIN.name().equals(role.getRoleCode());
+
+        Position position = null;
+        if (request.getPositionId() != null) {
+            position = validatePosition(request.getPositionId(), department.getId());
+            validatePositionLimits(id, department, position);
+        } else if (!isDepartmentAdmin) {
+            throw new AppException(ErrorCode.POSITION_ID_REQUIRED);
+        }
 
         userMapper.updateEntity(request, user);
         user.setDepartment(department);
         user.setPosition(position);
 
-        Role role = roleRepository.findById(request.getRoleId())
-                .orElseThrow(() -> new AppException(ErrorCode.ROLE_NOT_EXIST));
-
         if (currentUserService.hasRole(RoleName.DEPARTMENT_ADMIN)) {
             // Chỉ kiểm tra gán role nếu admin CÓ THAY ĐỔI role của user
             if (!role.getId().equals(user.getRole() != null ? user.getRole().getId() : null)) {
-                if (!role.getRoleName().equals(RoleName.USER.name())) {
+                if (!RoleName.USER.name().equals(role.getRoleCode())) {
                     throw new AppException(ErrorCode.UNAUTHOZIZED); // Không được gán role cao hơn
                 }
+            }
+        }
+
+        if (RoleName.DEPARTMENT_ADMIN.name().equals(role.getRoleCode())) {
+            if (department.getParentDepartment() != null && department.getParentDepartment().getParentDepartment() != null) {
+                throw new AppValidationException(Map.of("roleId", "Không thể tạo Admin đơn vị ở cấp phòng/ban. Chỉ được tạo ở cấp Đơn vị."));
+            }
+            boolean adminExists = userRepository.existsByDepartmentIdAndRole_RoleCodeAndIdNot(department.getId(), RoleName.DEPARTMENT_ADMIN.name(), id);
+            if (adminExists) {
+                throw new AppValidationException(Map.of("roleId", "Đơn vị này đã có tài khoản Admin đơn vị (tối đa 1 admin/đơn vị)"));
             }
         }
 
@@ -313,11 +427,11 @@ public class UserService {
 
         var auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
         if (auth != null && auth.isAuthenticated()) {
-            java.util.Set<String> perms = auth.getAuthorities().stream()
+           Set<String> perms = auth.getAuthorities().stream()
                     .map(org.springframework.security.core.GrantedAuthority::getAuthority)
                     .filter(a -> !a.startsWith("ROLE_"))
                     .collect(java.util.stream.Collectors.toSet());
-            response.setPermissions(perms);
+                    response.setPermissions(perms);
         }
 
         return response;
@@ -327,9 +441,8 @@ public class UserService {
         User user = getUser(id);
         User caller = currentUserService.getCurrentActiveUser();
 
-        // Chặn Admin cấp dưới xóa SUPER_ADMIN
         if (currentUserService.hasRole(RoleName.DEPARTMENT_ADMIN) &&
-                user.getRole() != null && user.getRole().getRoleName().equals(RoleName.SUPER_ADMIN.name())) {
+                user.getRole() != null && user.getRole().getRoleCode().equals(RoleName.SUPER_ADMIN.name())) {
             throw new AppException(ErrorCode.UNAUTHOZIZED);
         }
 
@@ -352,8 +465,27 @@ public class UserService {
         Position position = positionRepository.findById(positionId)
                 .orElseThrow(() -> new AppException(ErrorCode.POSITION_NOT_EXIST));
 
-        if (position.getDepartment() == null || !departmentId.equals(position.getDepartment().getId())) {
-            throw new AppException(ErrorCode.POSITION_DEPARTMENT_MISMATCH);
+        // Cho phép các chức vụ hệ thống (department == null) được gán ở tất cả các đơn vị
+        if (position.getDepartment() != null) {
+            UUID posDeptId = position.getDepartment().getId();
+            if (!departmentId.equals(posDeptId)) {
+                User currentUser = currentUserService.getCurrentActiveUser();
+                boolean isAllowed = false;
+                if (currentUserService.hasRole(RoleName.SUPER_ADMIN)) {
+                    isAllowed = true;
+                } else if (currentUserService.hasRole(RoleName.DEPARTMENT_ADMIN)) {
+                    UUID callerDeptId = currentUser.getDepartment() != null ? currentUser.getDepartment().getId() : null;
+                    if (callerDeptId != null) {
+                        List<UUID> allowedIds = getAllSubDepartmentIds(callerDeptId);
+                        if (allowedIds.contains(departmentId) && allowedIds.contains(posDeptId)) {
+                            isAllowed = true;
+                        }
+                    }
+                }
+                if (!isAllowed) {
+                    throw new AppException(ErrorCode.POSITION_DEPARTMENT_MISMATCH);
+                }
+            }
         }
 
         return position;
@@ -420,4 +552,69 @@ public class UserService {
         return allIds;
     }
 
+    private void validatePositionLimits(UUID userId, Department department, Position position) {
+        if (position == null || position.getPositionRole() == null || department == null) {
+            return;
+        }
+
+        PositionRole role = position.getPositionRole();
+        
+        long currentCount = department.getUserList().stream()
+                .filter(u -> userId == null || !u.getId().equals(userId))
+                .filter(u -> u.getPosition() != null && role.equals(u.getPosition().getPositionRole()))
+                .count();
+
+        Map<String, String> errors = new HashMap<>();
+
+        switch (role) {
+            case CHAIRMAN_CITY:
+                if (currentCount >= 1) {
+                    errors.put("positionId", "Đơn vị đã có Chủ tịch Ủy ban nhân dân thành phố (tối đa 1)");
+                }
+                break;
+            case VICE_CHAIRMAN_CITY:
+                if (currentCount >= 6) {
+                    errors.put("positionId", "Đơn vị đã đạt số lượng tối đa Phó Chủ tịch Ủy ban nhân dân thành phố (tối đa 6)");
+                }
+                break;
+            case HEAD_OF_DEPARTMENT_LEVEL:
+                if (currentCount >= 1) {
+                    errors.put("positionId", "Đơn vị đã có Thủ trưởng đứng đầu (tối đa 1)");
+                }
+                break;
+            case DEPUTY_OF_DEPARTMENT_LEVEL:
+                if (currentCount >= 3) {
+                    errors.put("positionId", "Đơn vị đã đạt số lượng tối đa cấp Phó Thủ trưởng (tối đa 3)");
+                }
+                break;
+            case HEAD_OF_DIVISION:
+                if (currentCount >= 1) {
+                    errors.put("positionId", "Đơn vị đã có Trưởng phòng/Đầu mối phụ trách (tối đa 1)");
+                }
+                break;
+            case DEPUTY_OF_DIVISION:
+                int staffCount = department.getUserList() != null ? department.getUserList().size() : 0;
+                int maxDeputies;
+                if (staffCount < 10) {
+                    maxDeputies = 1;
+                } else if (staffCount <= 14) {
+                    maxDeputies = 2;
+                } else {
+                    maxDeputies = 3;
+                }
+                if (currentCount >= maxDeputies) {
+                    errors.put("positionId", String.format(
+                        "Quá số lượng Phó Trưởng phòng theo quy định biên chế (Quy mô: %d người, tối đa cho phép: %d)",
+                        staffCount, maxDeputies
+                    ));
+                }
+                break;
+            default:
+                break;
+        }
+
+        if (!errors.isEmpty()) {
+            throw new AppValidationException(errors);
+        }
+    }
 }

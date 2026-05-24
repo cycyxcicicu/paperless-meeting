@@ -42,6 +42,16 @@ public class LocationController {
 				.build();
 	}
 
+	@GetMapping("/stats")
+	public ApiResponse<vn.acme.paperless_meeting.dto.response.location.LocationStatsResponse> getStats(
+			@RequestParam(required = false) UUID departmentId) {
+		return ApiResponse.<vn.acme.paperless_meeting.dto.response.location.LocationStatsResponse>builder()
+				.success(true)
+				.message("Lấy thống kê địa điểm thành công")
+				.data(locationService.getStats(departmentId))
+				.build();
+	}
+
 	@GetMapping("/{id}")
 	public ApiResponse<LocationResponse> findById(@PathVariable UUID id) {
 		return ApiResponse.<LocationResponse>builder()

@@ -8,14 +8,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '@/common/utils/cn'; // I'll assume a cn utility exists or create it
 
-export interface TreeNode {
-  id: string;
-  name: string;
-  code: string;
-  children?: TreeNode[];
-  isExpanded?: boolean;
-  level: number;
-}
+import { TreeNode } from '../types';
 
 interface OrgTreeProps {
   treeData: TreeNode[];

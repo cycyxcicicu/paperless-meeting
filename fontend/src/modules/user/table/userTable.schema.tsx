@@ -1,6 +1,7 @@
 import React from 'react';
 import { Mail, Phone, Eye, Edit, Trash2 } from 'lucide-react';
 import { ColumnDef, TableActionDef, FilterDef, BulkActionDef, TableTooltip } from '@/common/components/table-engine';
+import { BadgeStatus } from '@/common/components/ui/BadgeStatus';
 
 export interface User {
   id: number;
@@ -77,13 +78,10 @@ export const getUserTableColumns = (): ColumnDef<User>[] => [
       const statusStr = String(row.status || '').toUpperCase();
       const isActive = statusStr === 'ACTIVE' || statusStr === '1' || statusStr === 'HOẠT ĐỘNG';
       return (
-        <span className={`inline-flex items-center px-3 py-1 text-xs btn-primary rounded-full border ${
-          isActive 
-            ? 'bg-gradient-to-r from-emerald-50 to-emerald-100 text-emerald-700 border-emerald-200'
-            : 'bg-gradient-to-r from-gray-50 to-gray-100 text-gray-600 border-gray-200'
-        }`}>
-          {isActive ? 'Hoạt động' : 'Ngừng hoạt động'}
-        </span>
+        <BadgeStatus 
+          status={isActive ? 'success' : 'neutral'} 
+          label={isActive ? 'Hoạt động' : 'Ngừng hoạt động'} 
+        />
       );
     }
   },
@@ -121,17 +119,6 @@ export const getUserRowActions = (
 // Hàm khởi tạo Bộ lọc (Filters)
 export const getUserFilters = (units: any[]): FilterDef[] => [
   {
-    key: 'role',
-    label: 'Vai trò',
-    type: 'select',
-    options: [
-      { value: 'all', label: 'Tất cả' },
-      { value: 'admin', label: 'Admin' },
-      { value: 'staff', label: 'Nhân viên' },
-      { value: 'user', label: 'Người dùng' }
-    ],
-  },
-  {
     key: 'status',
     label: 'Trạng thái',
     type: 'select',
@@ -139,12 +126,10 @@ export const getUserFilters = (units: any[]): FilterDef[] => [
       { value: 'all', label: 'Tất cả' },
       { value: 'active', label: 'Hoạt động' },
       { value: 'inactive', label: 'Ngừng hoạt động' },
-      { value: 'pending', label: 'Chờ duyệt' },
-      { value: 'locked', label: 'Bị khóa' }
     ],
   },
   {
-    key: 'unit',
+    key: 'departmentId',
     label: 'Đơn vị',
     type: 'searchable-select',
     searchPlaceholder: 'Tìm kiếm đơn vị...',
@@ -155,11 +140,11 @@ export const getUserFilters = (units: any[]): FilterDef[] => [
 // Hàm lấy Nhãn của filter đang chọn (để hiển thị Tag)
 export const getUserFilterLabel = (key: string, value: string, units: any[]): string => {
   if (value === 'all') return '';
-  if (key === 'role') return `Vai trò: ${value === 'admin' ? 'Admin' : value === 'staff' ? 'Nhân viên' : 'Người dùng'}`;
-  if (key === 'status') return `Trạng thái: ${value === 'active' ? 'Hoạt động' : value === 'inactive' ? 'Ngừng hoạt động' : value === 'pending' ? 'Chờ duyệt' : 'Bị khóa'}`;
-  if (key === 'unit') {
+  if (key === 'status') return `Trạng thái: ${value === 'active' ? 'Hoạt động' : 'Ngừng hoạt động'}`;
+  if (key === 'departmentId') {
     const selectedUnit = units.find(u => String(u.id) === value);
     return `Đơn vị: ${selectedUnit?.name || value}`;
   }
   return `${key}: ${value}`;
 };
+

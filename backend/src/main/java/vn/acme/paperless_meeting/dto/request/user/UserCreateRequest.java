@@ -35,7 +35,6 @@ public class UserCreateRequest {
     @NotNull(message = "USER_STATUS_REQUIRED")
     private UserStatus status;
 
-    @NotNull(message = "POSITION_ID_REQUIRED")
     private UUID positionId;
 
     @NotNull(message = "DEPARTMENT_ID_REQUIRED")

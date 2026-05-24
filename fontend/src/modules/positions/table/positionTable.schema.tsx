@@ -1,4 +1,3 @@
-import React from 'react';
 import { Eye, Edit, Trash2 } from 'lucide-react';
 import { ColumnDef, TableActionDef, TableTooltip } from '@/common/components/table-engine';
 
@@ -9,6 +8,8 @@ export interface Position {
   description: string;
   memberCount: number;
   status: 'active' | 'inactive';
+  rankOrder: number;
+  isLeadership: boolean;
   createdAt: string;
 }
 

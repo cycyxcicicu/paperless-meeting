@@ -16,7 +16,7 @@ export const createRoleFormSchema = (deps: {
           showPlaceholder: false,
           disabled: ({ mode }) => mode === 'view',
           col: 'col-span-1',
-          allowedChars: 'letters',
+          allowedChars: 'no-special',
         },
         {
           key: 'roleCode',
@@ -26,7 +26,6 @@ export const createRoleFormSchema = (deps: {
           showPlaceholder: false,
           disabled: ({ mode }) => mode === 'view',
           col: 'col-span-1',
-          allowedChars: 'alphanumeric',
           uppercase: true,
         },
         {

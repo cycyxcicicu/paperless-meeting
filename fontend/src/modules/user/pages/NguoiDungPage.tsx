@@ -1,19 +1,42 @@
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { PageHeader } from '@/common/components/layout/PageHeader';
+import { getErrorMessage } from '@/lib/api/error';
 import { UserFormModal } from '@/modules/user/components/UserFormModal';
 import { DeleteUserModal } from '@/modules/user/components/DeleteUserModal';
 import { toast } from '@/lib/toast';
 import { Users, UserCheck, UserX, Plus, Trash2, Loader2 } from 'lucide-react';
 import { Button } from '@/common/components/ui/button';
 import { StatCard } from '@/common/components/ui/StatCard';
+import { useAuth } from '@/app/context/AuthContext';
 
 // Table Engine imports
 import { DataTable, DataToolbar, BulkActionDef } from '@/common/components/table-engine';
 import { User, getUserTableColumns, getUserRowActions, getUserFilters, getUserFilterLabel } from '@/modules/user/table/userTable.schema';
 import { usePaginationQuery } from '@/common/hooks/usePaginationQuery';
-import { userApi } from '@/modules/user/services/user.api';
+import { userApi, UserStatsResponse } from '@/modules/user/services/user.api';
+import { departmentApi, DepartmentTreeResponse } from '@/modules/organization/services/department.api';
+
+// Helper: flatten tree thành array {id, name}
+const flattenTree = (nodes: DepartmentTreeResponse[]): { id: string; name: string }[] => {
+  const result: { id: string; name: string }[] = [];
+  const walk = (list: DepartmentTreeResponse[]) => {
+    for (const node of list) {
+      result.push({ id: node.id, name: node.deptName });
+      if (node.children && node.children.length > 0) {
+        walk(node.children);
+      }
+    }
+  };
+  walk(nodes);
+  return result;
+};
 
 const NguoiDungPage = () => {
+  const { user: authUser } = useAuth();
+  const roleCode = authUser?.role?.roleCode || 'USER';
+  const isSuperAdmin = roleCode === 'SUPER_ADMIN';
+  const isDeptAdmin = roleCode === 'DEPARTMENT_ADMIN';
+
   // Selection State
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
 
@@ -32,25 +55,77 @@ const NguoiDungPage = () => {
 
   const [showFilters, setShowFilters] = useState(false);
 
-  // Mock data - Units (Giữ mock đơn vị nếu BE chưa có API danh sách đơn vị)
-  const units = useMemo(() => [
-    { id: '1', name: 'Văn phòng UBND thành phố Hải Phòng' },
-    { id: '2', name: 'Sở Tài chính' },
-    { id: '3', name: 'Sở Kế hoạch và Đầu tư' },
-    { id: '4', name: 'Sở Xây dựng' },
-    { id: '5', name: 'Sở Giao thông vận tải' },
-    { id: '6', name: 'Sở Nông nghiệp và Phát triển nông thôn' },
-    { id: '7', name: 'Sở Công Thương' },
-    { id: '8', name: 'Sở Giáo dục và Đào tạo' },
-    { id: '9', name: 'Sở Y tế' },
-    { id: '10', name: 'Sở Văn hóa và Thể thao' },
-    { id: '11', name: 'Sở Khoa học và Công nghệ' },
-    { id: '12', name: 'Sở Tư pháp' },
-    { id: '13', name: 'Sở Nội vụ' },
-    { id: '14', name: 'Sở Lao động - Thương binh và Xã hội' },
-  ], []);
+  // Stats from API
+  const [stats, setStats] = useState<UserStatsResponse>({ totalUsers: 0, activeUsers: 0, inactiveUsers: 0 });
 
-  // Gọi API thông qua Hook usePaginationQuery (Sử dụng fetchFunction tập trung)
+  // Department options loaded from API tree
+  const [units, setUnits] = useState<{ id: string; name: string }[]>([]);
+
+  // Load stats from API
+  const fetchStats = useCallback(async () => {
+    try {
+      const res = await userApi.getStats();
+      if (res.success && res.data) {
+        setStats(res.data);
+      }
+    } catch (e) {
+      console.error('Error fetching user stats:', e);
+    }
+  }, []);
+
+  // Load department tree from API, scoped per role:
+  // SUPER_ADMIN: chỉ lấy level-1 (những node gốc = không có parentDepartmentId)
+  // DEPT_ADMIN: lấy các đơn vị con trong cây của mình (trừ root)
+  const fetchDepartments = useCallback(async () => {
+    try {
+      const res = await departmentApi.getTree();
+      if (res.success && res.data) {
+        if (isSuperAdmin) {
+          // Chỉ lấy level-1 (root nodes — các Sở/Cơ quan)
+          const level1 = res.data.map((node: DepartmentTreeResponse) => ({ id: node.id, name: node.deptName }));
+          setUnits(level1);
+        } else {
+          // DEPT_ADMIN: lấy tất cả đơn vị con (phòng, bộ phận) trong cây của mình
+          // res.data sẽ là [rootNode] → lấy children của rootNode
+          const rootNode = res.data[0];
+          if (rootNode) {
+            const children = flattenTree(rootNode.children || []);
+            setUnits(children);
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Error fetching departments:', e);
+    }
+  }, [isSuperAdmin]);
+
+  useEffect(() => {
+    fetchStats();
+    fetchDepartments();
+  }, [fetchStats, fetchDepartments]);
+
+  // Backend tự xử lý phân quyền, frontend chỉ cần rename search -> keyword
+  const fetchUsersFunction = useCallback((params: any) => {
+    const adjustedParams = { ...params };
+    if (adjustedParams.search) {
+      adjustedParams.keyword = adjustedParams.search;
+      delete adjustedParams.search;
+    }
+    // Xóa các filter 'all' để tránh gửi giá trị rác lên backend
+    Object.keys(adjustedParams).forEach(k => {
+      if (adjustedParams[k] === 'all') delete adjustedParams[k];
+    });
+
+    // Ép buộc lọc danh sách các Quản trị viên (DEPARTMENT_ADMIN) trên trang Quản trị Người Dùng
+    // đối với tài khoản cấp tối cao (để không bị lẫn lộn chuyên viên khi filter theo phòng ban)
+    if (isSuperAdmin) {
+      adjustedParams.roleCode = 'DEPARTMENT_ADMIN';
+    }
+
+    return userApi.getUsers(adjustedParams);
+  }, [isSuperAdmin]);
+
+  // Gọi API thông qua Hook usePaginationQuery 
   const {
     data: allUsers,
     totalItems,
@@ -66,16 +141,10 @@ const NguoiDungPage = () => {
     handleFilterChange: setFilterValues,
     refresh,
   } = usePaginationQuery<User>({
-    fetchFunction: userApi.getUsers,
+    fetchFunction: fetchUsersFunction,
     initialPage: 1,
     initialSize: 10,
   });
-
-  // Tính toán Thống kê dựa trên dữ liệu hiện tại / API totalItems
-  // LƯU Ý: active/inactive tạm thời đếm trên Data của trang hiện tại vì API pagination thường không kèm stats, 
-  // hoặc bạn có thể gọi thêm API stats riêng nếu BE hỗ trợ.
-  const activeUsersCount = useMemo(() => allUsers.filter(u => u.status === 'active').length, [allUsers]);
-  const inactiveUsersCount = useMemo(() => allUsers.filter(u => u.status === 'inactive').length, [allUsers]);
 
   // Handlers for Filters
   const handleFilterChange = (key: string, val: string) => {
@@ -125,7 +194,7 @@ const NguoiDungPage = () => {
   // Refresh Handler
   const handleRefresh = async () => {
     try {
-      await refresh();
+      await Promise.all([refresh(), fetchStats()]);
       toast.success('Làm mới thành công', 'Dữ liệu đã được cập nhật');
     } catch {
       toast.error('Làm mới thất bại');
@@ -171,28 +240,38 @@ const NguoiDungPage = () => {
     rowActions,
   };
 
+  // Dynamic labels depending on role
+  const pageTitle = isSuperAdmin ? 'Admin đơn vị' : 'Nhân sự';
+  const cardTotalLabel = isSuperAdmin ? 'Tổng admin đơn vị' : 'Tổng nhân sự';
+  const cardActiveLabel = isSuperAdmin ? 'Đang hoạt động' : 'Đang hoạt động';
+  const cardInactiveLabel = isSuperAdmin ? 'Ngừng hoạt động' : 'Ngừng hoạt động';
+  const addButtonLabel = isSuperAdmin ? 'Thêm admin đơn vị' : 'Thêm nhân sự';
+
+
   // Submit Axios Mutation Handlers
   const handleSubmitUserForm = async (userData: any) => {
     try {
       if (userFormModal.mode === 'create') {
         const response = await userApi.createUser(userData);
         if (response.success) {
-          toast.success('Thêm người dùng thành công');
+          toast.success('Thêm thành công');
         } else {
           throw new Error(response.message || 'Thao tác không thành công');
         }
       } else if (userFormModal.mode === 'edit' && userFormModal.user) {
         const response = await userApi.updateUser(userFormModal.user.id, userData);
         if (response.success) {
-          toast.success('Cập nhật người dùng thành công');
+          toast.success('Cập nhật thành công');
         } else {
           throw new Error(response.message || 'Thao tác không thành công');
         }
       }
       refresh();
+      fetchStats();
       setUserFormModal({ isOpen: false, mode: 'create' });
     } catch (error: any) {
-      toast.error('Có lỗi xảy ra', error.message || 'Không thể lưu dữ liệu');
+      toast.error('Có lỗi xảy ra', getErrorMessage(error, 'Không thể lưu dữ liệu'));
+      throw error;
     }
   };
 
@@ -202,20 +281,21 @@ const NguoiDungPage = () => {
         // Xóa đơn lẻ
         const response = await userApi.deleteUser(deleteModal.user.id);
         if (response.success) {
-          toast.success('Xóa người dùng thành công');
+          toast.success('Xóa thành công');
         } else {
           throw new Error(response.message || 'Xóa thất bại');
         }
       } else if (selectedIds.length > 0) {
-        // Xóa nhiều người dùng đã chọn
+        // Xóa nhiều
         await Promise.all(selectedIds.map(id => userApi.deleteUser(id)));
         toast.success(`Đã xóa ${selectedIds.length} người dùng thành công`);
       }
       refresh();
+      fetchStats();
       setDeleteModal({ isOpen: false });
       setSelectedIds([]);
     } catch (error: any) {
-      toast.error('Có lỗi xảy ra khi xóa', error.message || 'Không thể thực thi');
+      toast.error('Có lỗi xảy ra khi xóa', getErrorMessage(error, 'Không thể thực thi'));
     }
   };
 
@@ -225,10 +305,10 @@ const NguoiDungPage = () => {
         <div className="p-8">
           {/* Page Header */}
           <PageHeader
-            breadcrumbs={[{ name: "Trang chủ", path: "/" }, { name: "Quản lý" }]}
+            breadcrumbs={[{ name: "Trang chủ", path: "/" }, { name: "Quản lý" }, { name: pageTitle }]}
             actions={
               <Button onClick={() => setUserFormModal({ isOpen: true, mode: 'create' })} variant="primary">
-                <Plus className="h-4 w-4" /> Thêm người dùng mới
+                <Plus className="h-4 w-4" /> {addButtonLabel}
               </Button>
             }
           />
@@ -236,21 +316,21 @@ const NguoiDungPage = () => {
           {/* Summary Stats */}
           <div className="grid grid-cols-3 gap-4 mb-6">
             <StatCard 
-              title="Tổng số người dùng" 
-              value={totalItems} 
+              title={cardTotalLabel} 
+              value={stats.totalUsers} 
               icon={<Users />} 
               color="blue" 
               hasFilters={activeFiltersCount > 0} 
             />
             <StatCard 
-              title="Đang hoạt động trên trang" 
-              value={activeUsersCount} 
+              title={cardActiveLabel} 
+              value={stats.activeUsers} 
               icon={<UserCheck />} 
               color="emerald" 
             />
             <StatCard 
-              title="Ngừng hoạt động trên trang" 
-              value={inactiveUsersCount} 
+              title={cardInactiveLabel} 
+              value={stats.inactiveUsers} 
               icon={<UserX />} 
               color="gray" 
             />
@@ -295,7 +375,7 @@ const NguoiDungPage = () => {
               totalPages={totalPages}
               onPageChange={setCurrentPage}
               onPageSizeChange={setPageSize}
-              itemLabel="người dùng"
+              itemLabel={isSuperAdmin ? 'admin đơn vị' : 'nhân sự'}
             />
           </div>
         </div>
@@ -308,6 +388,7 @@ const NguoiDungPage = () => {
         onSubmit={handleSubmitUserForm}
         mode={userFormModal.mode}
         initialData={userFormModal.user}
+        lockRole={isDeptAdmin}
       />
 
       <DeleteUserModal

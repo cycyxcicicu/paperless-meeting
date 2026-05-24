@@ -43,7 +43,8 @@ export const MultiSelect: React.FC<MultiSelectProps> = ({
     onChange(newValues);
   };
 
-  const handleRemoveValue = (e: React.MouseEvent, optionValue: string) => {
+  const handleRemoveValue = (e: React.SyntheticEvent, optionValue: string) => {
+    e.preventDefault();
     e.stopPropagation();
     onChange(values.filter((v) => v !== optionValue));
   };
@@ -56,7 +57,7 @@ export const MultiSelect: React.FC<MultiSelectProps> = ({
         <PopoverTrigger asChild>
           <div
             className={cn(
-              'relative min-h-10 w-full p-2 rounded-xl border bg-white text-sm text-left transition-all flex flex-wrap items-center gap-1.5 cursor-pointer pr-10',
+              'group relative min-h-10 w-full p-2 rounded-xl border bg-white text-sm text-left transition-all flex flex-wrap items-center gap-1.5 cursor-pointer pr-10',
               'border-gray-300 hover:border-gray-400',
               'focus-within:ring-2 focus-within:ring-[#C8102E]/20 focus-within:border-[#C8102E]',
               error && 'border-red-500 focus-within:ring-red-500/20 focus-within:border-red-500',
@@ -70,13 +71,18 @@ export const MultiSelect: React.FC<MultiSelectProps> = ({
                   key={option.value}
                   variant="secondary"
                   className="bg-gray-100 text-gray-700 hover:bg-gray-200 gap-1 border-none py-1 px-2 rounded-lg"
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => e.stopPropagation()}
                 >
                   {option.label}
                   {!disabled && (
-                    <X
-                      className="h-3 w-3 cursor-pointer hover:text-red-600"
+                    <div
+                      role="button"
+                      className="cursor-pointer hover:bg-red-100 hover:text-red-600 rounded-full p-0.5 -mr-1 transition-colors"
                       onClick={(e) => handleRemoveValue(e, option.value)}
-                    />
+                    >
+                      <X className="h-3 w-3" />
+                    </div>
                   )}
                 </Badge>
               ))
@@ -85,7 +91,7 @@ export const MultiSelect: React.FC<MultiSelectProps> = ({
             )}
             
             <div className="absolute right-3 top-0 h-full flex items-center pointer-events-none">
-              <ChevronDown className="h-4 w-4 text-gray-400" />
+              <ChevronDown className="h-4 w-4 text-gray-400 transition-transform duration-200 group-data-[state=open]:rotate-180" />
             </div>
           </div>
         </PopoverTrigger>

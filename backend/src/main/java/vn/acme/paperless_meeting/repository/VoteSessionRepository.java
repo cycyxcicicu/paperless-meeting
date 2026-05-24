@@ -17,4 +17,6 @@ public interface VoteSessionRepository extends JpaRepository<VoteSession, UUID> 
      */
     @Query("SELECT s FROM VoteSession s JOIN FETCH s.motion WHERE s.status = :status")
     List<VoteSession> findByStatusWithMotion(@Param("status") VoteSessionStatus status);
+
+    List<VoteSession> findByMeetingIdAndStatus(UUID meetingId, VoteSessionStatus status);
 }

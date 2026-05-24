@@ -87,8 +87,11 @@ public class MeetingController {
     @Operation(summary = "Trình duyệt cuộc họp",
                description = "Chuyển cuộc họp từ DRAFT → PENDING_APPROVAL để ban thư ký xét duyệt. Yêu cầu tất cả nội dung nghị sự phải được phê duyệt tài liệu trước.")
     @PostMapping("/{id}/submit-approval")
-    public ResponseEntity<ApiResponse<Void>> submitForApproval(@PathVariable UUID id) {
-        meetingService.submitForApproval(id);
+    public ResponseEntity<ApiResponse<Void>> submitForApproval(
+            @PathVariable UUID id,
+            @RequestParam(required = false) UUID approverUserId,
+            @RequestParam(required = false) UUID approverRoleId) {
+        meetingService.submitForApproval(id, approverUserId, approverRoleId);
         return ResponseEntity.ok(ApiResponse.<Void>builder()
                 .message("Đã trình duyệt cuộc họp thành công")
                 .build());
@@ -141,6 +144,26 @@ public class MeetingController {
         meetingService.close(id);
         return ResponseEntity.ok(ApiResponse.<Void>builder()
                 .message("Đã kết thúc cuộc họp")
+                .build());
+    }
+
+    @Operation(summary = "Xóa cuộc họp",
+               description = "Xóa cuộc họp đang ở trạng thái NHÁP (DRAFT).")
+    @org.springframework.web.bind.annotation.DeleteMapping("/{id}")
+    public ResponseEntity<ApiResponse<Void>> delete(@PathVariable UUID id) {
+        meetingService.delete(id);
+        return ResponseEntity.ok(ApiResponse.<Void>builder()
+                .message("Đã xóa cuộc họp thành công")
+                .build());
+    }
+
+    @Operation(summary = "Khôi phục cuộc họp",
+               description = "Khôi phục cuộc họp đã bị xóa. Chỉ áp dụng cho cuộc họp đã bị xóa bằng API DELETE.")
+    @PostMapping("/{id}/restore")
+    public ResponseEntity<ApiResponse<Void>> restore(@PathVariable UUID id) {
+        meetingService.restore(id);
+        return ResponseEntity.ok(ApiResponse.<Void>builder()
+                .message("Đã khôi phục cuộc họp thành công")
                 .build());
     }
 }

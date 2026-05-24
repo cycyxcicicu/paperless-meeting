@@ -1,7 +1,7 @@
-import React from 'react';
 import { Mail, Phone, Eye, Edit, Trash2, Shield, UserCheck } from 'lucide-react';
 import { ColumnDef, TableActionDef } from '@/common/components/table-engine';
 import { cn } from '@/common/utils/cn';
+import { BadgeStatus } from '@/common/components/ui/BadgeStatus';
 
 export interface UnitUser {
   id: number;
@@ -9,9 +9,9 @@ export interface UnitUser {
   fullName: string;
   email: string;
   phone: string;
-  role: string;
-  position: string;
-  isActive: boolean;
+  status: string;
+  role: any;
+  position: any;
 }
 
 export const getUnitUserTableColumns = (): ColumnDef<UnitUser>[] => [
@@ -33,18 +33,28 @@ export const getUnitUserTableColumns = (): ColumnDef<UnitUser>[] => [
   {
     key: 'position',
     header: 'Chức vụ / Vai trò',
-    render: (row) => (
-      <div className="flex flex-col gap-1.5">
-        <div className="text-sm body text-gray-700 flex items-center gap-1.5">
-          <UserCheck className="h-3.5 w-3.5 text-gray-400" />
-          {row.position}
+    render: (row) => {
+      let posVal = row.position;
+      if (typeof posVal === 'object' && posVal !== null) {
+        posVal = posVal.positionName || posVal.name || '';
+      }
+      let roleVal = row.role;
+      if (typeof roleVal === 'object' && roleVal !== null) {
+        roleVal = roleVal.roleName || roleVal.name || roleVal.roleCode || '';
+      }
+      return (
+        <div className="flex flex-col gap-1.5">
+          <div className="text-sm body text-gray-700 flex items-center gap-1.5">
+            <UserCheck className="h-3.5 w-3.5 text-gray-400" />
+            {(posVal as string) || 'Chưa cập nhật'}
+          </div>
+          <div className="inline-flex items-center gap-1.5 text-xs btn-primary text-[#C8102E] bg-[#C8102E]/5 px-2 py-0.5 rounded-md w-fit">
+            <Shield className="h-3 w-3" />
+            {(roleVal as string) || 'N/A'}
+          </div>
         </div>
-        <div className="inline-flex items-center gap-1.5 text-xs btn-primary text-[#C8102E] bg-[#C8102E]/5 px-2 py-0.5 rounded-md w-fit">
-          <Shield className="h-3 w-3" />
-          {row.role}
-        </div>
-      </div>
-    ),
+      );
+    },
   },
   {
     key: 'contact',
@@ -63,47 +73,59 @@ export const getUnitUserTableColumns = (): ColumnDef<UnitUser>[] => [
     ),
   },
   {
-    key: 'isActive',
+    key: 'status',
     header: 'Trạng thái',
     align: 'center',
-    render: (row) => (
-      <span className={cn(
-        "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs heading ring-1",
-        row.isActive
-          ? "bg-emerald-50 text-emerald-600 ring-emerald-100"
-          : "bg-red-50 text-red-600 ring-red-100"
-      )}>
-        <span className={cn("w-1.5 h-1.5 rounded-full", row.isActive ? "bg-emerald-500" : "bg-red-500")} />
-        {row.isActive ? 'Hoạt động' : 'Đã khóa'}
-      </span>
-    ),
+    render: (row) => {
+      const statusStr = String(row.status || '').toUpperCase();
+      const isActive = statusStr === 'ACTIVE' || statusStr === '1' || statusStr === 'HOẠT ĐỘNG';
+      return (
+        <BadgeStatus 
+          status={isActive ? 'success' : 'neutral'} 
+          label={isActive ? 'Hoạt động' : 'Ngừng hoạt động'} 
+        />
+      );
+    },
   },
 ];
 
 export const getUnitUserRowActions = (
   onView: (user: UnitUser) => void,
-  onEdit: (user: UnitUser) => void,
-  onDelete: (user: UnitUser) => void
-): TableActionDef<UnitUser>[] => [
-  {
-    key: 'view',
-    label: 'Xem chi tiết',
-    icon: <Eye className="h-4 w-4" />,
-    variant: 'primary',
-    onClick: onView,
-  },
-  {
-    key: 'edit',
-    label: 'Chỉnh sửa',
-    icon: <Edit className="h-4 w-4" />,
-    variant: 'warning',
-    onClick: onEdit,
-  },
-  {
-    key: 'delete',
-    label: 'Xóa',
-    icon: <Trash2 className="h-4 w-4" />,
-    variant: 'danger',
-    onClick: onDelete,
-  },
-];
+  onEdit?: (user: UnitUser) => void,
+  onDelete?: (user: UnitUser) => void,
+  isSuperAdmin?: boolean
+): TableActionDef<UnitUser>[] => {
+  const actions: TableActionDef<UnitUser>[] = [
+    {
+      key: 'view',
+      label: 'Xem chi tiết',
+      icon: <Eye className="h-4 w-4" />,
+      variant: 'primary',
+      onClick: onView,
+    }
+  ];
+
+  if (onEdit) {
+    actions.push({
+      key: 'edit',
+      label: 'Chỉnh sửa',
+      icon: <Edit className="h-4 w-4" />,
+      variant: 'warning',
+      onClick: onEdit,
+      show: (row) => !isSuperAdmin || row.role?.roleCode === 'DEPARTMENT_ADMIN',
+    });
+  }
+
+  if (onDelete) {
+    actions.push({
+      key: 'delete',
+      label: 'Xóa',
+      icon: <Trash2 className="h-4 w-4" />,
+      variant: 'danger',
+      onClick: onDelete,
+      show: (row) => !isSuperAdmin || row.role?.roleCode === 'DEPARTMENT_ADMIN',
+    });
+  }
+
+  return actions;
+};

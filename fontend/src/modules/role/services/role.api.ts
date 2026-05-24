@@ -10,8 +10,13 @@ export interface RoleUpsertRequest {
 
 export const roleApi = {
   // Lấy danh sách vai trò
-  getRoles: (): Promise<ApiResponse<Role[]>> => {
-    return api.get('/roles');
+  getRoles: (keyword?: string): Promise<ApiResponse<Role[]>> => {
+    return api.get('/roles', { params: { keyword } });
+  },
+
+  // Lấy thống kê vai trò
+  getRoleStats: (): Promise<ApiResponse<{ totalRoles: number, activeRoles: number, usersWithoutRole: number }>> => {
+    return api.get('/roles/stats');
   },
 
   // Lấy chi tiết vai trò

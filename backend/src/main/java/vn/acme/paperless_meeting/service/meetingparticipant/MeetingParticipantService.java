@@ -50,7 +50,19 @@ import vn.acme.paperless_meeting.repository.MeetingGuestRepository;
 import vn.acme.paperless_meeting.repository.MeetingRepository;
 import vn.acme.paperless_meeting.repository.UserRepository;
 import vn.acme.paperless_meeting.repository.AttendanceLogRepository;
+import vn.acme.paperless_meeting.repository.VoteEligibilityRepository;
 import vn.acme.paperless_meeting.service.auth.CurrentUserService;
+import vn.acme.paperless_meeting.service.document.DocumentService;
+import vn.acme.paperless_meeting.dto.response.document.MeetingDocumentResponse;
+import java.util.stream.Collectors;
+import vn.acme.paperless_meeting.repository.MeetingInvitationRepository;
+import vn.acme.paperless_meeting.repository.NotificationRepository;
+import vn.acme.paperless_meeting.entity.MeetingInvitation;
+import vn.acme.paperless_meeting.entity.Notification;
+import vn.acme.paperless_meeting.entity.enums.NotificationType;
+import vn.acme.paperless_meeting.entity.enums.NotificationStatus;
+import vn.acme.paperless_meeting.entity.enums.SendStatus;
+import vn.acme.paperless_meeting.dto.request.meetingparticipant.SendInvitationsRequest;
 
 @Service
 @RequiredArgsConstructor
@@ -67,6 +79,10 @@ public class MeetingParticipantService {
     MeetingMapper meetingMapper;
     CurrentUserService currentUserService;
     AuditLogPublisher auditLogPublisher;
+    VoteEligibilityRepository voteEligibilityRepository;
+    DocumentService documentService;
+    MeetingInvitationRepository meetingInvitationRepository;
+    NotificationRepository notificationRepository;
 
     static final List<MeetingStatus> ACTIVE_MEETING_STATUSES = List.of(MeetingStatus.APPROVED, MeetingStatus.UPCOMING, MeetingStatus.IN_PROGRESS);
 
@@ -95,9 +111,42 @@ public class MeetingParticipantService {
         throw new AppException(ErrorCode.MEETING_PARTICIPANT_MANAGEMENT_FORBIDDEN);
     }
 
-    private void validateMeetingState(Meeting meeting) {
+    private void requireAttendancePermission(Meeting meeting) {
+        User caller = currentUserService.getCurrentActiveUser();
+        if (currentUserService.hasRole(RoleName.SUPER_ADMIN)) return;
+        if (currentUserService.hasRole(RoleName.DEPARTMENT_ADMIN)
+                && caller.getDepartment() != null
+                && caller.getDepartment().getId().equals(meeting.getDepartment().getId())) return;
+        if (meeting.getCreatedBy().getId().equals(caller.getId())) return;
+        
+        boolean isSecretaryOrChair = meetingParticipantRepository.findByMeetingIdAndUserId(meeting.getId(), caller.getId())
+                .map(p -> p.getParticipantRole() == ParticipantRole.SECRETARY || p.getParticipantRole() == ParticipantRole.CHAIR)
+                .orElse(false);
+        if (isSecretaryOrChair) return;
+        
+        throw new AppException(ErrorCode.MEETING_PARTICIPANT_MANAGEMENT_FORBIDDEN);
+    }
+
+    private void validateMeetingStateForParticipantMod(Meeting meeting) {
         if (meeting.getStatus() == MeetingStatus.CLOSED || meeting.getStatus() == MeetingStatus.CANCELLED) {
             throw new AppException(ErrorCode.MEETING_ALREADY_CLOSED_OR_CANCELLED);
+        }
+        if (meeting.getStatus() == MeetingStatus.IN_PROGRESS) {
+            throw new AppException(ErrorCode.MEETING_PARTICIPANT_NOT_EDITABLE);
+        }
+    }
+
+    private void validateMeetingStateForRsvp(Meeting meeting) {
+        if (meeting.getStatus() == MeetingStatus.CLOSED || meeting.getStatus() == MeetingStatus.CANCELLED) {
+            throw new AppException(ErrorCode.MEETING_ALREADY_CLOSED_OR_CANCELLED);
+        }
+        if (meeting.getStatus() == MeetingStatus.DRAFT 
+                || meeting.getStatus() == MeetingStatus.REJECTED 
+                || meeting.getStatus() == MeetingStatus.PENDING_APPROVAL) {
+            throw new AppException(ErrorCode.MEETING_STATUS_TRANSITION_INVALID);
+        }
+        if (meeting.getRsvpDeadline() != null && LocalDateTime.now().isAfter(meeting.getRsvpDeadline())) {
+            throw new AppException(ErrorCode.MEETING_RSVP_DEADLINE_EXPIRED);
         }
     }
 
@@ -116,7 +165,15 @@ public class MeetingParticipantService {
     public List<ParticipantResponse> addParticipants(UUID meetingId, List<AddParticipantRequest> requests) {
         Meeting meeting = getMeeting(meetingId);
         requireEditPermission(meeting);
-        validateMeetingState(meeting);
+        validateMeetingStateForParticipantMod(meeting);
+
+        // RÀNG BUỘC PARTICIPANT-01: Kiểm tra trùng lặp userId trong danh sách đại biểu gửi lên (tránh gửi trùng trong cùng một request)
+        java.util.Set<UUID> payloadUserIds = new java.util.HashSet<>();
+        for (AddParticipantRequest req : requests) {
+            if (!payloadUserIds.add(req.getUserId())) {
+                throw new AppException(ErrorCode.MEETING_PARTICIPANT_ALREADY_EXISTS);
+            }
+        }
 
         List<ParticipantResponse> responses = new ArrayList<>();
         for (AddParticipantRequest request : requests) {
@@ -124,11 +181,13 @@ public class MeetingParticipantService {
                     .findByMeetingIdAndUserId(meetingId, request.getUserId());
 
             MeetingParticipant participant;
+            User user;
             if (existingOpt.isPresent()) {
                 participant = existingOpt.get();
+                user = participant.getUser();
                 meetingParticipantMapper.updateEntity(request, participant);
             } else {
-                User user = userRepository.findById(request.getUserId())
+                user = userRepository.findById(request.getUserId())
                         .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
 
                 participant = meetingParticipantMapper.toEntity(request);
@@ -136,6 +195,11 @@ public class MeetingParticipantService {
                 participant.setUser(user);
                 participant.setInviteStatus(InviteStatus.PENDING);
                 participant.setAttendanceStatus(AttendanceStatus.NOT_CHECKED_IN);
+            }
+
+            // RÀNG BUỘC PARTICIPANT-02: Kiểm tra trạng thái tài khoản của đại biểu, bắt buộc phải là ACTIVE mới được thêm vào cuộc họp
+            if (user.getStatus() != vn.acme.paperless_meeting.entity.enums.UserStatus.ACTIVE) {
+                throw new AppException(ErrorCode.USER_NOT_ACTIVE);
             }
 
             meetingParticipantRepository.save(participant);
@@ -163,7 +227,7 @@ public class MeetingParticipantService {
     public List<GuestResponse> addExternalGuests(UUID meetingId, List<AddGuestRequest> requests) {
         Meeting meeting = getMeeting(meetingId);
         requireEditPermission(meeting);
-        validateMeetingState(meeting);
+        validateMeetingStateForParticipantMod(meeting);
 
         List<GuestResponse> responses = new ArrayList<>();
         for (AddGuestRequest request : requests) {
@@ -307,7 +371,7 @@ public class MeetingParticipantService {
     @Transactional
     public void updateInviteStatus(UUID meetingId, UUID userId, UpdateInviteStatusRequest request) {
         Meeting meeting = getMeeting(meetingId);
-        validateMeetingState(meeting);
+        validateMeetingStateForRsvp(meeting);
 
         MeetingParticipant participant = meetingParticipantRepository.findByMeetingIdAndUserId(meetingId, userId)
                 .orElseThrow(() -> new AppException(ErrorCode.MEETING_PARTICIPANT_NOT_FOUND));
@@ -336,7 +400,34 @@ public class MeetingParticipantService {
             }
         }
 
+        InviteStatus oldStatus = participant.getInviteStatus();
         participant.setInviteStatus(request.getInviteStatus());
+
+        if (oldStatus == InviteStatus.ACCEPTED && request.getInviteStatus() == InviteStatus.DECLINED) {
+            // RÀNG BUỘC INVITE-06: Cảnh báo khi đại biểu "quay xe" từ ĐỒNG Ý sang TỪ CHỐI
+            List<MeetingParticipant> chairs = meetingParticipantRepository.findByMeetingId(meetingId)
+                .stream()
+                .filter(p -> p.getParticipantRole() == ParticipantRole.CHAIR)
+                .collect(Collectors.toList());
+
+            String msg = String.format("Cảnh báo: Đại biểu %s đã đổi ý từ ĐỒNG Ý thành TỪ CHỐI tham dự cuộc họp \"%s\".", 
+                participant.getUser().getFullName(), meeting.getTitle());
+
+            for (MeetingParticipant chairObj : chairs) {
+                Notification notification = new Notification();
+                notification.setUser(chairObj.getUser());
+                notification.setType(NotificationType.RSVP_ALERT);
+                notification.setStatus(NotificationStatus.PENDING);
+                notification.setChannel(vn.acme.paperless_meeting.entity.enums.ChannelType.APP);
+                notification.setRefType(ResourceType.MEETING);
+                notification.setRefId(meetingId);
+                notification.setContent(msg);
+                notification.setScheduledAt(LocalDateTime.now());
+                if (notificationRepository != null) {
+                    notificationRepository.save(notification);
+                }
+            }
+        }
 
         if (request.getInviteStatus() == InviteStatus.DECLINED) {
             participant.setDeclineReason(request.getDeclineReason());
@@ -423,7 +514,7 @@ public class MeetingParticipantService {
                 .orElseThrow(() -> new AppException(ErrorCode.MEETING_PARTICIPANT_NOT_FOUND));
 
         Meeting meeting = guest.getMeeting();
-        validateMeetingState(meeting);
+        validateMeetingStateForRsvp(meeting);
 
         if (request.getInviteStatus() == InviteStatus.ACCEPTED) {
             // Check trùng lịch bận cho khách theo Email
@@ -461,10 +552,31 @@ public class MeetingParticipantService {
         return meetingMapper.toResponse(guest.getMeeting());
     }
 
+    @Transactional(readOnly = true)
+    public List<MeetingDocumentResponse> publicGetMeetingDocumentsByGuestToken(UUID guestToken) {
+        MeetingGuest guest = meetingGuestRepository.findByGuestToken(guestToken)
+                .orElseThrow(() -> new AppException(ErrorCode.MEETING_PARTICIPANT_NOT_FOUND));
+
+        if (guest.getInviteStatus() != InviteStatus.ACCEPTED) {
+            throw new AppException(ErrorCode.PARTICIPANT_STATUS_INCONSISTENT);
+        }
+
+        // Lấy toàn bộ tài liệu của cuộc họp này ra
+        List<MeetingDocumentResponse> documents = documentService.getMeetingDocuments(guest.getMeeting().getId());
+        // Lọc bỏ các tài liệu mật (isConfidential = true) để khách mời không thể xem hoặc tải về
+        return documents.stream()
+                .filter(doc -> doc.getIsConfidential() == null || !doc.getIsConfidential())
+                .collect(Collectors.toList());
+    }
+
     @Transactional
     public AttendeeResponse updateAttendanceStatus(UUID meetingId, UUID attendeeId, String type, UpdateAttendanceStatusRequest request) {
         Meeting meeting = getMeeting(meetingId);
-        requireEditPermission(meeting);
+        requireAttendancePermission(meeting);
+
+        if (meeting.getStatus() == MeetingStatus.CLOSED || meeting.getStatus() == MeetingStatus.CANCELLED) {
+            throw new AppException(ErrorCode.MEETING_ALREADY_CLOSED_OR_CANCELLED);
+        }
 
         LocalDateTime now = LocalDateTime.now();
         Integer lateMinutes = calculateLateMinutes(meeting, now);
@@ -472,6 +584,10 @@ public class MeetingParticipantService {
         if ("INTERNAL".equalsIgnoreCase(type)) {
             MeetingParticipant participant = meetingParticipantRepository.findById(attendeeId)
                     .orElseThrow(() -> new AppException(ErrorCode.MEETING_PARTICIPANT_NOT_FOUND));
+
+            if (!participant.getMeeting().getId().equals(meetingId)) {
+                throw new AppException(ErrorCode.BAD_REQUEST);
+            }
 
             if (participant.getInviteStatus() != InviteStatus.ACCEPTED) {
                 throw new AppException(ErrorCode.PARTICIPANT_STATUS_INCONSISTENT);
@@ -508,6 +624,10 @@ public class MeetingParticipantService {
             MeetingGuest guest = meetingGuestRepository.findById(attendeeId)
                     .orElseThrow(() -> new AppException(ErrorCode.MEETING_PARTICIPANT_NOT_FOUND));
 
+            if (!guest.getMeeting().getId().equals(meetingId)) {
+                throw new AppException(ErrorCode.BAD_REQUEST);
+            }
+
             if (guest.getInviteStatus() != InviteStatus.ACCEPTED) {
                 throw new AppException(ErrorCode.PARTICIPANT_STATUS_INCONSISTENT);
             }
@@ -543,12 +663,31 @@ public class MeetingParticipantService {
     public void removeAttendee(UUID meetingId, UUID attendeeId, String type) {
         Meeting meeting = getMeeting(meetingId);
         requireEditPermission(meeting);
-        validateMeetingState(meeting);
+        validateMeetingStateForParticipantMod(meeting);
 
         if ("INTERNAL".equalsIgnoreCase(type)) {
             MeetingParticipant participant = meetingParticipantRepository.findById(attendeeId)
                     .orElseThrow(() -> new AppException(ErrorCode.MEETING_PARTICIPANT_NOT_FOUND));
+
+            // RÀNG BUỘC PARTICIPANT-06 & 07: Không cho phép xoá Chủ tọa (CHAIR) hoặc Thư ký (SECRETARY) cuối cùng của cuộc họp để tránh lỗi mồ côi
+            if (participant.getParticipantRole() == ParticipantRole.CHAIR) {
+                long chairCount = meetingParticipantRepository.countByMeetingIdAndParticipantRole(meetingId, ParticipantRole.CHAIR);
+                if (chairCount <= 1) {
+                    throw new AppException(ErrorCode.MEETING_CHAIR_REQUIRED);
+                }
+            } else if (participant.getParticipantRole() == ParticipantRole.SECRETARY) {
+                long secretaryCount = meetingParticipantRepository.countByMeetingIdAndParticipantRole(meetingId, ParticipantRole.SECRETARY);
+                if (secretaryCount <= 1) {
+                    throw new AppException(ErrorCode.MEETING_SECRETARY_REQUIRED);
+                }
+            }
+
             meetingParticipantRepository.delete(participant);
+
+            // RÀNG BUỘC PARTICIPANT-12: Khi xoá đại biểu, thu hồi quyền biểu quyết (VoteEligibility) của họ đối với các biểu quyết chưa kết thúc
+            if (voteEligibilityRepository != null && participant.getUser() != null) {
+                voteEligibilityRepository.revokeVoteEligibility(meetingId, participant.getUser().getId(), "Đã bị loại khỏi cuộc họp");
+            }
 
             auditLogPublisher.publish(
                     currentUserService.getCurrentActiveUser(),
@@ -569,6 +708,77 @@ public class MeetingParticipantService {
                     attendeeId,
                     Map.of("meetingId", String.valueOf(meetingId), "type", "GUEST")
             );
+        }
+    }
+
+    @Transactional
+    public void sendInvitations(UUID meetingId, SendInvitationsRequest request) {
+        Meeting meeting = getMeeting(meetingId);
+        requireEditPermission(meeting);
+
+        // RÀNG BUỘC INVITE-01: Chặn gửi thư mời khi cuộc họp chưa được duyệt
+        if (meeting.getStatus() == MeetingStatus.DRAFT || meeting.getStatus() == MeetingStatus.PENDING_APPROVAL) {
+            throw new AppException(ErrorCode.MEETING_STATUS_TRANSITION_INVALID);
+        }
+
+        boolean forceResend = Boolean.TRUE.equals(request.getForceResend());
+
+        // RÀNG BUỘC INVITE-03: Tính năng chống lưu nháp (dùng list user/guest mới nhất trong DB)
+        List<MeetingParticipant> participants = meetingParticipantRepository.findByMeetingId(meetingId);
+        List<MeetingGuest> guests = meetingGuestRepository.findByMeetingId(meetingId);
+
+        if (request.getUserIds() != null && !request.getUserIds().isEmpty()) {
+            participants = participants.stream()
+                    .filter(p -> request.getUserIds().contains(p.getUser().getId()))
+                    .collect(Collectors.toList());
+        }
+
+        if (request.getGuestIds() != null && !request.getGuestIds().isEmpty()) {
+            guests = guests.stream()
+                    .filter(g -> request.getGuestIds().contains(g.getId()))
+                    .collect(Collectors.toList());
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        User caller = currentUserService.getCurrentActiveUser();
+
+        for (MeetingParticipant p : participants) {
+            // RÀNG BUỘC INVITE-02: Chống gửi lặp thư mời (ngoại trừ admin ép gửi lại - forceResend = true)
+            if (!forceResend) {
+                boolean alreadySent = meetingInvitationRepository.existsByMeetingIdAndInviteeUserIdAndSendStatus(
+                        meetingId, p.getUser().getId(), SendStatus.SENT);
+                if (alreadySent) continue;
+            }
+
+            MeetingInvitation invitation = new MeetingInvitation();
+            invitation.setMeeting(meeting);
+            invitation.setInviteeUser(p.getUser());
+            invitation.setChannel(vn.acme.paperless_meeting.entity.enums.ChannelType.EMAIL);
+            invitation.setSendStatus(SendStatus.SENT);
+            invitation.setSentAt(now);
+            invitation.setRsvpDeadline(meeting.getRsvpDeadline());
+            invitation.setInvitedBy(caller);
+            invitation.setMessage("Kính mời đại biểu tham dự cuộc họp: " + meeting.getTitle());
+            meetingInvitationRepository.save(invitation);
+        }
+
+        for (MeetingGuest g : guests) {
+            if (!forceResend) {
+                boolean alreadySent = meetingInvitationRepository.existsByMeetingIdAndInviteeGuestIdAndSendStatus(
+                        meetingId, g.getId(), SendStatus.SENT);
+                if (alreadySent) continue;
+            }
+
+            MeetingInvitation invitation = new MeetingInvitation();
+            invitation.setMeeting(meeting);
+            invitation.setInviteeGuest(g);
+            invitation.setChannel(vn.acme.paperless_meeting.entity.enums.ChannelType.EMAIL);
+            invitation.setSendStatus(SendStatus.SENT);
+            invitation.setSentAt(now);
+            invitation.setRsvpDeadline(meeting.getRsvpDeadline());
+            invitation.setInvitedBy(caller);
+            invitation.setMessage("Kính mời khách mời tham dự cuộc họp: " + meeting.getTitle());
+            meetingInvitationRepository.save(invitation);
         }
     }
 }

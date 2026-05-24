@@ -5,14 +5,12 @@ interface LocationSummaryProps {
   totalLocations: number;
   totalCapacity: number;
   activeLocations: number;
-  recentlyUsed: number;
 }
 
 export const LocationSummary: React.FC<LocationSummaryProps> = ({
   totalLocations,
   totalCapacity,
-  activeLocations,
-  recentlyUsed
+  activeLocations
 }) => {
   const stats = [
     {
@@ -39,20 +37,11 @@ export const LocationSummary: React.FC<LocationSummaryProps> = ({
       color: 'from-teal-500 to-teal-600',
       bgColor: 'bg-teal-50',
       textColor: 'text-teal-600'
-    },
-    {
-      label: 'Sử dụng gần đây',
-      value: recentlyUsed,
-      icon: Clock,
-      color: 'from-purple-500 to-purple-600',
-      bgColor: 'bg-purple-50',
-      textColor: 'text-purple-600',
-      suffix: 'địa điểm'
     }
   ];
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
       {stats.map((stat, index) => (
         <div
           key={index}

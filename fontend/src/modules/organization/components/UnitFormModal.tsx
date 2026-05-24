@@ -5,9 +5,10 @@ import { Building2 } from 'lucide-react';
 import { Modal } from '@/common/components/ui/modal';
 import { DynamicFormRenderer } from '@/common/components/form-engine/DynamicFormRenderer';
 import { unitFormSchema } from '../form/unitForm.schema';
-import { unitValidationSchema, UnitFormValues } from '../form/unitForm.validation';
+import { getUnitValidationSchema, UnitFormValues } from '../form/unitForm.validation';
 import { unitFormMapper } from '../form/unitForm.mapper';
 import { FormMode } from '@/common/components/form-engine/form.types';
+import { departmentApi } from '../services/department.api';
 
 type ModalMode = 'create' | 'edit' | 'view';
 
@@ -47,14 +48,48 @@ export const UnitFormModal: React.FC<UnitFormModalProps> = ({
   const isCreateMode = mode === 'create';
 
   const methods = useForm<any>({
-    resolver: zodResolver(unitValidationSchema),
+    resolver: zodResolver(getUnitValidationSchema(unitTypeLabel)),
     defaultValues: unitFormMapper.fromApiToForm(initialData),
     mode: 'onSubmit',
   });
 
+  const [isLoading, setIsLoading] = React.useState(false);
+
   React.useEffect(() => {
     if (isOpen) {
-      methods.reset(unitFormMapper.fromApiToForm(initialData));
+      if (mode !== 'create' && initialData?.id) {
+        setIsLoading(true);
+        const fetchUnitDetails = async () => {
+          try {
+            const res = await departmentApi.getById(initialData.id!);
+            if (res.success && res.data) {
+              // Convert generic entity into form structure
+              const apiDataAsFormInput = {
+                id: res.data.id,
+                name: res.data.deptName,
+                code: res.data.code,
+                address: res.data.headquartersAddress || "",
+                phone: res.data.phoneNumber || "",
+                email: res.data.email || "",
+                foundedDate: res.data.establishedDate || "",
+                status: res.data.status === 'ACTIVE' ? 'active' as const : 'inactive' as const,
+                description: res.data.description || ""
+              };
+              methods.reset(unitFormMapper.fromApiToForm(apiDataAsFormInput));
+            } else {
+              methods.reset(unitFormMapper.fromApiToForm(initialData));
+            }
+          } catch (e) {
+            methods.reset(unitFormMapper.fromApiToForm(initialData));
+          } finally {
+            setIsLoading(false);
+          }
+        };
+        fetchUnitDetails();
+      } else {
+        methods.reset(unitFormMapper.fromApiToForm(initialData));
+        setIsLoading(false);
+      }
     } else {
       methods.clearErrors();
     }
@@ -66,14 +101,18 @@ export const UnitFormModal: React.FC<UnitFormModalProps> = ({
     onClose();
   };
 
-  const onFormSubmit = (data: UnitFormValues) => {
+  const onFormSubmit = async (data: UnitFormValues) => {
     if (isViewMode) {
       handleClose();
       return;
     }
     const payload = unitFormMapper.fromFormToApi(data, initialData?.id);
-    onSubmit(payload);
-    handleClose();
+    try {
+      await onSubmit(payload);
+      handleClose();
+    } catch (e) {
+      // If parent throws, keep modal open.
+    }
   };
 
   const getModalTitle = () => {
@@ -121,27 +160,34 @@ export const UnitFormModal: React.FC<UnitFormModalProps> = ({
       className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto"
     >
       <FormProvider {...methods}>
-        <form onSubmit={methods.handleSubmit(onFormSubmit as any)} className="space-y-6 pt-4" autoComplete="off" noValidate>
-          <DynamicFormRenderer groups={groups} mode={mode as FormMode} />
-
-          <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
-            <button
-              type="button"
-              onClick={handleClose}
-              className="px-5 py-2.5 rounded-xl border border-gray-300 bg-white text-gray-700 heading text-sm hover:bg-gray-50 transition-colors"
-            >
-              {isViewMode ? 'Đóng' : 'Hủy bỏ'}
-            </button>
-            {!isViewMode && (
-              <button
-                type="submit"
-                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#C8102E] to-[#A90F14] text-white heading text-sm hover:shadow-lg transition-all shadow-md active:scale-95"
-              >
-                {isCreateMode ? `Thêm ${unitTypeLabel}` : 'Cập nhật'}
-              </button>
-            )}
+        {isLoading ? (
+          <div className="flex flex-col items-center justify-center py-20 space-y-4">
+            <div className="animate-spin rounded-full h-10 w-10 border-4 border-gray-100 border-t-[#C8102E]"></div>
+            <p className="text-gray-500 font-medium heading text-sm animate-pulse">Đang nạp dữ liệu...</p>
           </div>
-        </form>
+        ) : (
+          <form onSubmit={methods.handleSubmit(onFormSubmit as any)} className="space-y-6 pt-4" autoComplete="off" noValidate>
+            <DynamicFormRenderer groups={groups} mode={mode as FormMode} />
+
+            <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
+              <button
+                type="button"
+                onClick={handleClose}
+                className="px-5 py-2.5 rounded-xl border border-gray-300 bg-white text-gray-700 heading text-sm hover:bg-gray-50 transition-colors"
+              >
+                {isViewMode ? 'Đóng' : 'Hủy bỏ'}
+              </button>
+              {!isViewMode && (
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#C8102E] to-[#A90F14] text-white heading text-sm hover:shadow-lg transition-all shadow-md active:scale-95 flex items-center justify-center gap-2"
+                >
+                  {isCreateMode ? `Thêm ${unitTypeLabel}` : 'Lưu cập nhật'}
+                </button>
+              )}
+            </div>
+          </form>
+        )}
       </FormProvider>
     </Modal>
   );

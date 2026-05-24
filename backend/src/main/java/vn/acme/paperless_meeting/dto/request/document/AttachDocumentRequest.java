@@ -12,5 +12,6 @@ public class AttachDocumentRequest {
     private UUID documentId;
     private MeetingDocumentUsageType usageType;
     private Boolean requiredBeforeMeeting;
+    private Boolean isConfidential;
     private UUID agendaItemId; // optional — nếu gắn vào agenda item cụ thể
 }

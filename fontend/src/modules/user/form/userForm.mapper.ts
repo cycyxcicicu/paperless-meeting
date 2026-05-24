@@ -65,6 +65,11 @@ export const mapUserSubmitPayload = (formValues: any, isEditMode: boolean) => {
     delete trimmed.role;
   }
   
+  // Convert frontend status ('active'/'inactive') to backend UserStatus enum ('ACTIVE'/'INACTIVE')
+  if (trimmed.status) {
+    trimmed.status = trimmed.status.toUpperCase();
+  }
+  
   delete trimmed.formMode;
   
   return trimmed;

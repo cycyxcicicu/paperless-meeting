@@ -26,6 +26,7 @@ import vn.acme.paperless_meeting.mapper.meetingparticipant.MeetingGuestMapper;
 import vn.acme.paperless_meeting.mapper.meetingparticipant.MeetingParticipantMapper;
 import vn.acme.paperless_meeting.repository.*;
 import vn.acme.paperless_meeting.service.auth.CurrentUserService;
+import vn.acme.paperless_meeting.service.document.DocumentService;
 import vn.acme.paperless_meeting.event.audit.AuditLogPublisher;
 
 @ExtendWith(MockitoExtension.class)
@@ -50,6 +51,14 @@ class MeetingParticipantServiceTest {
     CurrentUserService currentUserService;
     @Mock
     AuditLogPublisher auditLogPublisher;
+    @Mock
+    VoteEligibilityRepository voteEligibilityRepository;
+    @Mock
+    DocumentService documentService;
+    @Mock
+    MeetingInvitationRepository meetingInvitationRepository;
+    @Mock
+    NotificationRepository notificationRepository;
 
     @InjectMocks
     MeetingParticipantService meetingParticipantService;
@@ -88,6 +97,7 @@ class MeetingParticipantServiceTest {
         user = new User();
         user.setId(userId);
         user.setFullName("User Test");
+        user.setStatus(vn.acme.paperless_meeting.entity.enums.UserStatus.ACTIVE);
 
         participant = new MeetingParticipant();
         participant.setId(UUID.randomUUID());
@@ -368,6 +378,273 @@ class MeetingParticipantServiceTest {
             meetingParticipantService.removeAttendee(meetingId, participant.getId(), "INTERNAL");
         });
         assertEquals(ErrorCode.MEETING_ALREADY_CLOSED_OR_CANCELLED, ex.getErrorCode());
+    }
+
+    // =====================================================================
+    // BỔ SUNG: addParticipants — validate IN_PROGRESS
+    // =====================================================================
+
+    @Test
+    void addParticipants_WhenMeetingInProgress_ShouldThrowException() {
+        // Arrange
+        meeting.setStatus(MeetingStatus.IN_PROGRESS);
+        when(meetingRepository.findById(meetingId)).thenReturn(Optional.of(meeting));
+        when(currentUserService.getCurrentActiveUser()).thenReturn(caller);
+
+        AddParticipantRequest req = new AddParticipantRequest();
+        req.setUserId(userId);
+        req.setParticipantRole(ParticipantRole.PARTICIPANT);
+
+        // Act & Assert
+        AppException ex = assertThrows(AppException.class, () -> {
+            meetingParticipantService.addParticipants(meetingId, List.of(req));
+        });
+        assertEquals(ErrorCode.MEETING_PARTICIPANT_NOT_EDITABLE, ex.getErrorCode());
+    }
+
+    // =====================================================================
+    // BỔ SUNG: updateInviteStatus — validate RSVP Deadline & Status
+    // =====================================================================
+
+    @Test
+    void updateInviteStatus_WhenRsvpDeadlineExpired_ShouldThrowException() {
+        // Arrange
+        meeting.setStatus(MeetingStatus.UPCOMING);
+        meeting.setRsvpDeadline(LocalDateTime.now().minusMinutes(10)); // Expired
+        when(meetingRepository.findById(meetingId)).thenReturn(Optional.of(meeting));
+        when(meetingParticipantRepository.findByMeetingIdAndUserId(meetingId, userId)).thenReturn(Optional.of(participant));
+        when(currentUserService.getCurrentActiveUser()).thenReturn(user);
+
+        UpdateInviteStatusRequest req = new UpdateInviteStatusRequest();
+        req.setInviteStatus(InviteStatus.ACCEPTED);
+
+        // Act & Assert
+        AppException ex = assertThrows(AppException.class, () -> {
+            meetingParticipantService.updateInviteStatus(meetingId, userId, req);
+        });
+        assertEquals(ErrorCode.MEETING_RSVP_DEADLINE_EXPIRED, ex.getErrorCode());
+    }
+
+    @Test
+    void updateInviteStatus_WhenMeetingDraft_ShouldThrowException() {
+        // Arrange
+        meeting.setStatus(MeetingStatus.DRAFT);
+        when(meetingRepository.findById(meetingId)).thenReturn(Optional.of(meeting));
+        when(meetingParticipantRepository.findByMeetingIdAndUserId(meetingId, userId)).thenReturn(Optional.of(participant));
+        when(currentUserService.getCurrentActiveUser()).thenReturn(user);
+
+        UpdateInviteStatusRequest req = new UpdateInviteStatusRequest();
+        req.setInviteStatus(InviteStatus.ACCEPTED);
+
+        // Act & Assert
+        AppException ex = assertThrows(AppException.class, () -> {
+            meetingParticipantService.updateInviteStatus(meetingId, userId, req);
+        });
+        assertEquals(ErrorCode.MEETING_STATUS_TRANSITION_INVALID, ex.getErrorCode());
+    }
+
+    @Test
+    void addParticipants_WhenDuplicatePayload_ShouldThrowMEETING_PARTICIPANT_ALREADY_EXISTS() {
+        // Kiểm thử RÀNG BUỘC PARTICIPANT-01: Nếu gửi lên một danh sách đại biểu có 2 account trùng nhau, hệ thống sẽ chặn và ném lỗi trùng lặp
+        // Arrange
+        when(meetingRepository.findById(meetingId)).thenReturn(Optional.of(meeting));
+        when(currentUserService.getCurrentActiveUser()).thenReturn(caller);
+
+        AddParticipantRequest req1 = new AddParticipantRequest();
+        req1.setUserId(userId);
+        req1.setParticipantRole(ParticipantRole.PARTICIPANT);
+
+        AddParticipantRequest req2 = new AddParticipantRequest();
+        req2.setUserId(userId);
+        req2.setParticipantRole(ParticipantRole.PARTICIPANT);
+
+        // Act & Assert
+        AppException ex = assertThrows(AppException.class, () -> {
+            meetingParticipantService.addParticipants(meetingId, List.of(req1, req2));
+        });
+        assertEquals(ErrorCode.MEETING_PARTICIPANT_ALREADY_EXISTS, ex.getErrorCode());
+    }
+
+    @Test
+    void addParticipants_WhenUserInactive_ShouldThrowUSER_NOT_ACTIVE() {
+        // Kiểm thử RÀNG BUỘC PARTICIPANT-02: Nếu tài khoản User bị INACTIVE thì không cho phép thêm vào danh sách họp
+        // Arrange
+        when(meetingRepository.findById(meetingId)).thenReturn(Optional.of(meeting));
+        when(currentUserService.getCurrentActiveUser()).thenReturn(caller);
+        
+        User inactiveUser = new User();
+        inactiveUser.setId(userId);
+        inactiveUser.setStatus(vn.acme.paperless_meeting.entity.enums.UserStatus.INACTIVE);
+        when(userRepository.findById(userId)).thenReturn(Optional.of(inactiveUser));
+
+        AddParticipantRequest req = new AddParticipantRequest();
+        req.setUserId(userId);
+        req.setParticipantRole(ParticipantRole.PARTICIPANT);
+
+        MeetingParticipant dummyParticipant = new MeetingParticipant();
+        when(meetingParticipantMapper.toEntity(req)).thenReturn(dummyParticipant);
+
+        // Act & Assert
+        AppException ex = assertThrows(AppException.class, () -> {
+            meetingParticipantService.addParticipants(meetingId, List.of(req));
+        });
+        assertEquals(ErrorCode.USER_NOT_ACTIVE, ex.getErrorCode());
+    }
+
+    @Test
+    void removeAttendee_WhenLastChair_ShouldThrowMEETING_CHAIR_REQUIRED() {
+        // Kiểm thử RÀNG BUỘC PARTICIPANT-06: Chặn xoá Chủ tọa nếu họ là Chủ tọa cuối cùng của cuộc họp này
+        // Arrange
+        participant.setParticipantRole(ParticipantRole.CHAIR);
+        when(meetingRepository.findById(meetingId)).thenReturn(Optional.of(meeting));
+        when(currentUserService.getCurrentActiveUser()).thenReturn(caller);
+        when(meetingParticipantRepository.findById(participant.getId())).thenReturn(Optional.of(participant));
+        when(meetingParticipantRepository.countByMeetingIdAndParticipantRole(meetingId, ParticipantRole.CHAIR)).thenReturn(1L);
+
+        // Act & Assert
+        AppException ex = assertThrows(AppException.class, () -> {
+            meetingParticipantService.removeAttendee(meetingId, participant.getId(), "INTERNAL");
+        });
+        assertEquals(ErrorCode.MEETING_CHAIR_REQUIRED, ex.getErrorCode());
+    }
+
+    @Test
+    void removeAttendee_WhenLastSecretary_ShouldThrowMEETING_SECRETARY_REQUIRED() {
+        // Kiểm thử RÀNG BUỘC PARTICIPANT-07: Chặn xoá Thư ký nếu họ là Thư ký cuối cùng của cuộc họp này
+        // Arrange
+        participant.setParticipantRole(ParticipantRole.SECRETARY);
+        when(meetingRepository.findById(meetingId)).thenReturn(Optional.of(meeting));
+        when(currentUserService.getCurrentActiveUser()).thenReturn(caller);
+        when(meetingParticipantRepository.findById(participant.getId())).thenReturn(Optional.of(participant));
+        when(meetingParticipantRepository.countByMeetingIdAndParticipantRole(meetingId, ParticipantRole.SECRETARY)).thenReturn(1L);
+
+        // Act & Assert
+        AppException ex = assertThrows(AppException.class, () -> {
+            meetingParticipantService.removeAttendee(meetingId, participant.getId(), "INTERNAL");
+        });
+        assertEquals(ErrorCode.MEETING_SECRETARY_REQUIRED, ex.getErrorCode());
+    }
+
+    @Test
+    void removeAttendee_WhenSuccessAndInternal_ShouldRevokeVoteEligibilities() {
+        // Kiểm thử RÀNG BUỘC PARTICIPANT-12: Loại bỏ đại biểu thành công phải tự động đánh rớt quyền biểu quyết của họ
+        // Arrange
+        participant.setParticipantRole(ParticipantRole.PARTICIPANT);
+        when(meetingRepository.findById(meetingId)).thenReturn(Optional.of(meeting));
+        when(currentUserService.getCurrentActiveUser()).thenReturn(caller);
+        when(meetingParticipantRepository.findById(participant.getId())).thenReturn(Optional.of(participant));
+
+        // Act
+        meetingParticipantService.removeAttendee(meetingId, participant.getId(), "INTERNAL");
+
+        // Assert
+        verify(meetingParticipantRepository).delete(participant);
+        verify(voteEligibilityRepository).revokeVoteEligibility(meetingId, userId, "Đã bị loại khỏi cuộc họp");
+    }
+
+    @Test
+    void publicGetMeetingDocumentsByGuestToken_ShouldFilterConfidential() {
+        // Kiểm thử RÀNG BUỘC PARTICIPANT-10: Khách mời xem tài liệu thông qua token sẽ không bị trả về các File mật (isConfidential = true)
+        // Arrange
+        UUID guestToken = UUID.randomUUID();
+        MeetingGuest guest = new MeetingGuest();
+        guest.setMeeting(meeting);
+        guest.setInviteStatus(InviteStatus.ACCEPTED);
+        when(meetingGuestRepository.findByGuestToken(guestToken)).thenReturn(Optional.of(guest));
+
+        vn.acme.paperless_meeting.dto.response.document.MeetingDocumentResponse doc1 = vn.acme.paperless_meeting.dto.response.document.MeetingDocumentResponse.builder()
+                .id(UUID.randomUUID())
+                .isConfidential(false)
+                .build();
+        vn.acme.paperless_meeting.dto.response.document.MeetingDocumentResponse doc2 = vn.acme.paperless_meeting.dto.response.document.MeetingDocumentResponse.builder()
+                .id(UUID.randomUUID())
+                .isConfidential(true) // Confidential!
+                .build();
+
+        when(documentService.getMeetingDocuments(meetingId)).thenReturn(List.of(doc1, doc2));
+
+        // Act
+        List<vn.acme.paperless_meeting.dto.response.document.MeetingDocumentResponse> result = meetingParticipantService.publicGetMeetingDocumentsByGuestToken(guestToken);
+
+        // Assert
+        assertEquals(1, result.size());
+        assertEquals(doc1.getId(), result.get(0).getId());
+    }
+
+    @Test
+    void sendInvitations_ShouldThrowException_WhenMeetingStatusIsDraft() {
+        // Kiểm thử RÀNG BUỘC INVITE-01: Chặn gửi thư mời khi meeting là DRAFT
+        meeting.setStatus(MeetingStatus.DRAFT);
+        when(meetingRepository.findById(meetingId)).thenReturn(Optional.of(meeting));
+        when(currentUserService.getCurrentActiveUser()).thenReturn(caller);
+
+        SendInvitationsRequest request = new SendInvitationsRequest();
+
+        AppException ex = assertThrows(AppException.class, () -> 
+            meetingParticipantService.sendInvitations(meetingId, request)
+        );
+        assertEquals(ErrorCode.MEETING_STATUS_TRANSITION_INVALID, ex.getErrorCode());
+    }
+
+    @Test
+    void sendInvitations_ShouldSkipAlreadySent_WhenForceResendIsFalse() {
+        // Kiểm thử RÀNG BUỘC INVITE-02: Chống spam thư mời (trùng lặp) trừ khi có forceResend
+        meeting.setStatus(MeetingStatus.UPCOMING);
+        when(meetingRepository.findById(meetingId)).thenReturn(Optional.of(meeting));
+        when(currentUserService.getCurrentActiveUser()).thenReturn(caller);
+
+        MeetingParticipant p = new MeetingParticipant();
+        p.setUser(user);
+        when(meetingParticipantRepository.findByMeetingId(meetingId)).thenReturn(List.of(p));
+        when(meetingGuestRepository.findByMeetingId(meetingId)).thenReturn(Collections.emptyList());
+
+        // Mô phỏng thư mời đã được gửi trước đó
+        when(meetingInvitationRepository.existsByMeetingIdAndInviteeUserIdAndSendStatus(
+            eq(meetingId), eq(user.getId()), eq(SendStatus.SENT)
+        )).thenReturn(true);
+
+        SendInvitationsRequest request = new SendInvitationsRequest();
+        request.setForceResend(false);
+
+        meetingParticipantService.sendInvitations(meetingId, request);
+
+        // Đảm bảo hàm save không được gọi vì đã bị skip
+        verify(meetingInvitationRepository, never()).save(any(MeetingInvitation.class));
+    }
+
+    @Test
+    void updateInviteStatus_ShouldSendAlertNotification_WhenParticipantDeclinesAfterAccepting() {
+        // Kiểm thử RÀNG BUỘC INVITE-06: Bắn cảnh báo notification cho CHAIR nếu đại biểu "quay xe" TỪ CHỐI sau khi đã ĐỒNG Ý
+        MeetingParticipant participant = new MeetingParticipant();
+        participant.setId(UUID.randomUUID());
+        participant.setUser(user);
+        participant.setMeeting(meeting);
+        participant.setInviteStatus(InviteStatus.ACCEPTED); // Trạng thái cũ là ACCEPTED
+        
+        when(meetingRepository.findById(meetingId)).thenReturn(Optional.of(meeting));
+        when(currentUserService.getCurrentActiveUser()).thenReturn(user);
+        when(meetingParticipantRepository.findByMeetingIdAndUserId(meetingId, user.getId()))
+                .thenReturn(Optional.of(participant));
+
+        // Giả lập cuộc họp có 1 CHAIR (người nhận thông báo)
+        MeetingParticipant chairObj = new MeetingParticipant();
+        User chairUser = new User();
+        chairUser.setId(UUID.randomUUID());
+        chairUser.setFullName("Chair User");
+        chairObj.setUser(chairUser);
+        chairObj.setParticipantRole(ParticipantRole.CHAIR);
+        when(meetingParticipantRepository.findByMeetingId(meetingId)).thenReturn(List.of(chairObj));
+
+        UpdateInviteStatusRequest request = new UpdateInviteStatusRequest();
+        request.setInviteStatus(InviteStatus.DECLINED);
+        request.setDeclineReason("Bận việc đột xuất");
+
+        // Act
+        meetingParticipantService.updateInviteStatus(meetingId, user.getId(), request);
+
+        // Assert
+        assertEquals(InviteStatus.DECLINED, participant.getInviteStatus());
+        verify(notificationRepository, times(1)).save(any(Notification.class));
     }
 }
 

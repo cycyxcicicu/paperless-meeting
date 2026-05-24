@@ -95,6 +95,10 @@ public class AgendaItemService {
         AgendaItem agendaItem = agendaItemRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.AGENDA_ITEM_NOT_FOUND));
 
+        if (!agendaItem.getMeeting().getId().equals(meetingId)) {
+            throw new AppException(ErrorCode.AGENDA_ITEM_NOT_FOUND);
+        }
+
         User preparedBy = null;
         if (request.getPreparedByUserId() != null) {
             boolean isParticipant = meetingParticipantRepository.existsByMeetingIdAndUserId(meetingId, request.getPreparedByUserId());
@@ -123,6 +127,10 @@ public class AgendaItemService {
 
         AgendaItem agendaItem = agendaItemRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.AGENDA_ITEM_NOT_FOUND));
+
+        if (!agendaItem.getMeeting().getId().equals(meetingId)) {
+            throw new AppException(ErrorCode.AGENDA_ITEM_NOT_FOUND);
+        }
 
         // Xóa liên kết tài liệu đính kèm của Agenda
         meetingDocumentRepository.deleteByAgendaItemId(id);
@@ -163,6 +171,10 @@ public class AgendaItemService {
 
         AgendaItem agendaItem = agendaItemRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.AGENDA_ITEM_NOT_FOUND));
+
+        if (!agendaItem.getMeeting().getId().equals(meetingId)) {
+            throw new AppException(ErrorCode.AGENDA_ITEM_NOT_FOUND);
+        }
 
         if (agendaItem.getStatus() != AgendaItemStatus.DRAFT && agendaItem.getStatus() != AgendaItemStatus.REJECTED) {
             throw new AppException(ErrorCode.MEETING_STATUS_TRANSITION_INVALID);
@@ -257,9 +269,94 @@ public class AgendaItemService {
         AgendaItem agendaItem = agendaItemRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.AGENDA_ITEM_NOT_FOUND));
 
+        if (!agendaItem.getMeeting().getId().equals(meetingId)) {
+            throw new AppException(ErrorCode.AGENDA_ITEM_NOT_FOUND);
+        }
+
         agendaItem.setStatus(AgendaItemStatus.PENDING_PREPARATION);
         agendaItem.setRejectReason(null);
 
+        return toResponseWithDocs(agendaItemRepository.save(agendaItem));
+    }
+
+    /**
+     * Bắt đầu điều hành nội dung cuộc họp
+     */
+    @Transactional
+    public AgendaItemResponse startAgenda(UUID meetingId, UUID id) {
+        Meeting meeting = getMeeting(meetingId);
+        User caller = currentUserService.getCurrentActiveUser();
+        
+        if (meeting.getCreatedBy() == null || !meeting.getCreatedBy().getId().equals(caller.getId())) {
+            throw new AppException(ErrorCode.AGENDA_MODIFICATION_FORBIDDEN);
+        }
+        if (meeting.getStatus() != MeetingStatus.IN_PROGRESS) {
+            throw new AppException(ErrorCode.MEETING_STATUS_TRANSITION_INVALID);
+        }
+
+        AgendaItem agendaItem = agendaItemRepository.findById(id)
+                .orElseThrow(() -> new AppException(ErrorCode.AGENDA_ITEM_NOT_FOUND));
+
+        if (!agendaItem.getMeeting().getId().equals(meetingId)) {
+            throw new AppException(ErrorCode.AGENDA_ITEM_NOT_FOUND);
+        }
+
+        agendaItem.setStatus(AgendaItemStatus.IN_PROGRESS);
+        return toResponseWithDocs(agendaItemRepository.save(agendaItem));
+    }
+
+    /**
+     * Hoàn tất phiên điều hành nội dung cuộc họp
+     */
+    @Transactional
+    public AgendaItemResponse completeAgenda(UUID meetingId, UUID id) {
+        Meeting meeting = getMeeting(meetingId);
+        User caller = currentUserService.getCurrentActiveUser();
+        
+        if (meeting.getCreatedBy() == null || !meeting.getCreatedBy().getId().equals(caller.getId())) {
+            throw new AppException(ErrorCode.AGENDA_MODIFICATION_FORBIDDEN);
+        }
+        if (meeting.getStatus() != MeetingStatus.IN_PROGRESS) {
+            throw new AppException(ErrorCode.MEETING_STATUS_TRANSITION_INVALID);
+        }
+
+        AgendaItem agendaItem = agendaItemRepository.findById(id)
+                .orElseThrow(() -> new AppException(ErrorCode.AGENDA_ITEM_NOT_FOUND));
+
+        if (!agendaItem.getMeeting().getId().equals(meetingId)) {
+            throw new AppException(ErrorCode.AGENDA_ITEM_NOT_FOUND);
+        }
+        if (agendaItem.getStatus() != AgendaItemStatus.IN_PROGRESS) {
+            throw new AppException(ErrorCode.MEETING_STATUS_TRANSITION_INVALID);
+        }
+
+        agendaItem.setStatus(AgendaItemStatus.DONE);
+        return toResponseWithDocs(agendaItemRepository.save(agendaItem));
+    }
+
+    /**
+     * Bỏ qua thiết lập nội dung lịch trình hiện tại
+     */
+    @Transactional
+    public AgendaItemResponse skipAgenda(UUID meetingId, UUID id) {
+        Meeting meeting = getMeeting(meetingId);
+        User caller = currentUserService.getCurrentActiveUser();
+        
+        if (meeting.getCreatedBy() == null || !meeting.getCreatedBy().getId().equals(caller.getId())) {
+            throw new AppException(ErrorCode.AGENDA_MODIFICATION_FORBIDDEN);
+        }
+        if (meeting.getStatus() != MeetingStatus.IN_PROGRESS) {
+            throw new AppException(ErrorCode.MEETING_STATUS_TRANSITION_INVALID);
+        }
+
+        AgendaItem agendaItem = agendaItemRepository.findById(id)
+                .orElseThrow(() -> new AppException(ErrorCode.AGENDA_ITEM_NOT_FOUND));
+
+        if (!agendaItem.getMeeting().getId().equals(meetingId)) {
+            throw new AppException(ErrorCode.AGENDA_ITEM_NOT_FOUND);
+        }
+
+        agendaItem.setStatus(AgendaItemStatus.SKIPPED);
         return toResponseWithDocs(agendaItemRepository.save(agendaItem));
     }
 
@@ -359,6 +456,14 @@ public class AgendaItemService {
             if (curr.getStartTime().isBefore(prev.getEndTime())) {
                 errors.put("sequence", "Thời gian nội dung cuộc họp không được trùng lặp và phải tuần tự theo Order No (Đầu mục " + curr.getOrderNo() + " phải bắt đầu sau hoặc bằng thời gian kết thúc của đầu mục " + prev.getOrderNo() + ").");
             }
+        }
+
+        boolean hasDuplicateOrder = list.stream()
+                .filter(item -> item.getOrderNo() != null)
+                .collect(Collectors.groupingBy(AgendaItem::getOrderNo, Collectors.counting()))
+                .values().stream().anyMatch(count -> count > 1);
+        if (hasDuplicateOrder) {
+            errors.put("orderNo", "Thứ tự của các Agenda không được phép trùng nhau.");
         }
 
         if (!errors.isEmpty()) {

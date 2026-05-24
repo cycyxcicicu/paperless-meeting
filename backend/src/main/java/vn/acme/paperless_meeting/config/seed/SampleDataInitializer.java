@@ -34,6 +34,7 @@ import vn.acme.paperless_meeting.entity.enums.DepartmentStatus;
 import vn.acme.paperless_meeting.entity.enums.InviteStatus;
 import vn.acme.paperless_meeting.entity.enums.MeetingStatus;
 import vn.acme.paperless_meeting.entity.enums.ParticipantRole;
+import vn.acme.paperless_meeting.entity.enums.PositionRole;
 import vn.acme.paperless_meeting.entity.enums.UserStatus;
 import vn.acme.paperless_meeting.repository.DepartmentRepository;
 import vn.acme.paperless_meeting.repository.LocationRepository;
@@ -208,7 +209,7 @@ public class SampleDataInitializer implements CommandLineRunner {
         Map<String, User> userByUsername = ensureUsers(departmentByPath, positionByCode);
         ensureRoleAssignments(roleByCode, userByUsername);
 
-        Map<String, Location> locationByCode = ensureLocations();
+        Map<String, Location> locationByCode = ensureLocations(departmentByPath);
         List<MeetingSeed> meetingSeeds = buildMeetingSeeds();
         Map<String, Meeting> meetingByTitle = ensureMeetings(meetingSeeds, userByUsername, departmentByPath,
                 locationByCode);
@@ -329,60 +330,60 @@ public class SampleDataInitializer implements CommandLineRunner {
         Map<String, Position> existingByCode = indexBy(positionRepository.findAll(), Position::getPositionCode);
         Map<String, Position> result = new LinkedHashMap<>();
 
-        for (DepartmentBlueprint blueprint : DEPARTMENT_BLUEPRINTS) {
-            Department department = requireDepartment(departmentByPath, blueprint.topLevelPath());
+        // 1. Tạo các Chức vụ hệ thống (Department = null)
+        List<PositionSeed> globalSeeds = List.of(
+            new PositionSeed("CHU_TICH", "Chủ tịch UBND", "Đứng đầu thành phố", 1, true, PositionRole.CHAIRMAN_CITY),
+            new PositionSeed("PHO_CHU_TICH", "Phó Chủ tịch UBND", "Cấp phó thành phố", 2, true, PositionRole.VICE_CHAIRMAN_CITY),
+            new PositionSeed("GIAM_DOC", "Giám đốc / Chánh văn phòng", "Thủ trưởng đơn vị", 10, true, PositionRole.HEAD_OF_DEPARTMENT_LEVEL),
+            new PositionSeed("PHO_GIAM_DOC", "Phó Giám đốc / Phó chánh văn phòng", "Cấp phó", 11, true, PositionRole.DEPUTY_OF_DEPARTMENT_LEVEL),
+            new PositionSeed("TRUONG_PHONG", "Trưởng phòng", "Lãnh đạo phòng ban", 15, true, PositionRole.HEAD_OF_DIVISION),
+            new PositionSeed("PHO_TRUONG_PHONG", "Phó Trưởng phòng", "Phó phòng ban", 16, true, PositionRole.DEPUTY_OF_DIVISION),
+            new PositionSeed("CHUYEN_VIEN", "Chuyên viên", "Cán bộ chuyên môn", 20, false, PositionRole.SPECIALIST)
+        );
 
-            for (PositionSeed seed : buildPositionSeeds(blueprint)) {
-                Position position = existingByCode.get(seed.code());
-                if (position == null) {
-                    position = new Position();
-                    position.setCreatedAt(ROLE_ASSIGNMENT_AT);
-                }
-
-                position.setPositionCode(seed.code());
-                position.setPositionName(seed.name());
-                position.setDescription(seed.description());
-                position.setRankOrder(seed.rankOrder());
-                position.setIsLeadership(seed.isLeadership());
-                position.setDepartment(department);
-                position.setUpdatedAt(ROLE_ASSIGNMENT_AT);
-                position.setIsDeleted(false);
-
-                Position saved = positionRepository.save(position);
-                existingByCode.put(seed.code(), saved);
-                result.put(seed.code(), saved);
-            }
+        for (PositionSeed seed : globalSeeds) {
+            Position saved = upsertPosition(seed, null, existingByCode);
+            result.put(seed.code(), saved);
         }
 
+        // 2. Tạo một vài chức vụ mẫu đặc thù cấp Đơn vị (Department != null)
+        for (Department department : departmentByPath.values()) {
+            boolean isTopLevel = department.getParentDepartment() == null || ROOT_DEPARTMENT.equals(department.getParentDepartment().getDeptName());
+            if (isTopLevel && !ROOT_DEPARTMENT.equals(department.getDeptName())) {
+                String deptCode = department.getCode();
+                List<PositionSeed> unitSpecificSeeds = List.of(
+                    new PositionSeed(deptCode + "_ketoan", "Kế toán trưởng (" + deptCode.toUpperCase() + ")", "Kế toán đặc thù", 18, true, PositionRole.SPECIALIST)
+                );
+                for (PositionSeed seed : unitSpecificSeeds) {
+                    Position saved = upsertPosition(seed, department, existingByCode);
+                    result.put(seed.code(), saved);
+                }
+            }
+        }
+        
         return result;
     }
 
-    private List<PositionSeed> buildPositionSeeds(DepartmentBlueprint blueprint) {
-        return List.of(
-                new PositionSeed(
-                        blueprint.positionCode("lead"),
-                        "Trưởng đơn vị",
-                        "Vị trí lãnh đạo cao nhất của " + blueprint.name(),
-                        1,
-                        true),
-                new PositionSeed(
-                        blueprint.positionCode("deputy"),
-                        "Phó trưởng đơn vị",
-                        "Hỗ trợ điều hành mảng " + blueprint.focusLabel(),
-                        2,
-                        true),
-                new PositionSeed(
-                        blueprint.positionCode("coordinator"),
-                        "Tổ trưởng chuyên môn",
-                        "Điều phối nghiệp vụ " + blueprint.focusLabel(),
-                        3,
-                        true),
-                new PositionSeed(
-                        blueprint.positionCode("specialist"),
-                        "Chuyên viên",
-                        "Chuyên viên phụ trách " + blueprint.focusLabel(),
-                        4,
-                        false));
+    private Position upsertPosition(PositionSeed seed, Department department, Map<String, Position> existingByCode) {
+        Position position = existingByCode.get(seed.code());
+        if (position == null) {
+            position = new Position();
+            position.setCreatedAt(ROLE_ASSIGNMENT_AT);
+        }
+
+        position.setPositionCode(seed.code());
+        position.setPositionName(seed.name());
+        position.setDescription(seed.description());
+        position.setRankOrder(seed.rankOrder());
+        position.setIsLeadership(seed.isLeadership());
+        position.setPositionRole(seed.positionRole());
+        position.setDepartment(department);
+        position.setUpdatedAt(ROLE_ASSIGNMENT_AT);
+        position.setIsDeleted(false);
+
+        Position saved = positionRepository.save(position);
+        existingByCode.put(seed.code(), saved);
+        return saved;
     }
 
     private Map<String, Role> ensureRoles() {
@@ -557,61 +558,36 @@ public class SampleDataInitializer implements CommandLineRunner {
 
     private List<UserSeed> buildRosterSeeds(DepartmentBlueprint blueprint) {
         List<UserSeed> seeds = new ArrayList<>();
-        seeds.add(buildAdminSeed(blueprint));
-        seeds.add(buildCreatorSeed(blueprint, 1));
-        seeds.add(buildCreatorSeed(blueprint, 2));
+        String topCode = blueprint.slug();
+        String topPath = blueprint.topLevelPath();
+        
+        seeds.add(new UserSeed(blueprint.adminUsername(), (blueprint.isCentralOffice() ? "Chủ tịch UBND thành phố" : "Thủ trưởng " + blueprint.name()), blueprint.adminUsername() + "@paperless.local", buildPhoneNumber(blueprint.departmentIndex(), 1, 1), topPath, blueprint.isCentralOffice() ? "CHU_TICH" : "GIAM_DOC"));
+        
+        for (int i = 1; i <= 3; i++) {
+            seeds.add(new UserSeed(topCode + ".pgd" + i, (blueprint.isCentralOffice() ? "Phó Chủ tịch " + i : "Phó Thủ trưởng " + i) + " " + blueprint.name(), topCode + ".pgd" + i + "@paperless.local", buildPhoneNumber(blueprint.departmentIndex(), 2, i), topPath, blueprint.isCentralOffice() ? "PHO_CHU_TICH" : "PHO_GIAM_DOC"));
+        }
 
-        for (int staffIndex = 1; staffIndex <= 12; staffIndex++) {
-            seeds.add(buildStaffSeed(blueprint, staffIndex));
+        int staffCounter = 1;
+        for (int pIdx = 0; pIdx < blueprint.childUnits().size(); pIdx++) {
+            String childUnit = blueprint.childUnits().get(pIdx);
+            String childPath = blueprint.childPath(childUnit);
+            
+            seeds.add(new UserSeed(topCode + ".manager" + pIdx, "Trưởng " + childUnit, topCode + ".manager" + pIdx + "@paperless.local", buildPhoneNumber(blueprint.departmentIndex(), 3, staffCounter++), childPath, "TRUONG_PHONG"));
+            
+            int targetStaffCount = (pIdx == 0) ? 12 : ((pIdx == 1) ? 8 : 16);
+            int deputies = (targetStaffCount >= 15) ? 3 : ((targetStaffCount >= 10) ? 2 : 1);
+            
+            for (int i = 1; i <= deputies; i++) {
+                seeds.add(new UserSeed(topCode + ".deputy" + pIdx + "_" + i, "Phó " + childUnit + " " + i, topCode + ".deputy" + pIdx + "_" + i + "@paperless.local", buildPhoneNumber(blueprint.departmentIndex(), 4, staffCounter++), childPath, "PHO_TRUONG_PHONG"));
+            }
+            
+            int specialists = targetStaffCount - 1 - deputies;
+            for (int i = 1; i <= specialists; i++) {
+                seeds.add(new UserSeed(topCode + ".spec" + pIdx + "_" + i, "Chuyên viên " + childUnit + " " + i, topCode + ".spec" + pIdx + "_" + i + "@paperless.local", buildPhoneNumber(blueprint.departmentIndex(), 5, staffCounter++), childPath, "CHUYEN_VIEN"));
+            }
         }
 
         return seeds;
-    }
-
-    private UserSeed buildAdminSeed(DepartmentBlueprint blueprint) {
-        String username = blueprint.adminUsername();
-        String fullName = blueprint.isCentralOffice()
-                ? "Quản trị hệ thống UBND thành phố Hải Phòng"
-                : "Thủ trưởng " + blueprint.name();
-        return new UserSeed(
-                username,
-                fullName,
-                username + "@paperless.local",
-                blueprint.isCentralOffice() ? "0999000001" : buildPhoneNumber(blueprint.departmentIndex(), 1, 1),
-                blueprint.topLevelPath(),
-                blueprint.positionCode("lead"));
-    }
-
-    private UserSeed buildCreatorSeed(DepartmentBlueprint blueprint, int creatorIndex) {
-        String username = blueprint.creatorUsername(creatorIndex);
-        String fullName = creatorIndex == 1
-                ? "Phó phụ trách " + blueprint.focusLabel() + " 01 - " + blueprint.name()
-                : "Tổ trưởng " + blueprint.focusLabel() + " 02 - " + blueprint.name();
-        String positionCode = creatorIndex == 1 ? blueprint.positionCode("deputy")
-                : blueprint.positionCode("coordinator");
-
-        return new UserSeed(
-                username,
-                fullName,
-                username + "@paperless.local",
-                buildPhoneNumber(blueprint.departmentIndex(), 2, creatorIndex),
-                blueprint.topLevelPath(),
-                positionCode);
-    }
-
-    private UserSeed buildStaffSeed(DepartmentBlueprint blueprint, int staffIndex) {
-        String username = blueprint.staffUsername(staffIndex);
-        String childUnit = blueprint.childUnits().get((staffIndex - 1) % blueprint.childUnits().size());
-        String fullName = "Chuyên viên " + childUnit + " " + String.format("%02d", staffIndex) + " - "
-                + blueprint.name();
-
-        return new UserSeed(
-                username,
-                fullName,
-                username + "@paperless.local",
-                buildPhoneNumber(blueprint.departmentIndex(), 3, staffIndex),
-                blueprint.topLevelPath(),
-                blueprint.positionCode("specialist"));
     }
 
     private UserSeed buildGlobalCreatorSeed() {
@@ -622,7 +598,7 @@ public class SampleDataInitializer implements CommandLineRunner {
                 "global.creator@paperless.local",
                 "0999000002",
                 blueprint.topLevelPath(),
-                blueprint.positionCode("coordinator"));
+                "CHUYEN_VIEN");
     }
 
     private User upsertUser(UserSeed seed,
@@ -668,23 +644,16 @@ public class SampleDataInitializer implements CommandLineRunner {
         assignRoleToUser(adminHp, superAdminRole);
         assignRoleToUser(globalCreator, departmentAdminRole);
 
-        for (DepartmentBlueprint blueprint : DEPARTMENT_BLUEPRINTS) {
-            User adminUser = requireUser(userByUsername, blueprint.adminUsername());
-            User creator1 = requireUser(userByUsername, blueprint.creatorUsername(1));
-            User creator2 = requireUser(userByUsername, blueprint.creatorUsername(2));
-
-            // admin.hp keeps SUPER_ADMIN in 1-n role model; other unit admins get DEPARTMENT_ADMIN
-            if (!adminHp.getId().equals(adminUser.getId())) {
-                assignRoleToUser(adminUser, departmentAdminRole);
+        for (User user : userByUsername.values()) {
+            if (user.getId().equals(adminHp.getId()) || user.getId().equals(globalCreator.getId())) {
+                continue;
             }
-
-            // Creators are regular users
-            assignRoleToUser(creator1, userRole);
-            assignRoleToUser(creator2, userRole);
-
-            for (int staffIndex = 1; staffIndex <= 12; staffIndex++) {
-                User staff = requireUser(userByUsername, blueprint.staffUsername(staffIndex));
-                assignRoleToUser(staff, userRole);
+            if (user.getPosition() != null && 
+                (user.getPosition().getPositionRole() == PositionRole.CHAIRMAN_CITY || 
+                 user.getPosition().getPositionRole() == PositionRole.HEAD_OF_DEPARTMENT_LEVEL)) {
+                assignRoleToUser(user, departmentAdminRole);
+            } else {
+                assignRoleToUser(user, userRole);
             }
         }
     }
@@ -700,7 +669,7 @@ public class SampleDataInitializer implements CommandLineRunner {
         userRepository.save(user);
     }
 
-    private Map<String, Location> ensureLocations() {
+    private Map<String, Location> ensureLocations(Map<String, Department> departmentByPath) {
         Map<String, Location> existingByRoomCode = indexBy(locationRepository.findAll(), Location::getRoomCode);
         Map<String, Location> result = new LinkedHashMap<>();
 
@@ -716,6 +685,12 @@ public class SampleDataInitializer implements CommandLineRunner {
             location.setIsActive(seed.isActive());
             location.setCapacity(seed.capacity());
 
+            if (seed.departmentPath() != null) {
+                location.setDepartment(requireDepartment(departmentByPath, seed.departmentPath()));
+            } else {
+                location.setDepartment(null);
+            }
+
             Location saved = locationRepository.save(location);
             existingByRoomCode.put(seed.roomCode(), saved);
             result.put(seed.roomCode(), saved);
@@ -727,32 +702,41 @@ public class SampleDataInitializer implements CommandLineRunner {
     private List<LocationSeed> buildLocationSeeds() {
         List<LocationSeed> seeds = new ArrayList<>();
 
+        // Add some shared system-wide rooms (department == null)
+        seeds.add(new LocationSeed("SYS-HALL-1", "Hội trường lớn UBND TP", "Trung tâm Hội nghị TP", true, 500, null));
+        seeds.add(new LocationSeed("SYS-ROOM-2", "Phòng Khánh tiết", "Tòa nhà UBND TP, Tầng 2", true, 50, null));
+
         for (DepartmentBlueprint blueprint : DEPARTMENT_BLUEPRINTS) {
             String officeAddress = "Trụ sở " + blueprint.name() + ", Hải Phòng";
+            String departmentPath = blueprint.topLevelPath();
             seeds.add(new LocationSeed(
                     blueprint.locationCode("office"),
                     "Phòng họp chuyên đề - " + blueprint.name(),
                     officeAddress,
                     true,
-                    20));
+                    20,
+                    departmentPath));
             seeds.add(new LocationSeed(
                     blueprint.locationCode("hall"),
                     "Hội trường - " + blueprint.name(),
                     officeAddress,
                     true,
-                    200));
+                    200,
+                    departmentPath));
             seeds.add(new LocationSeed(
                     blueprint.locationCode("online"),
                     "Phòng họp trực tuyến - " + blueprint.name(),
                     null,
                     true,
-                    100));
+                    100,
+                    departmentPath));
             seeds.add(new LocationSeed(
                     blueprint.locationCode("hybrid"),
                     "Phòng họp kết hợp - " + blueprint.name(),
                     officeAddress,
                     true,
-                    50));
+                    50,
+                    departmentPath));
         }
 
         return seeds;
@@ -1152,7 +1136,8 @@ public class SampleDataInitializer implements CommandLineRunner {
             String name,
             String description,
             Integer rankOrder,
-            Boolean isLeadership) {
+            Boolean isLeadership,
+            PositionRole positionRole) {
     }
 
     private record PermissionSeed(String code, String description) {
@@ -1172,7 +1157,8 @@ public class SampleDataInitializer implements CommandLineRunner {
             String name,
             String address,
             Boolean isActive,
-            Integer capacity) {
+            Integer capacity,
+            String departmentPath) {
     }
 
     private record MeetingSeed(
@@ -1221,11 +1207,11 @@ public class SampleDataInitializer implements CommandLineRunner {
         }
 
         private String creatorUsername(int index) {
-            return "creator." + slug + "." + String.format("%02d", index);
+            return slug + ".manager" + (index - 1);
         }
 
         private String staffUsername(int index) {
-            return "user." + slug + "." + String.format("%02d", index);
+            return slug + ".spec0_" + index;
         }
 
         private String positionCode(String suffix) {

@@ -4,12 +4,11 @@ import { Badge } from "@/common/components/ui/badge";
 export interface MeetingRoom {
     id: string;
     name: string;
-    code: string;
-    building: string;
-    floor: string;
+    roomCode: string;
+    address: string;
     capacity: number;
-    facilities: string[];
-    status: "active" | "inactive";
+    isActive: boolean;
+    departmentId: string | null;
     lastUsed?: string;
 }
 
@@ -19,7 +18,7 @@ export const createMeetingRoomColumns = (handlers: {
     onDelete: (id: string) => void;
 }): ColumnDef<MeetingRoom>[] => [
     {
-        key: "code",
+        key: "roomCode",
         header: "Mã phòng",
         className: "font-bold text-gray-900",
     },
@@ -29,7 +28,7 @@ export const createMeetingRoomColumns = (handlers: {
         render: (row) => (
             <div className="flex flex-col">
                 <span className="font-medium text-gray-900">{row.name}</span>
-                <span className="text-xs text-gray-500">{row.building} - {row.floor}</span>
+                <span className="text-xs text-gray-500">{row.address}</span>
             </div>
         ),
     },
@@ -43,35 +42,28 @@ export const createMeetingRoomColumns = (handlers: {
         ),
     },
     {
-        key: "status",
+        key: "isActive",
         header: "Trạng thái",
         render: (row) => {
-            const status = row.status;
+            const isActive = row.isActive;
             return (
                 <Badge 
-                    variant={status === "active" ? "success" : "secondary"}
+                    variant={isActive ? "success" : "secondary"}
                     className="rounded-lg px-2.5 py-0.5"
                 >
-                    {status === "active" ? "Đang hoạt động" : "Ngừng hoạt động"}
+                    {isActive ? "Đang hoạt động" : "Ngừng hoạt động"}
                 </Badge>
             );
         },
     },
-    {
-        key: "lastUsed",
-        header: "Sử dụng lần cuối",
-        render: (row) => (
-            <span className="text-sm text-gray-600">
-                {row.lastUsed || "Chưa sử dụng"}
-            </span>
-        ),
-    },
+
 ];
 
 export const createMeetingRoomRowActions = (handlers: {
     onView: (id: string) => void;
     onEdit: (id: string) => void;
     onDelete: (id: string) => void;
+    isSuperAdmin: boolean;
 }) => [
     {
         key: 'view',
@@ -94,7 +86,8 @@ export const createMeetingRoomRowActions = (handlers: {
             </svg>
         ),
         variant: 'warning' as const,
-        onClick: (row: MeetingRoom) => handlers.onEdit(row.id)
+        onClick: (row: MeetingRoom) => handlers.onEdit(row.id),
+        show: (row: MeetingRoom) => handlers.isSuperAdmin || row.departmentId !== null
     },
     {
         key: 'delete',
@@ -105,6 +98,7 @@ export const createMeetingRoomRowActions = (handlers: {
             </svg>
         ),
         variant: 'danger' as const,
-        onClick: (row: MeetingRoom) => handlers.onDelete(row.id)
+        onClick: (row: MeetingRoom) => handlers.onDelete(row.id),
+        show: (row: MeetingRoom) => handlers.isSuperAdmin || row.departmentId !== null
     }
 ];

@@ -15,6 +15,7 @@ public class MeetingDocumentResponse {
     private DocumentResponse document;
     private MeetingDocumentUsageType usageType;
     private Boolean requiredBeforeMeeting;
+    private Boolean isConfidential;
     private UUID agendaItemId;
     private String agendaItemTitle;
 }

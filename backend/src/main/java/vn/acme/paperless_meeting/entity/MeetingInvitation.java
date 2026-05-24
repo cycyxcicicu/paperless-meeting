@@ -50,6 +50,10 @@ public class MeetingInvitation extends SoftDeletable {
         @Column(name = "channel")
         private ChannelType channel;
 
+        @Enumerated(EnumType.STRING)
+        @Column(name = "send_status")
+        private vn.acme.paperless_meeting.entity.enums.SendStatus sendStatus = vn.acme.paperless_meeting.entity.enums.SendStatus.PENDING;
+
         private LocalDateTime sentAt;
 
         private String message;
@@ -63,6 +67,10 @@ public class MeetingInvitation extends SoftDeletable {
         @ManyToOne(fetch = FetchType.LAZY)
         @JoinColumn(name = "invitee_user_id")
         private User inviteeUser;
+
+        @ManyToOne(fetch = FetchType.LAZY)
+        @JoinColumn(name = "invitee_guest_id")
+        private MeetingGuest inviteeGuest;
 
         @ManyToOne(fetch = FetchType.LAZY)
         @JoinColumn(name = "invited_by")

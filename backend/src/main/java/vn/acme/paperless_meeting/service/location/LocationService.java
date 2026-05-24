@@ -16,6 +16,7 @@ import lombok.experimental.FieldDefaults;
 import vn.acme.paperless_meeting.dto.base.PageResponse;
 import vn.acme.paperless_meeting.dto.request.location.LocationUpsertRequest;
 import vn.acme.paperless_meeting.dto.response.location.LocationResponse;
+import vn.acme.paperless_meeting.dto.response.location.LocationStatsResponse;
 import vn.acme.paperless_meeting.entity.Department;
 import vn.acme.paperless_meeting.entity.Location;
 import vn.acme.paperless_meeting.entity.User;
@@ -72,6 +73,8 @@ public class LocationService {
             if (departmentId != null) {
                 allowedDeptIds = List.of(departmentId);
                 includeShared = false;
+            } else {
+                allowedDeptIds = new ArrayList<>(); // Empty list to trigger only shared rooms in Specification
             }
         }
 
@@ -90,6 +93,41 @@ public class LocationService {
                 .totalPages(page.getTotalPages())
                 .last(page.isLast())
                 .build();
+    }
+
+    @Transactional(readOnly = true)
+    public LocationStatsResponse getStats(UUID departmentId) {
+        User caller = currentUserService.getCurrentActiveUser();
+        List<UUID> allowedDeptIds = null;
+        boolean includeShared = true;
+
+        if (!currentUserService.hasRole(RoleName.SUPER_ADMIN)) {
+            if (!hasViewPermission()) {
+                throw new AppException(ErrorCode.UNAUTHOZIZED);
+            }
+            if (caller.getDepartment() == null) {
+                throw new AppException(ErrorCode.DEPARTMENT_ID_REQUIRED);
+            }
+
+            if (departmentId == null) {
+                allowedDeptIds = departmentService.getAllSubDepartmentIds(caller.getDepartment().getId());
+            } else {
+                if (!departmentService.getAllSubDepartmentIds(caller.getDepartment().getId()).contains(departmentId)) {
+                    throw new AppException(ErrorCode.UNAUTHOZIZED);
+                }
+                allowedDeptIds = List.of(departmentId);
+                includeShared = false;
+            }
+        } else {
+            if (departmentId != null) {
+                allowedDeptIds = List.of(departmentId);
+                includeShared = false;
+            } else {
+                allowedDeptIds = new ArrayList<>();
+            }
+        }
+
+        return locationRepository.getStats(allowedDeptIds, includeShared);
     }
 
     public LocationResponse findById(UUID id) {

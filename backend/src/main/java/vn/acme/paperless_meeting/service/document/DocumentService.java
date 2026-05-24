@@ -38,6 +38,7 @@ import vn.acme.paperless_meeting.repository.DocumentRepository;
 import vn.acme.paperless_meeting.repository.DocumentVersionRepository;
 import vn.acme.paperless_meeting.repository.MeetingDocumentRepository;
 import vn.acme.paperless_meeting.repository.MeetingRepository;
+import vn.acme.paperless_meeting.repository.MeetingParticipantRepository;
 import vn.acme.paperless_meeting.service.auth.CurrentUserService;
 
 @Service
@@ -50,6 +51,7 @@ public class DocumentService {
     MeetingDocumentRepository meetingDocumentRepository;
     MeetingRepository meetingRepository;
     AgendaItemRepository agendaItemRepository;
+    MeetingParticipantRepository meetingParticipantRepository;
     FileStorageService fileStorageService;
     CurrentUserService currentUserService;
     DocumentMapper documentMapper;
@@ -179,6 +181,47 @@ public class DocumentService {
         );
     }
 
+    /**
+     * Bọc thao tác Upload và Gắn vào Meeting trong 1 giao dịch.
+     */
+    @Transactional
+    public MeetingDocumentResponse uploadAndAttach(UUID meetingId, UUID agendaId, MultipartFile file, String title, String docType, String note, vn.acme.paperless_meeting.entity.enums.MeetingDocumentUsageType usageType, Boolean requiredBeforeMeeting, Boolean isConfidential) {
+        DocumentResponse docRes = uploadDocument(file, title, docType, note);
+        AttachDocumentRequest req = new AttachDocumentRequest();
+        req.setDocumentId(docRes.getId());
+        req.setUsageType(usageType);
+        req.setRequiredBeforeMeeting(requiredBeforeMeeting);
+        req.setIsConfidential(isConfidential);
+        req.setAgendaItemId(agendaId);
+        return attachToMeeting(meetingId, req);
+    }
+
+    /**
+     * Lấy URL proxy để Download tài liệu có qua vòng kiểm định Authz.
+     */
+    @Transactional(readOnly = true)
+    public String getDownloadUrl(UUID documentId) {
+        Document document = documentRepository.findById(documentId)
+                .orElseThrow(() -> new AppException(ErrorCode.DOCUMENT_NOT_FOUND));
+
+        User caller = currentUserService.getCurrentActiveUser();
+        boolean isCreator = document.getCreatedBy() != null && document.getCreatedBy().getId().equals(caller.getId());
+
+        if (!isCreator) {
+            boolean hasAccess = document.getMeetingDocumentList().stream()
+                    .anyMatch(md -> meetingParticipantRepository.existsByMeetingIdAndUserId(md.getMeeting().getId(), caller.getId()));
+            if (!hasAccess) {
+                throw new AppException(ErrorCode.UNAUTHOZIZED);
+            }
+        }
+
+        if (document.getCurrentVersion() == null || document.getCurrentVersion().getStorageKey() == null) {
+            throw new AppException(ErrorCode.DOCUMENT_NOT_FOUND);
+        }
+
+        return fileStorageService.getFileUrl(document.getCurrentVersion().getStorageKey());
+    }
+
     // ========== NHÓM B — Meeting Document ==========
 
     /**
@@ -197,6 +240,11 @@ public class DocumentService {
         Document document = documentRepository.findById(request.getDocumentId())
                 .orElseThrow(() -> new AppException(ErrorCode.DOCUMENT_NOT_FOUND));
 
+        User caller = currentUserService.getCurrentActiveUser();
+        if (document.getCreatedBy() == null || !document.getCreatedBy().getId().equals(caller.getId())) {
+            throw new AppException(ErrorCode.UNAUTHOZIZED);
+        }
+
         // Không gắn duplicate
         if (meetingDocumentRepository.existsByMeetingIdAndDocumentId(meetingId, document.getId())) {
             throw new AppException(ErrorCode.DOCUMENT_ALREADY_ATTACHED);
@@ -207,6 +255,7 @@ public class DocumentService {
         meetingDoc.setDocument(document);
         meetingDoc.setUsageType(request.getUsageType());
         meetingDoc.setRequiredBeforeMeeting(request.getRequiredBeforeMeeting());
+        meetingDoc.setIsConfidential(request.getIsConfidential() != null ? request.getIsConfidential() : false);
 
         // Nếu có agendaItemId → validate thuộc đúng meeting
         if (request.getAgendaItemId() != null) {
@@ -214,6 +263,9 @@ public class DocumentService {
                     .orElseThrow(() -> new AppException(ErrorCode.AGENDA_ITEM_NOT_FOUND));
             if (!agendaItem.getMeeting().getId().equals(meetingId)) {
                 throw new AppException(ErrorCode.AGENDA_ITEM_NOT_FOUND);
+            }
+            if (agendaItem.getStatus() == vn.acme.paperless_meeting.entity.enums.AgendaItemStatus.DONE || agendaItem.getStatus() == vn.acme.paperless_meeting.entity.enums.AgendaItemStatus.SKIPPED) {
+                throw new AppException(ErrorCode.AGENDA_MODIFICATION_FORBIDDEN);
             }
             meetingDoc.setAgendaItem(agendaItem);
         }
@@ -253,6 +305,13 @@ public class DocumentService {
      */
     @Transactional
     public void detachFromMeeting(UUID meetingId, UUID meetingDocId) {
+        Meeting meeting = meetingRepository.findById(meetingId)
+                .orElseThrow(() -> new AppException(ErrorCode.MEETING_NOT_EXIST));
+        
+        if (meeting.getStatus() == MeetingStatus.IN_PROGRESS || meeting.getStatus() == MeetingStatus.CLOSED) {
+            throw new AppException(ErrorCode.MEETING_STATUS_TRANSITION_INVALID);
+        }
+
         MeetingDocument meetingDoc = meetingDocumentRepository.findByMeetingIdAndId(meetingId, meetingDocId)
                 .orElseThrow(() -> new AppException(ErrorCode.DOCUMENT_MEETING_NOT_FOUND));
         meetingDocumentRepository.delete(meetingDoc);
@@ -282,6 +341,9 @@ public class DocumentService {
         if (request.getRequiredBeforeMeeting() != null) {
             meetingDoc.setRequiredBeforeMeeting(request.getRequiredBeforeMeeting());
         }
+        if (request.getIsConfidential() != null) {
+            meetingDoc.setIsConfidential(request.getIsConfidential());
+        }
 
         // Update agendaItem link
         if (request.getAgendaItemId() != null) {
@@ -289,6 +351,9 @@ public class DocumentService {
                     .orElseThrow(() -> new AppException(ErrorCode.AGENDA_ITEM_NOT_FOUND));
             if (!agendaItem.getMeeting().getId().equals(meetingId)) {
                 throw new AppException(ErrorCode.AGENDA_ITEM_NOT_FOUND);
+            }
+            if (agendaItem.getStatus() == vn.acme.paperless_meeting.entity.enums.AgendaItemStatus.DONE || agendaItem.getStatus() == vn.acme.paperless_meeting.entity.enums.AgendaItemStatus.SKIPPED) {
+                throw new AppException(ErrorCode.AGENDA_MODIFICATION_FORBIDDEN);
             }
             meetingDoc.setAgendaItem(agendaItem);
         }

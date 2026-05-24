@@ -21,6 +21,7 @@ import vn.acme.paperless_meeting.dto.response.meetingparticipant.MeetingAttendee
 import vn.acme.paperless_meeting.dto.response.meetingparticipant.AttendeeStatisticsResponse;
 import vn.acme.paperless_meeting.dto.response.meeting.PublicMeetingInviteResponse;
 import vn.acme.paperless_meeting.dto.response.meeting.MeetingResponse;
+import vn.acme.paperless_meeting.dto.response.document.MeetingDocumentResponse;
 import vn.acme.paperless_meeting.service.meetingparticipant.MeetingParticipantService;
 
 @RestController
@@ -60,6 +61,15 @@ public class MeetingParticipantController {
                 .data(meetingParticipantService.getAttendeeStatistics(meetingId)).build();
     }
 
+    @Operation(summary = "Chủ động gửi thư mời cho đại biểu/khách mời",
+               description = "API này hỗ trợ gửi thủ công, gọi nhiều lần (check chống spam), hoặc ép gửi lại (forceResend).")
+    @PostMapping("/{meetingId}/invitations/send")
+    public ApiResponse<Void> sendInvitations(
+            @PathVariable UUID meetingId, @Valid @RequestBody vn.acme.paperless_meeting.dto.request.meetingparticipant.SendInvitationsRequest request) {
+        meetingParticipantService.sendInvitations(meetingId, request);
+        return ApiResponse.<Void>builder().success(true).message("Đã gửi thư mời họp thành công").build();
+    }
+
     @Operation(summary = "Phản hồi thư mời họp (user nội bộ)",
                description = "Xác nhận ACCEPTED hoặc DECLINED. Cần đăng nhập.")
     @PutMapping("/{meetingId}/participants/{userId}/invite-status")
@@ -96,6 +106,15 @@ public class MeetingParticipantController {
         return ApiResponse.<MeetingResponse>builder()
                 .success(true).message("Lấy chi tiết phòng họp qua guestToken thành công")
                 .data(meetingParticipantService.publicGetMeetingByGuestToken(guestToken)).build();
+    }
+
+    @Operation(summary = "Lấy danh sách tài liệu cho khách (không cần đăng nhập)",
+               description = "Khách mời dùng guestToken để lấy danh sách tài liệu được phép xem (không bảo mật).")
+    @GetMapping("/public/documents")
+    public ApiResponse<List<MeetingDocumentResponse>> publicGetMeetingDocumentsByGuestToken(@RequestParam UUID guestToken) {
+        return ApiResponse.<List<MeetingDocumentResponse>>builder()
+                .success(true).message("Lấy danh sách tài liệu qua guestToken thành công")
+                .data(meetingParticipantService.publicGetMeetingDocumentsByGuestToken(guestToken)).build();
     }
 
     @Operation(summary = "Điểm danh người tham dự",

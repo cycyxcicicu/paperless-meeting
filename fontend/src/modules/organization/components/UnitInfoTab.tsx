@@ -1,14 +1,9 @@
 import React from 'react';
 import { 
-  Building2, 
-  Mail, 
   Phone, 
-  MapPin, 
-  Calendar, 
   User, 
   FileText,
-  Info,
-  ShieldCheck
+  Info
 } from 'lucide-react';
 
 interface UnitInfo {
@@ -20,7 +15,7 @@ interface UnitInfo {
   email: string;
   establishedDate: string;
   director: string;
-  contactPerson: string;
+  contactPerson?: string;
   description: string;
   isActive: boolean;
   totalMembers: number;
@@ -28,9 +23,10 @@ interface UnitInfo {
 
 interface UnitInfoTabProps {
   unit: UnitInfo;
+  onEdit?: (id: string) => void;
 }
 
-export const UnitInfoTab: React.FC<UnitInfoTabProps> = ({ unit }) => {
+export const UnitInfoTab: React.FC<UnitInfoTabProps> = ({ unit, onEdit }) => {
   const InfoField = ({ label, value, className = "" }: { label: string; value: string | React.ReactNode; className?: string }) => (
     <div className={className}>
       <div className="text-xs body text-gray-500 mb-1.5">{label}</div>
@@ -42,10 +38,20 @@ export const UnitInfoTab: React.FC<UnitInfoTabProps> = ({ unit }) => {
     <div className="p-6 space-y-6">
       {/* Thông tin chung */}
       <div className="bg-white rounded-xl border border-gray-200 p-5">
-        <h3 className="text-sm btn-primary text-gray-900 mb-4 flex items-center gap-2">
-          <Info className="h-4 w-4 text-[#C8102E]" />
-          Thông tin chung
-        </h3>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm btn-primary text-gray-900 flex items-center gap-2">
+            <Info className="h-4 w-4 text-[#C8102E]" />
+            Thông tin chung
+          </h3>
+          {onEdit && (
+            <button
+              onClick={() => onEdit(unit.id)}
+              className="px-4 py-2 rounded-xl border border-gray-200 text-xs heading text-gray-700 bg-white hover:bg-gray-50 flex items-center gap-1.5 transition-all shadow-sm"
+            >
+              Chỉnh sửa thông tin
+            </button>
+          )}
+        </div>
         <div className="grid grid-cols-4 gap-6">
           <InfoField label="Tên đơn vị" value={unit.name} />
           <InfoField label="Mã định danh" value={<code className="text-sm font-mono heading text-gray-900 bg-gray-100 px-2 py-0.5 rounded">{unit.code}</code>} />
@@ -88,9 +94,8 @@ export const UnitInfoTab: React.FC<UnitInfoTabProps> = ({ unit }) => {
           <User className="h-4 w-4 text-[#C8102E]" />
           Nhân sự lãnh đạo
         </h3>
-        <div className="grid grid-cols-3 gap-6">
-          <InfoField label="Người đứng đầu" value={unit.director} />
-          <InfoField label="Người phụ trách liên hệ" value={unit.contactPerson} />
+        <div className="grid grid-cols-2 gap-6">
+          <InfoField label="Người đứng đầu" value={unit.director || "Chưa thiết lập"} />
           <InfoField label="Tổng số cán bộ" value={`${unit.totalMembers} nhân sự`} />
         </div>
       </div>

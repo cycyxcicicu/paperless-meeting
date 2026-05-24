@@ -207,6 +207,7 @@ public class MotionServiceTest {
         motion.getVoteSessionList().add(session);
 
         when(meetingParticipantRepository.findByMeetingId(meetingId)).thenReturn(new ArrayList<>());
+        when(meetingParticipantRepository.existsByMeetingIdAndUserId(meetingId, userId)).thenReturn(true);
 
         // Act
         VoteStatisticsResponse response = motionService.getVoteStatistics(motionId);

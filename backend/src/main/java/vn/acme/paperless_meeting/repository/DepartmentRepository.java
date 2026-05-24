@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import vn.acme.paperless_meeting.entity.Department;
+import vn.acme.paperless_meeting.entity.enums.DepartmentStatus;
 
 import java.util.List;
 import java.util.UUID;
@@ -30,4 +31,18 @@ public interface DepartmentRepository extends JpaRepository<Department, UUID>, J
 	Integer countByIdIn(List<UUID> ids);
 
 	List<Department> findByIdIn(List<UUID> ids);
+
+	long countByStatus(DepartmentStatus status);
+
+	long countByParentDepartmentIsNull();
+	long countByParentDepartmentIsNullAndStatus(DepartmentStatus status);
+
+	@Query("SELECT COUNT(d) FROM Department d JOIN d.parentDepartment p WHERE p.parentDepartment IS NULL")
+	long countLevel2Departments();
+
+	@Query("SELECT COUNT(d) FROM Department d JOIN d.parentDepartment p WHERE p.parentDepartment IS NULL AND d.status = :status")
+	long countLevel2DepartmentsByStatus(@Param("status") DepartmentStatus status);
+	
+	long countByParentDepartment_Id(UUID parentId);
+	long countByParentDepartment_IdAndStatus(UUID parentId, DepartmentStatus status);
 }

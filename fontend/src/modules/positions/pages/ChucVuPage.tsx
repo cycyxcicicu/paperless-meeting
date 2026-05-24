@@ -19,25 +19,28 @@ import {
   Position 
 } from '../table/positionTable.schema';
 
-const mockPositions: Position[] = [
-  { id: '1', name: 'Chủ tịch UBND Thành phố', code: 'CT_UBND', description: 'Người đứng đầu cơ quan hành chính nhà nước cao nhất ở địa phương.', memberCount: 1, status: 'active', createdAt: '2023-01-15' },
-  { id: '2', name: 'Phó Chủ tịch Thường trực', code: 'PCT_TT', description: 'Hỗ trợ Chủ tịch điều hành các hoạt động chung của UBND.', memberCount: 1, status: 'active', createdAt: '2023-01-16' },
-  { id: '3', name: 'Phó Chủ tịch UBND', code: 'PCT_UBND', description: 'Phụ trách các mảng lĩnh vực cụ thể theo phân công.', memberCount: 3, status: 'active', createdAt: '2023-01-17' },
-  { id: '4', name: 'Chánh Văn phòng', code: 'CVP', description: 'Điều hành mọi hoạt động của Văn phòng UBND Thành phố.', memberCount: 1, status: 'active', createdAt: '2023-01-20' },
-  { id: '5', name: 'Phó Chánh Văn phòng', code: 'PCVP', description: 'Hỗ trợ Chánh Văn phòng trong công tác quản lý điều hành.', memberCount: 4, status: 'active', createdAt: '2023-01-21' },
-  { id: '6', name: 'Trưởng phòng', code: 'TP', description: 'Chịu trách nhiệm quản lý trực tiếp một phòng ban chuyên môn.', memberCount: 12, status: 'active', createdAt: '2023-02-01' },
-  { id: '7', name: 'Phó Trưởng phòng', code: 'PTP', description: 'Hỗ trợ Trưởng phòng quản lý điều hành phòng ban.', memberCount: 24, status: 'active', createdAt: '2023-02-05' },
-  { id: '8', name: 'Chuyên viên chính', code: 'CVC', description: 'Cán bộ có trình độ chuyên môn nghiệp vụ cao trong lĩnh vực.', memberCount: 45, status: 'active', createdAt: '2023-02-10' },
-  { id: '9', name: 'Chuyên viên', code: 'CV', description: 'Thực hiện các công việc chuyên môn theo sự phân công.', memberCount: 120, status: 'active', createdAt: '2023-02-15' },
-  { id: '10', name: 'Kế toán trưởng', code: 'KTT', description: 'Phụ trách công tác tài chính kế toán của đơn vị.', memberCount: 2, status: 'active', createdAt: '2023-02-20' },
-  { id: '11', name: 'Thủ quỹ', code: 'TQ', description: 'Quản lý quỹ tiền mặt của cơ quan đơn vị.', memberCount: 2, status: 'inactive', createdAt: '2023-02-25' },
-  { id: '12', name: 'Văn thư', code: 'VT', description: 'Tiếp nhận, lưu trữ và luân chuyển công văn tài liệu.', memberCount: 5, status: 'active', createdAt: '2023-03-01' },
-];
+import { usePositions } from '../hooks/usePositions';
+import { PositionUpsertRequest } from '../services/position.api';
 
 const ChucVuPage = () => {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const {
+    positions,
+    stats,
+    isLoading,
+    searchQuery,
+    currentPage,
+    pageSize,
+    totalItems,
+    totalPages,
+    setPageSize,
+    setCurrentPage,
+    handleSearch,
+    fetchPositions,
+    fetchStats,
+    handleCreate,
+    handleUpdate,
+    handleDelete,
+  } = usePositions();
 
   // Modal state
   const [positionFormModal, setPositionFormModal] = useState<{
@@ -51,20 +54,41 @@ const ChucVuPage = () => {
     position?: Position;
   }>({ isOpen: false });
 
-  // Filter positions
-  const filteredPositions = useMemo(() => {
-    return mockPositions.filter(pos => 
-      pos.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      pos.code.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+  const [localSearch, setLocalSearch] = useState(searchQuery);
+
+  // Sync local search when searchQuery resets externally (e.g. inside hook)
+  React.useEffect(() => {
+    setLocalSearch(searchQuery);
   }, [searchQuery]);
 
-  const currentData = filteredPositions.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  // Debounced search logic (waiting 500ms of inactivity before firing API)
+  React.useEffect(() => {
+    if (localSearch === searchQuery) return;
+
+    const handler = setTimeout(() => {
+      const trimmed = localSearch.trim();
+      setLocalSearch(trimmed);
+      handleSearch(trimmed);
+    }, 500); // 500ms delay
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [localSearch, searchQuery]);
+
+  React.useEffect(() => {
+    fetchPositions(searchQuery);
+  }, [fetchPositions, searchQuery]); // fetchPositions and searchQuery change trigger query reload
+
+  React.useEffect(() => {
+    fetchStats();
+  }, [fetchStats]);
 
   // Handlers
   const handleRefresh = () => {
+    fetchPositions(searchQuery);
+    fetchStats();
     toast.success('Dữ liệu đã được cập nhật');
-    setSearchQuery('');
   };
 
   const handleAddNew = () => {
@@ -79,7 +103,7 @@ const ChucVuPage = () => {
     setPositionFormModal({ isOpen: true, mode: 'edit', position });
   };
 
-  const handleDelete = (position: Position) => {
+  const handleDeleteClick = (position: Position) => {
     setDeleteModal({ isOpen: true, position });
   };
 
@@ -91,27 +115,42 @@ const ChucVuPage = () => {
     setDeleteModal({ isOpen: false });
   };
 
-  const handleSubmitPositionForm = (positionData: any) => {
+  const handleSubmitPositionForm = async (positionData: any) => {
+    const payload: PositionUpsertRequest = {
+      positionName: positionData.name,
+      positionCode: positionData.code,
+      rankOrder: Number(positionData.ordinal),
+      isLeadership: positionData.leader === 'yes',
+      description: positionData.description || '',
+    };
+
+    let success = false;
     if (positionFormModal.mode === 'create') {
-      toast.success('Thêm chức vụ thành công');
-    } else if (positionFormModal.mode === 'edit') {
-      toast.success('Cập nhật chức vụ thành công');
+      success = await handleCreate(payload);
+    } else if (positionFormModal.mode === 'edit' && positionFormModal.position) {
+      success = await handleUpdate(positionFormModal.position.id, payload);
     }
-    handleClosePositionFormModal();
+
+    if (success) {
+      handleClosePositionFormModal();
+    }
   };
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (deleteModal.position) {
-      toast.success('Xóa chức vụ thành công');
+      const success = await handleDelete(deleteModal.position.id);
+      if (success) {
+        handleCloseDeleteModal();
+      }
     }
-    handleCloseDeleteModal();
   };
 
   // Table Configuration
   const tableConfig = {
     columns: getPositionTableColumns(),
-    rowActions: getPositionRowActions(handleView, handleEdit, handleDelete)
+    rowActions: getPositionRowActions(handleView, handleEdit, handleDeleteClick)
   };
+
 
   return (
     <div className="flex flex-col h-full bg-gray-50/50">
@@ -126,10 +165,8 @@ const ChucVuPage = () => {
 
         {/* Summary Strip */}
         <PositionSummary 
-          totalPositions={mockPositions.length}
-          totalUsers={mockPositions.reduce((acc, curr) => acc + curr.memberCount, 0)}
-          activePositions={mockPositions.filter(p => p.status === 'active').length}
-          inactivePositions={mockPositions.filter(p => p.status === 'inactive').length}
+          totalPositions={stats.totalPositions}
+          totalUsers={stats.totalUsers}
         />
 
         {/* Main Content Card */}
@@ -146,8 +183,15 @@ const ChucVuPage = () => {
                 <input
                   type="text"
                   placeholder="Tìm kiếm theo tên hoặc mã chức vụ..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  value={localSearch}
+                  onChange={(e) => setLocalSearch(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      const trimmed = localSearch.trim();
+                      setLocalSearch(trimmed);
+                      handleSearch(trimmed);
+                    }
+                  }}
                   className="w-full h-11 pl-12 pr-4 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#C8102E]/50 focus:ring-4 focus:ring-[#C8102E]/5 focus:bg-white transition-all"
                 />
               </div>
@@ -175,17 +219,14 @@ const ChucVuPage = () => {
           {/* Table Content */}
           <div className="p-0">
             <DataTable
-              data={currentData}
+              data={positions}
               config={tableConfig}
               currentPage={currentPage}
               pageSize={pageSize}
-              totalItems={filteredPositions.length}
-              totalPages={Math.ceil(filteredPositions.length / pageSize)}
+              totalItems={totalItems}
+              totalPages={totalPages}
               onPageChange={setCurrentPage}
-              onPageSizeChange={(size) => {
-                setPageSize(size);
-                setCurrentPage(1);
-              }}
+              onPageSizeChange={setPageSize}
               itemLabel="chức vụ"
               getRowId={(row) => row.id}
             />

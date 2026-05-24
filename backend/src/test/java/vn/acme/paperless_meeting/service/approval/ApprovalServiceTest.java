@@ -42,6 +42,8 @@ import vn.acme.paperless_meeting.repository.ApprovalStepRepository;
 import vn.acme.paperless_meeting.repository.DocumentRepository;
 import vn.acme.paperless_meeting.repository.MeetingRepository;
 import vn.acme.paperless_meeting.repository.MinutesRepository;
+import vn.acme.paperless_meeting.repository.RoleRepository;
+import vn.acme.paperless_meeting.repository.UserRepository;
 import vn.acme.paperless_meeting.service.auth.CurrentUserService;
 import vn.acme.paperless_meeting.service.department.DepartmentService;
 
@@ -58,6 +60,8 @@ class ApprovalServiceTest {
     @Mock DepartmentService departmentService;
     @Mock ApprovalMapper approvalMapper;
     @Mock vn.acme.paperless_meeting.event.audit.AuditLogPublisher auditLogPublisher;
+    @Mock UserRepository userRepository;
+    @Mock RoleRepository roleRepository;
 
     @InjectMocks ApprovalService approvalService;
 
@@ -75,6 +79,7 @@ class ApprovalServiceTest {
         dept.setId(UUID.randomUUID());
 
         Role role = new Role();
+        role.setId(UUID.randomUUID());
         role.setRoleName(RoleName.DEPARTMENT_ADMIN.name());
 
         caller = new User();
@@ -91,9 +96,14 @@ class ApprovalServiceTest {
 
     @Test
     void submit_Meeting_Success() {
+        UUID approverId = UUID.randomUUID();
+        User approver = new User();
+        approver.setId(approverId);
+
         SubmitApprovalRequest req = new SubmitApprovalRequest();
         req.setResourceType(ResourceType.MEETING);
         req.setResourceId(meetingId);
+        req.setApproverUserId(approverId);
 
         ApprovalRequest saved = new ApprovalRequest();
         saved.setId(approvalId);
@@ -101,6 +111,7 @@ class ApprovalServiceTest {
         saved.setResourceId(meetingId);
         saved.setStatus(ApprovalStatus.PENDING);
 
+        when(userRepository.findById(approverId)).thenReturn(Optional.of(approver));
         when(approvalRequestRepository.findFirstByResourceTypeAndResourceIdAndStatus(ResourceType.MEETING, meetingId, ApprovalStatus.PENDING))
                 .thenReturn(Optional.empty());
         when(meetingRepository.findById(meetingId)).thenReturn(Optional.of(meeting));
@@ -119,6 +130,58 @@ class ApprovalServiceTest {
     }
 
     @Test
+    void submit_WhenRoleIdProvided_ShouldSaveRoleToStep() {
+        UUID approverRoleId = UUID.randomUUID();
+        Role approver = new Role();
+        approver.setId(approverRoleId);
+
+        SubmitApprovalRequest req = new SubmitApprovalRequest();
+        req.setResourceType(ResourceType.MEETING);
+        req.setResourceId(meetingId);
+        req.setApproverRoleId(approverRoleId);
+
+        ApprovalRequest saved = new ApprovalRequest();
+        saved.setId(approvalId);
+        saved.setResourceType(ResourceType.MEETING);
+        saved.setResourceId(meetingId);
+        saved.setStatus(ApprovalStatus.PENDING);
+
+        when(roleRepository.findById(approverRoleId)).thenReturn(Optional.of(approver));
+        when(approvalRequestRepository.findFirstByResourceTypeAndResourceIdAndStatus(ResourceType.MEETING, meetingId, ApprovalStatus.PENDING))
+                .thenReturn(Optional.empty());
+        when(meetingRepository.findById(meetingId)).thenReturn(Optional.of(meeting));
+        when(currentUserService.getCurrentActiveUser()).thenReturn(caller);
+        when(approvalRequestRepository.save(any(ApprovalRequest.class))).thenReturn(saved);
+        when(approvalRequestRepository.findDetailById(approvalId)).thenReturn(Optional.of(saved));
+        when(approvalMapper.toResponse(saved)).thenReturn(ApprovalRequestResponse.builder().id(approvalId).build());
+
+        ApprovalRequestResponse result = approvalService.submit(req);
+
+        assertEquals(approvalId, result.getId());
+        verify(approvalStepRepository).save(any(ApprovalStep.class));
+        verify(meetingRepository).save(any(Meeting.class));
+    }
+
+    @Test
+    void submit_WhenApproverUserNotExist_ShouldThrowException() {
+        UUID approverId = UUID.randomUUID();
+        SubmitApprovalRequest req = new SubmitApprovalRequest();
+        req.setResourceType(ResourceType.MEETING);
+        req.setResourceId(meetingId);
+        req.setApproverUserId(approverId);
+
+        when(approvalRequestRepository.findFirstByResourceTypeAndResourceIdAndStatus(ResourceType.MEETING, meetingId, ApprovalStatus.PENDING))
+                .thenReturn(Optional.empty());
+        when(meetingRepository.findById(meetingId)).thenReturn(Optional.of(meeting));
+        when(userRepository.findById(approverId)).thenReturn(Optional.empty());
+        when(currentUserService.getCurrentActiveUser()).thenReturn(caller);
+        when(currentUserService.hasRole(RoleName.SUPER_ADMIN)).thenReturn(false);
+
+        AppException ex = assertThrows(AppException.class, () -> approvalService.submit(req));
+        assertEquals(ErrorCode.USER_NOT_EXISTED, ex.getErrorCode());
+    }
+
+    @Test
     void reject_WhenReasonBlank_ShouldThrow() {
         ApprovalRequest request = new ApprovalRequest();
         request.setId(approvalId);
@@ -134,5 +197,57 @@ class ApprovalServiceTest {
 
         AppException ex = assertThrows(AppException.class, () -> approvalService.reject(approvalId, decisionRequest));
         assertEquals(ErrorCode.BAD_REQUEST, ex.getErrorCode());
+    }
+
+    @Test
+    void approve_WhenUserApproverDoesNotMatch_ShouldThrowUnauthorized() {
+        ApprovalRequest request = new ApprovalRequest();
+        request.setId(approvalId);
+        request.setResourceType(ResourceType.MEETING);
+        request.setResourceId(meetingId);
+        request.setStatus(ApprovalStatus.PENDING);
+
+        ApprovalStep step = new ApprovalStep();
+        User designatedUser = new User();
+        designatedUser.setId(UUID.randomUUID()); // Không trùng với caller.getId()
+        step.setApproverUser(designatedUser);
+
+        when(approvalRequestRepository.findById(approvalId)).thenReturn(Optional.of(request));
+        when(approvalStepRepository.findFirstByApprovalRequestIdAndDecisionOrderByStepNoAsc(approvalId, ApprovalDecision.PENDING))
+                .thenReturn(Optional.of(step));
+        when(currentUserService.getCurrentActiveUser()).thenReturn(caller);
+        when(currentUserService.hasRole(RoleName.SUPER_ADMIN)).thenReturn(false);
+
+        ApprovalDecisionRequest decisionRequest = new ApprovalDecisionRequest();
+        decisionRequest.setComment("Duyệt!");
+
+        AppException ex = assertThrows(AppException.class, () -> approvalService.approve(approvalId, decisionRequest));
+        assertEquals(ErrorCode.UNAUTHOZIZED, ex.getErrorCode());
+    }
+
+    @Test
+    void approve_WhenRoleApproverDoesNotMatch_ShouldThrowUnauthorized() {
+        ApprovalRequest request = new ApprovalRequest();
+        request.setId(approvalId);
+        request.setResourceType(ResourceType.MEETING);
+        request.setResourceId(meetingId);
+        request.setStatus(ApprovalStatus.PENDING);
+
+        ApprovalStep step = new ApprovalStep();
+        Role designatedRole = new Role();
+        designatedRole.setId(UUID.randomUUID()); // Không trùng với caller.getRole().getId()
+        step.setApproverRole(designatedRole);
+
+        when(approvalRequestRepository.findById(approvalId)).thenReturn(Optional.of(request));
+        when(approvalStepRepository.findFirstByApprovalRequestIdAndDecisionOrderByStepNoAsc(approvalId, ApprovalDecision.PENDING))
+                .thenReturn(Optional.of(step));
+        when(currentUserService.getCurrentActiveUser()).thenReturn(caller);
+        when(currentUserService.hasRole(RoleName.SUPER_ADMIN)).thenReturn(false);
+
+        ApprovalDecisionRequest decisionRequest = new ApprovalDecisionRequest();
+        decisionRequest.setComment("Phê duyệt");
+
+        AppException ex = assertThrows(AppException.class, () -> approvalService.approve(approvalId, decisionRequest));
+        assertEquals(ErrorCode.UNAUTHOZIZED, ex.getErrorCode());
     }
 }

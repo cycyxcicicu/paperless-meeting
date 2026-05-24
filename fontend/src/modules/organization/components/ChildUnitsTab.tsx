@@ -12,7 +12,7 @@ import { cn } from '@/common/utils/cn';
 import { Pagination } from '@/common/components/ui/app-pagination';
 
 interface ChildUnit {
-  id: number;
+  id: string;
   name: string;
   code: string;
   address: string;
@@ -29,8 +29,8 @@ interface ChildUnitsTabProps {
   units: ChildUnit[];
   label?: string;
   onAdd?: () => void;
-  onEdit?: (unitId: number) => void;
-  onDelete?: (unitId: number) => void;
+  onEdit?: (unitId: string) => void;
+  onDelete?: (unitId: string) => void;
 }
 
 export const ChildUnitsTab: React.FC<ChildUnitsTabProps> = ({
@@ -153,22 +153,28 @@ export const ChildUnitsTab: React.FC<ChildUnitsTabProps> = ({
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3 pt-5 border-t border-gray-100 relative z-10">
-                  <button
-                    onClick={() => onEdit?.(unit.id)}
-                    className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs heading text-amber-600 bg-amber-50/50 hover:bg-amber-100 transition-all border border-amber-100/50 shadow-sm"
-                  >
-                    <Edit className="h-3.5 w-3.5" />
-                    Chỉnh sửa
-                  </button>
-                  <button
-                    onClick={() => onDelete?.(unit.id)}
-                    className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs heading text-red-600 bg-red-50/50 hover:bg-red-100 transition-all border border-red-100/50 shadow-sm"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                    Xóa bỏ
-                  </button>
-                </div>
+                {(onEdit || onDelete) && (
+                  <div className="flex items-center gap-3 pt-5 border-t border-gray-100 relative z-10">
+                    {onEdit && (
+                      <button
+                        onClick={() => onEdit(unit.id)}
+                        className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs heading text-amber-600 bg-amber-50/50 hover:bg-amber-100 transition-all border border-amber-100/50 shadow-sm"
+                      >
+                        <Edit className="h-3.5 w-3.5" />
+                        Chỉnh sửa
+                      </button>
+                    )}
+                    {onDelete && (
+                      <button
+                        onClick={() => onDelete(unit.id)}
+                        className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs heading text-red-600 bg-red-50/50 hover:bg-red-100 transition-all border border-red-100/50 shadow-sm"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        Xóa bỏ
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             ))}
           </div>

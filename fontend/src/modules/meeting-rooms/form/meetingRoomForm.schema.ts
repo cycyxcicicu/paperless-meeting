@@ -16,7 +16,7 @@ export const createMeetingRoomFormSchema = (): FormFieldGroup[] => {
           col: 'col-span-1 md:col-span-2',
         },
         {
-          key: 'code',
+          key: 'roomCode',
           label: 'Mã phòng họp',
           showPlaceholder: false,
           type: 'text',
@@ -44,12 +44,12 @@ export const createMeetingRoomFormSchema = (): FormFieldGroup[] => {
           col: 'col-span-1 md:col-span-2',
         },
         {
-          key: 'status',
+          key: 'isActive',
           label: 'Trạng thái',
           type: 'select',
           options: [
-            { value: 'active', label: 'Đang hoạt động' },
-            { value: 'inactive', label: 'Ngừng hoạt động' },
+            { value: 'true', label: 'Đang hoạt động' },
+            { value: 'false', label: 'Ngừng hoạt động' },
           ],
           required: true,
           disabled: ({ mode }) => mode === 'view',

@@ -5,5 +5,6 @@ public enum NotificationType {
     PREPARATION_REMINDER,
     APPROVAL_REMINDER,
     SPEAKER_TURN_REMINDER,
+    RSVP_ALERT,
     GENERAL
 }

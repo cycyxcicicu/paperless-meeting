@@ -1,6 +1,7 @@
 package vn.acme.paperless_meeting.service.speaker;
 
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -55,12 +56,15 @@ public class SpeakerService {
     CurrentUserService currentUserService;
     AuditLogPublisher auditLogPublisher;
 
-    private void checkIsChair(UUID meetingId, UUID userId) {
+    // SPEAKER-06: Chỉ CHAIR hoặc SECRETARY mới được gọi/dừng lượt phát biểu
+    private void checkIsChairOrSecretary(UUID meetingId, UUID userId) {
         boolean isChair = meetingParticipantRepository.existsByMeetingIdAndUserIdAndParticipantRole(
                 meetingId, userId, ParticipantRole.CHAIR);
-        if (!isChair) {
-            throw new AppException(ErrorCode.UNAUTHOZIZED);
-        }
+        if (isChair) return;
+        boolean isSecretary = meetingParticipantRepository.existsByMeetingIdAndUserIdAndParticipantRole(
+                meetingId, userId, ParticipantRole.SECRETARY);
+        if (isSecretary) return;
+        throw new AppException(ErrorCode.UNAUTHOZIZED);
     }
 
     private void checkMeetingInProgress(Meeting meeting) {
@@ -68,11 +72,11 @@ public class SpeakerService {
             throw new AppException(ErrorCode.MEETING_STATUS_TRANSITION_INVALID);
         }
     }
-    
+
     private void checkIsParticipant(UUID meetingId, UUID userId) {
         boolean isParticipant = meetingParticipantRepository.existsByMeetingIdAndUserId(meetingId, userId);
         if (!isParticipant) {
-             throw new AppException(ErrorCode.UNAUTHOZIZED);
+            throw new AppException(ErrorCode.UNAUTHOZIZED);
         }
     }
 
@@ -87,10 +91,12 @@ public class SpeakerService {
         User caller = currentUserService.getCurrentActiveUser();
         checkIsParticipant(meetingId, caller.getId());
 
-        // Check already in queue
-        boolean alreadyPending = speakerQueueRepository.existsByMeetingIdAndUserIdAndQueueStatus(
+        // SPEAKER-03: Chặn spam — không cho đăng ký nếu đang QUEUED hoặc đang SPEAKING
+        boolean alreadyQueued = speakerQueueRepository.existsByMeetingIdAndUserIdAndQueueStatus(
                 meetingId, caller.getId(), SpeakerQueueStatus.QUEUED);
-        if (alreadyPending) {
+        boolean alreadySpeaking = speakerQueueRepository.existsByMeetingIdAndUserIdAndQueueStatus(
+                meetingId, caller.getId(), SpeakerQueueStatus.SPEAKING);
+        if (alreadyQueued || alreadySpeaking) {
             throw new AppException(ErrorCode.BAD_REQUEST);
         }
 
@@ -98,6 +104,18 @@ public class SpeakerService {
         if (agendaItemId != null) {
             agendaItem = agendaItemRepository.findById(agendaItemId)
                     .orElseThrow(() -> new AppException(ErrorCode.AGENDA_ITEM_NOT_FOUND));
+
+            // SPEAKER-04: Agenda phải thuộc đúng meeting này
+            if (!agendaItem.getMeeting().getId().equals(meetingId)) {
+                throw new AppException(ErrorCode.BAD_REQUEST);
+            }
+
+            // SPEAKER-09: Không cho đăng ký vào agenda đã DONE hoặc SKIPPED
+            vn.acme.paperless_meeting.entity.enums.AgendaItemStatus agendaStatus = agendaItem.getStatus();
+            if (agendaStatus == vn.acme.paperless_meeting.entity.enums.AgendaItemStatus.DONE
+                    || agendaStatus == vn.acme.paperless_meeting.entity.enums.AgendaItemStatus.SKIPPED) {
+                throw new AppException(ErrorCode.AGENDA_MODIFICATION_FORBIDDEN);
+            }
         }
 
         long count = speakerQueueRepository.findByMeetingIdAndQueueStatusOrderBySortOrderAscRequestedAtAsc(meetingId, SpeakerQueueStatus.QUEUED).size();
@@ -135,7 +153,7 @@ public class SpeakerService {
         User caller = currentUserService.getCurrentActiveUser();
         
         if (!queue.getUser().getId().equals(caller.getId())) {
-            checkIsChair(meetingId, caller.getId());
+            checkIsChairOrSecretary(meetingId, caller.getId());
             queue.setQueueStatus(SpeakerQueueStatus.REJECTED);
         } else {
             queue.setQueueStatus(SpeakerQueueStatus.CANCELLED);
@@ -168,7 +186,7 @@ public class SpeakerService {
     @Transactional
     public void reorderQueue(UUID meetingId, ReorderQueueRequest request) {
         User caller = currentUserService.getCurrentActiveUser();
-        checkIsChair(meetingId, caller.getId());
+        checkIsChairOrSecretary(meetingId, caller.getId());
 
         List<SpeakerQueue> currentQueue = speakerQueueRepository.findByMeetingIdAndQueueStatusOrderBySortOrderAscRequestedAtAsc(meetingId, SpeakerQueueStatus.QUEUED);
         
@@ -198,13 +216,18 @@ public class SpeakerService {
     @Transactional
     public SpeakerTurnResponse startTurn(UUID meetingId, UUID queueId, StartTurnRequest request) {
         User caller = currentUserService.getCurrentActiveUser();
-        checkIsChair(meetingId, caller.getId());
+        checkIsChairOrSecretary(meetingId, caller.getId());
 
         SpeakerQueue queue = speakerQueueRepository.findById(queueId)
                 .orElseThrow(() -> new AppException(ErrorCode.BAD_REQUEST));
 
+        // SPEAKER-05: Queue phải thuộc đúng meeting này
+        if (!queue.getMeeting().getId().equals(meetingId)) {
+            throw new AppException(ErrorCode.BAD_REQUEST);
+        }
+
         if (queue.getQueueStatus() != SpeakerQueueStatus.QUEUED) {
-             throw new AppException(ErrorCode.BAD_REQUEST);
+            throw new AppException(ErrorCode.BAD_REQUEST);
         }
         
         queue.setQueueStatus(SpeakerQueueStatus.SPEAKING);
@@ -234,11 +257,11 @@ public class SpeakerService {
         return mapToTurnResponse(turn);
     }
 
-    // 6. Cho phép phát biểu trực tiếp (Bypass)
+    // 6. Cho phép phát biểu trực tiếp (Bypass) — chỉ CHAIR/SECRETARY
     @Transactional
     public SpeakerTurnResponse startDirectTurn(UUID meetingId, StartDirectTurnRequest request) {
         User caller = currentUserService.getCurrentActiveUser();
-        checkIsChair(meetingId, caller.getId());
+        checkIsChairOrSecretary(meetingId, caller.getId());
 
         Meeting meeting = meetingRepository.findById(meetingId)
                 .orElseThrow(() -> new AppException(ErrorCode.MEETING_NOT_EXIST));
@@ -272,14 +295,19 @@ public class SpeakerService {
         return mapToTurnResponse(turn);
     }
 
-    // 7. Ép buộc dừng phát biểu sớm
+    // 7. Ép buộc dừng phát biểu sớm — chỉ CHAIR/SECRETARY
     @Transactional
     public SpeakerTurnResponse stopTurn(UUID meetingId, UUID turnId) {
         User caller = currentUserService.getCurrentActiveUser();
-        checkIsChair(meetingId, caller.getId());
+        checkIsChairOrSecretary(meetingId, caller.getId());
 
         SpeakerTurn turn = speakerTurnRepository.findById(turnId)
                 .orElseThrow(() -> new AppException(ErrorCode.BAD_REQUEST));
+
+        // SPEAKER-07: Turn phải thuộc đúng meeting này
+        if (!turn.getMeeting().getId().equals(meetingId)) {
+            throw new AppException(ErrorCode.BAD_REQUEST);
+        }
         
         if (turn.getEndAt() == null) {
             turn.setEndAt(LocalDateTime.now());
@@ -313,6 +341,35 @@ public class SpeakerService {
         return mapToTurnResponse(turn);
     }
 
+    // SPEAKER-08: Đóng tất cả queue và turn còn active khi meeting chuyển CLOSED
+    @Transactional
+    public void closeAllQueuesAndTurns(UUID meetingId) {
+        LocalDateTime now = LocalDateTime.now();
+
+        // Đóng tất cả queue đang QUEUED hoặc SPEAKING
+        List<SpeakerQueue> activeQueues = speakerQueueRepository.findByMeetingId(meetingId);
+        for (SpeakerQueue q : activeQueues) {
+            if (q.getQueueStatus() == SpeakerQueueStatus.QUEUED
+                    || q.getQueueStatus() == SpeakerQueueStatus.SPEAKING) {
+                q.setQueueStatus(SpeakerQueueStatus.EXPIRED);
+                speakerQueueRepository.save(q);
+            }
+        }
+
+        // Đóng tất cả turn chưa có endAt
+        List<SpeakerTurn> activeTurns = speakerTurnRepository.findByEndAtIsNull();
+        for (SpeakerTurn t : activeTurns) {
+            if (t.getMeeting().getId().equals(meetingId)) {
+                t.setEndAt(now);
+                long actualSeconds = ChronoUnit.SECONDS.between(t.getStartAt(), now);
+                t.setDurationSeconds(actualSeconds);
+                speakerTurnRepository.save(t);
+                log.info("Auto closed SpeakerTurn ID: {} on meeting CLOSED", t.getId());
+            }
+        }
+    }
+
+    // 4. Đổi vị trí hàng xếp hàng — chỉ CHAIR/SECRETARY
     private SpeakerQueueResponse mapToQueueResponse(SpeakerQueue q) {
         return SpeakerQueueResponse.builder()
                 .id(q.getId())

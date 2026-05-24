@@ -8,10 +8,11 @@ import { Button } from '@/common/components/ui/button';
 import { StatCard } from '@/common/components/ui/StatCard';
 import { roleApi } from '../services/role.api';
 import { permissionApi } from '../services/permission.api';
+import { getErrorMessage } from '@/lib/api/error';
 
 // Table Engine
 import { DataTable, DataToolbar, BulkActionDef } from '@/common/components/table-engine';
-import { Role, getRoleTableColumns, getRoleRowActions, getRoleFilters } from '@/modules/role/table/roleTableColumns';
+import { Role, getRoleTableColumns, getRoleRowActions } from '@/modules/role/table/roleTableColumns';
 
 const VaiTroPage = () => {
   // Pagination State
@@ -20,8 +21,7 @@ const VaiTroPage = () => {
 
   // Search & Filter State
   const [searchQuery, setSearchQuery] = useState('');
-  const [showFilters, setShowFilters] = useState(false);
-  const [filterValues, setFilterValues] = useState<Record<string, string>>({});
+  // Filters currently unused for Roles
 
   // Selection State
   const [selectedIds, setSelectedIds] = useState<string[]>([]); // UUID representation
@@ -43,15 +43,16 @@ const VaiTroPage = () => {
   // Dynamic roles state & tables mapping
   const [allRoles, setAllRoles] = useState<Role[]>([]);
   const [permissionMap, setPermissionMap] = useState<Record<string, string>>({});
+  const [stats, setStats] = useState({ totalRoles: 0, activeRoles: 0, usersWithoutRole: 0 });
 
-  const fetchRoles = async () => {
+  const fetchRoles = async (keyword?: string) => {
     try {
-      const res = await roleApi.getRoles();
+      const res = await roleApi.getRoles(keyword);
       if (res.success && res.data) {
         setAllRoles(res.data);
       }
     } catch (e: any) {
-      toast.error('Lỗi', 'Không thể tải danh sách vai trò');
+      toast.error('Lỗi', getErrorMessage(e, 'Không thể tải danh sách vai trò'));
     }
   };
 
@@ -70,44 +71,37 @@ const VaiTroPage = () => {
     }
   };
 
-  useEffect(() => {
-    fetchRoles();
-    fetchPermissionsForTable();
-  }, []);
-
-  // Compute Filtered Data
-  const filteredRoles = useMemo(() => {
-    return allRoles.filter(role => {
-      // 1. Search filter
-      if (searchQuery) {
-        const query = searchQuery.toLowerCase();
-        const matches =
-          role.roleName.toLowerCase().includes(query) ||
-          role.roleCode.toLowerCase().includes(query);
-        if (!matches) return false;
+  const fetchRoleStats = async () => {
+    try {
+      const res = await roleApi.getRoleStats();
+      if (res.success && res.data) {
+        setStats(res.data);
       }
-
-      return true;
-    });
-  }, [allRoles, searchQuery]);
-
-  // Compute Pagination
-  const totalItems = filteredRoles.length;
-  const totalPages = Math.ceil(totalItems / pageSize);
-  const currentRoles = filteredRoles.slice((currentPage - 1) * pageSize, currentPage * pageSize);
-
-  // Compute Stats
-  const activeRoles = filteredRoles.length; // Fake or standard length representation
-  const systemRoles = filteredRoles.filter(r => r.roleCode.startsWith('ROLE_SUPER') || r.roleCode.includes('ADMIN')).length;
-
-  // Handlers for Filters
-  const handleFilterChange = (key: string, val: string) => {
-    setFilterValues(prev => ({ ...prev, [key]: val }));
-    setCurrentPage(1);
+    } catch (e) {
+      // safe fallback
+    }
   };
 
+  useEffect(() => {
+    fetchPermissionsForTable();
+    fetchRoleStats();
+  }, []);
+
+  useEffect(() => {
+    fetchRoles(searchQuery);
+  }, [searchQuery]);
+
+  // Compute Pagination
+  const totalItems = allRoles.length;
+  const totalPages = Math.ceil(totalItems / pageSize);
+  const currentRoles = allRoles.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  // Compute Stats (fetched from backend)
+  const activeRoles = stats.activeRoles;
+  const usersWithoutRole = stats.usersWithoutRole;
+
+  // Handlers for Reset
   const handleResetFilters = () => {
-    setFilterValues({});
     setSearchQuery('');
     setCurrentPage(1);
   };
@@ -139,7 +133,10 @@ const VaiTroPage = () => {
   // Handlers for Actions
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    await fetchRoles();
+    await Promise.all([
+      fetchRoles(searchQuery),
+      fetchRoleStats()
+    ]);
     setIsRefreshing(false);
     toast.success('Làm mới thành công', 'Dữ liệu đã được cập nhật');
   };
@@ -157,7 +154,7 @@ const VaiTroPage = () => {
         toast.error('Lỗi', res.message || 'Không thể tải chi tiết vai trò');
       }
     } catch (e: any) {
-      toast.error('Lỗi', e.message || 'Không thể tải chi tiết vai trò');
+      toast.error('Lỗi', getErrorMessage(e, 'Không thể tải chi tiết vai trò'));
     }
   };
 
@@ -167,7 +164,7 @@ const VaiTroPage = () => {
     (role) => setDeleteModal({ isOpen: true, role })
   ), []);
 
-  const tableFilters = useMemo(() => getRoleFilters(), []);
+  // Filter configuration (Empty for now)
 
   const bulkActions: BulkActionDef[] = useMemo(() => [
     {
@@ -204,10 +201,11 @@ const VaiTroPage = () => {
           toast.success('Cập nhật vai trò thành công', `Thông tin vai trò "${roleData.roleName}" đã được cập nhật`);
         }
       }
-      fetchRoles();
+      fetchRoles(searchQuery);
+      fetchRoleStats();
       setRoleFormModal({ isOpen: false, mode: 'create' });
     } catch (error: any) {
-      toast.error('Lỗi lưu trữ', error.message || 'Không thể thực thi lệnh');
+      toast.error('Lỗi lưu trữ', getErrorMessage(error, 'Không thể thực thi lệnh'));
     }
   };
 
@@ -218,9 +216,10 @@ const VaiTroPage = () => {
         if (res.success) {
           toast.success('Xóa vai trò thành công', `Đã xóa vai trò "${deleteModal.role.roleName}" khỏi hệ thống`);
         }
-        fetchRoles();
+        fetchRoles(searchQuery);
+        fetchRoleStats();
       } catch (error: any) {
-        toast.error('Lỗi xóa vai trò', error.message || 'Họ tên hoặc vai trò đang được dùng');
+        toast.error('Lỗi xóa vai trò', getErrorMessage(error, 'Không thể xóa vai trò'));
       }
     }
     setDeleteModal({ isOpen: false });
@@ -249,20 +248,20 @@ const VaiTroPage = () => {
           <div className="grid grid-cols-3 gap-4 mb-6">
             <StatCard
               title="Tổng số vai trò"
-              value={totalItems}
+              value={stats.totalRoles}
               icon={<Shield />}
               color="blue"
               hasFilters={activeFiltersCount > 0}
             />
             <StatCard
-              title="Đang hoạt động"
+              title="Đang được sử dụng"
               value={activeRoles}
               icon={<ShieldCheck />}
               color="emerald"
             />
             <StatCard
-              title="Vai trò hệ thống"
-              value={systemRoles}
+              title="Tài khoản chưa có vai trò"
+              value={usersWithoutRole}
               icon={<Key />}
               color="purple"
             />
@@ -274,11 +273,7 @@ const VaiTroPage = () => {
               searchQuery={searchQuery}
               onSearchChange={(val) => { setSearchQuery(val); setCurrentPage(1); }}
               searchPlaceholder="Tìm kiếm theo tên vai trò, mã vai trò..."
-              filters={tableFilters}
-              filterValues={filterValues}
-              onFilterChange={handleFilterChange}
-              showFilters={showFilters}
-              onToggleFilters={() => setShowFilters(!showFilters)}
+              // Unused filter configurations removed
               onResetFilters={handleResetFilters}
               activeFiltersCount={activeFiltersCount}
               activeFilterTags={activeFilterTags}

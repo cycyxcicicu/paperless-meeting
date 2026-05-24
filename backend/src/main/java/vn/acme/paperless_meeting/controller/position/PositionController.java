@@ -3,6 +3,7 @@ package vn.acme.paperless_meeting.controller.position;
 import java.util.List;
 import java.util.UUID;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -10,6 +11,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import jakarta.validation.Valid;
@@ -17,6 +19,7 @@ import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import vn.acme.paperless_meeting.dto.base.ApiResponse;
+import vn.acme.paperless_meeting.dto.base.PageResponse;
 import vn.acme.paperless_meeting.dto.request.position.PositionUpsertRequest;
 import vn.acme.paperless_meeting.dto.response.position.PositionResponse;
 import vn.acme.paperless_meeting.service.position.PositionService;
@@ -33,13 +36,29 @@ public class PositionController {
      * Get all positions
      */
     @GetMapping
-    public ApiResponse<List<PositionResponse>> findAll() {
-        return ApiResponse.<List<PositionResponse>>builder()
+    public ApiResponse<PageResponse<PositionResponse>> findAll(
+            @RequestParam(required = false) String search,
+            Pageable pageable
+    ) {
+        return ApiResponse.<PageResponse<PositionResponse>>builder()
                 .success(true)
                 .message("Lấy danh sách chức vụ thành công")
-                .data(positionService.findAll())
+                .data(positionService.findAll(search, pageable))
                 .build();
     }
+
+    /**
+     * Get position stats
+     */
+    @GetMapping("/stats")
+    public ApiResponse<vn.acme.paperless_meeting.dto.response.position.PositionStatsResponse> getStats() {
+        return ApiResponse.<vn.acme.paperless_meeting.dto.response.position.PositionStatsResponse>builder()
+                .success(true)
+                .message("Lấy thông số thống kê chức vụ thành công")
+                .data(positionService.getStats())
+                .build();
+    }
+
 
     /**
      * Get position by id
@@ -50,18 +69,6 @@ public class PositionController {
                 .success(true)
                 .message("Lấy thông tin chức vụ thành công")
                 .data(positionService.findById(id))
-                .build();
-    }
-
-    /**
-     * Get all positions of a department
-     */
-    @GetMapping("/department/{departmentId}")
-    public ApiResponse<List<PositionResponse>> findByDepartmentId(@PathVariable UUID departmentId) {
-        return ApiResponse.<List<PositionResponse>>builder()
-                .success(true)
-                .message("Lấy danh sách chức vụ theo phòng ban thành công")
-                .data(positionService.findByDepartmentId(departmentId))
                 .build();
     }
 

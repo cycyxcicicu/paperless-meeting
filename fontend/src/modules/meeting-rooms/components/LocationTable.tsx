@@ -16,6 +16,8 @@ import {
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
+import { useAuth } from '@/app/context/AuthContext';
+
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
@@ -23,12 +25,11 @@ function cn(...inputs: ClassValue[]) {
 export interface MeetingLocation {
   id: string;
   name: string;
-  code: string;
-  building: string;
-  floor: string;
+  roomCode: string;
+  address: string;
   capacity: number;
-  facilities: string[];
-  status: 'active' | 'inactive';
+  departmentId: string | null;
+  isActive: boolean;
   lastUsed?: string;
 }
 
@@ -47,14 +48,9 @@ const facilityIcons: Record<string, React.ElementType> = {
   coffee: Coffee,
 };
 
-export const LocationTable: React.FC<LocationTableProps> = ({
-  locations,
-  onEdit,
-  onDelete,
-  onView,
-  currentPage,
-  pageSize,
-}) => {
+  const { user } = useAuth();
+  const isSuperAdmin = user?.role?.roleCode === 'SUPER_ADMIN';
+
   return (
     <div className="overflow-hidden">
       <div className="overflow-x-auto">
@@ -73,7 +69,7 @@ export const LocationTable: React.FC<LocationTableProps> = ({
               </th>
               <th className="px-6 py-3.5 text-left">
                 <span className="text-xs heading text-gray-500 uppercase tracking-wider">
-                  Vị trí
+                  Vị trí / Địa chỉ
                 </span>
               </th>
               <th className="px-6 py-3.5 text-center">
@@ -81,8 +77,11 @@ export const LocationTable: React.FC<LocationTableProps> = ({
                   Sức chứa
                 </span>
               </th>
-
-
+              <th className="px-6 py-3.5 text-center">
+                <span className="text-xs heading text-gray-500 uppercase tracking-wider">
+                  Loại phòng
+                </span>
+              </th>
               <th className="px-6 py-3.5 text-center">
                 <span className="text-xs heading text-gray-500 uppercase tracking-wider">
                   Thao tác
@@ -93,6 +92,8 @@ export const LocationTable: React.FC<LocationTableProps> = ({
           <tbody className="divide-y divide-gray-100">
             {locations.map((location, index) => {
               const absoluteIndex = (currentPage - 1) * pageSize + index + 1;
+              const isSystemRoom = location.departmentId === null;
+              const canModify = isSuperAdmin || !isSystemRoom;
 
               return (
                 <tr
@@ -117,7 +118,7 @@ export const LocationTable: React.FC<LocationTableProps> = ({
                           {location.name}
                         </span>
                         <code className="text-xs text-gray-400 body">
-                          {location.code}
+                          {location.roomCode}
                         </code>
                       </div>
                     </div>
@@ -126,10 +127,10 @@ export const LocationTable: React.FC<LocationTableProps> = ({
                   {/* Location Info */}
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2 text-sm text-gray-600">
-                      <Building2 className="h-4 w-4 text-gray-400" />
-                      <span className="body">{location.building}</span>
-                      <span className="text-gray-400">•</span>
-                      <span className="text-gray-500">{location.floor}</span>
+                      <Building2 className="h-4 w-4 text-gray-400 truncate" />
+                      <span className="body truncate max-w-[200px]" title={location.address}>
+                        {location.address}
+                      </span>
                     </div>
                   </td>
 
@@ -141,9 +142,18 @@ export const LocationTable: React.FC<LocationTableProps> = ({
                     </div>
                   </td>
 
-
-
-
+                  {/* Room Type Tag */}
+                  <td className="px-6 py-4 text-center">
+                    {isSystemRoom ? (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-50 text-purple-700 border border-purple-200">
+                        Phòng hệ thống
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-50 text-gray-700 border border-gray-200">
+                        Phòng nội bộ
+                      </span>
+                    )}
+                  </td>
 
                   {/* Actions */}
                   <td className="px-6 py-4">
@@ -155,20 +165,42 @@ export const LocationTable: React.FC<LocationTableProps> = ({
                       >
                         <Eye className="h-4 w-4" />
                       </button>
-                      <button
-                        onClick={() => onEdit(location.id)}
-                        className="w-8 h-8 flex items-center justify-center rounded-lg bg-white border border-gray-200 text-gray-500 hover:text-amber-600 hover:border-amber-300 hover:bg-amber-50 transition-all"
-                        title="Chỉnh sửa"
-                      >
-                        <Edit3 className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={() => onDelete(location.id)}
-                        className="w-8 h-8 flex items-center justify-center rounded-lg bg-white border border-gray-200 text-gray-500 hover:text-red-600 hover:border-red-300 hover:bg-red-50 transition-all"
-                        title="Xóa"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      
+                      {canModify ? (
+                        <>
+                          <button
+                            onClick={() => onEdit(location.id)}
+                            className="w-8 h-8 flex items-center justify-center rounded-lg bg-white border border-gray-200 text-gray-500 hover:text-amber-600 hover:border-amber-300 hover:bg-amber-50 transition-all"
+                            title="Chỉnh sửa"
+                          >
+                            <Edit3 className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => onDelete(location.id)}
+                            className="w-8 h-8 flex items-center justify-center rounded-lg bg-white border border-gray-200 text-gray-500 hover:text-red-600 hover:border-red-300 hover:bg-red-50 transition-all"
+                            title="Xóa"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            disabled
+                            className="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-50 border border-gray-100 text-gray-300 cursor-not-allowed"
+                            title="Không thể sửa phòng chung hệ thống"
+                          >
+                            <Edit3 className="h-4 w-4" />
+                          </button>
+                          <button
+                            disabled
+                            className="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-50 border border-gray-100 text-gray-300 cursor-not-allowed"
+                            title="Không thể xóa phòng chung hệ thống"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </>
+                      )}
                     </div>
                   </td>
                 </tr>

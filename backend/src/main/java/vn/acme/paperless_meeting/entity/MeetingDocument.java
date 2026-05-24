@@ -44,7 +44,13 @@ public class MeetingDocument {
     @Column(name = "usage_type")
     private MeetingDocumentUsageType usageType;
 
+    @Column(name = "sort_order")
+    private Integer sortOrder;
+
     private Boolean requiredBeforeMeeting;
+
+    @Column(name = "is_confidential")
+    private Boolean isConfidential = false;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "meeting_id", nullable = false)

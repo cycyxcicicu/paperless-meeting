@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import jakarta.validation.Valid;
@@ -19,6 +20,7 @@ import lombok.experimental.FieldDefaults;
 import vn.acme.paperless_meeting.dto.base.ApiResponse;
 import vn.acme.paperless_meeting.dto.request.role.RoleUpsertRequest;
 import vn.acme.paperless_meeting.dto.response.role.RoleResponse;
+import vn.acme.paperless_meeting.dto.response.role.RoleStatsResponse;
 import vn.acme.paperless_meeting.service.role.RoleService;
 
 @RestController
@@ -29,11 +31,20 @@ public class RoleController {
     RoleService roleService;
 
     @GetMapping
-    public ApiResponse<List<RoleResponse>> findAll() {
+    public ApiResponse<List<RoleResponse>> findAll(@RequestParam(required = false) String keyword) {
         return ApiResponse.<List<RoleResponse>>builder()
                 .success(true)
                 .message("Lấy danh sách vai trò thành công")
-                .data(roleService.findAll())
+                .data(roleService.findAll(keyword))
+                .build();
+    }
+
+    @GetMapping("/stats")
+    public ApiResponse<RoleStatsResponse> getStats() {
+        return ApiResponse.<RoleStatsResponse>builder()
+                .success(true)
+                .message("Lấy thống kê vai trò thành công")
+                .data(roleService.getRoleStats())
                 .build();
     }
 

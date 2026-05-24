@@ -13,12 +13,8 @@ import vn.acme.paperless_meeting.entity.enums.DepartmentStatus;
 @Getter
 @Setter
 public class DepartmentUpsertRequest {
-    @NotBlank(message = "DEPARTMENT_NAME_REQUIRED")
-    @Size(min = 3, max = 100, message = "NAME_INVALID")
     private String deptName;
 
-    @NotBlank(message = "DEPARTMENT_CODE_REQUIRED")
-    @Size(min = 1, max = 50, message = "CODE_INVALID")
     private String code;
 
     @NotNull(message = "DEPARTMENT_STATUS_REQUIRED")

@@ -18,4 +18,13 @@ public class SubmitApprovalRequest {
     private UUID resourceId;
 
     private String note;
+
+    private UUID approverUserId;
+    private UUID approverRoleId;
+
+    @jakarta.validation.constraints.AssertTrue(message = "Vui lòng chọn chính xác một Người duyệt hoặc một Chức vụ duyệt")
+    private boolean isApproverValid() {
+        return (approverUserId != null) ^ (approverRoleId != null);
+    }
 }
+

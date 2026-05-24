@@ -7,6 +7,8 @@ import org.hibernate.annotations.SQLDelete;
 import org.hibernate.annotations.SQLRestriction;
 
 import jakarta.persistence.Entity;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.EnumType;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -14,6 +16,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import lombok.AllArgsConstructor;
+import vn.acme.paperless_meeting.entity.enums.PositionRole;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -24,7 +27,7 @@ import vn.acme.paperless_meeting.entity.base.SoftDeletable;
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
-@SQLDelete(sql = "UPDATE positions SET is_deleted = true, deleted_at = CURRENT_TIMESTAMP WHERE id = ? AND is_deleted = false")
+@SQLDelete(sql = "UPDATE position SET is_deleted = true, deleted_at = CURRENT_TIMESTAMP WHERE id = ? AND is_deleted = false")
 @SQLRestriction("is_deleted = false")
 public class Position extends SoftDeletable {
 
@@ -36,6 +39,8 @@ public class Position extends SoftDeletable {
     String positionCode;
     Integer rankOrder;
     Boolean isLeadership;
+    @Enumerated(EnumType.STRING)
+    PositionRole positionRole;
     String description;
     LocalDateTime createdAt;
     LocalDateTime updatedAt;

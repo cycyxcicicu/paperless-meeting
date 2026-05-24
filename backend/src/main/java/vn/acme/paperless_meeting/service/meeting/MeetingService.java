@@ -43,8 +43,10 @@ import vn.acme.paperless_meeting.service.auth.CurrentUserService;
 import vn.acme.paperless_meeting.service.department.DepartmentService;
 import vn.acme.paperless_meeting.specification.meeting.MeetingSpecification;
 
+import org.springframework.context.annotation.Lazy;
 import vn.acme.paperless_meeting.event.audit.AuditLogPublisher;
 import vn.acme.paperless_meeting.entity.enums.AuditAction;
+import vn.acme.paperless_meeting.service.speaker.SpeakerService;
 import java.util.Map;
 
 @Slf4j
@@ -52,6 +54,24 @@ import java.util.Map;
 @RequiredArgsConstructor
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 public class MeetingService {
+
+    // SpeakerService inject riêng bằng setter để tránh circular dependency
+    @lombok.experimental.NonFinal
+    private SpeakerService speakerService;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setSpeakerService(@Lazy SpeakerService speakerService) {
+        this.speakerService = speakerService;
+    }
+
+    // MotionService inject riêng bằng setter để tránh circular dependency
+    @lombok.experimental.NonFinal
+    private vn.acme.paperless_meeting.service.motion.MotionService motionService;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setMotionService(@Lazy vn.acme.paperless_meeting.service.motion.MotionService motionService) {
+        this.motionService = motionService;
+    }
 
     MeetingRepository meetingRepository;
     MeetingMapper meetingMapper;
@@ -136,7 +156,7 @@ public class MeetingService {
             throw new AppException(ErrorCode.UNAUTHOZIZED);
         }
 
-        validateMeetingTime(request.getStartTime(), request.getEndTime());
+        validateMeetingTime(request);
         validateLocationConflict(null, request.getLocationId(), request.getStartTime(), request.getEndTime());
 
         User caller = currentUserService.getCurrentActiveUser();
@@ -184,7 +204,7 @@ public class MeetingService {
             throw new AppException(ErrorCode.MEETING_STATUS_TRANSITION_INVALID);
         }
 
-        validateMeetingTime(request.getStartTime(), request.getEndTime());
+        validateMeetingTime(request);
         validateLocationConflict(id, request.getLocationId(), request.getStartTime(), request.getEndTime());
 
         Department department = departmentRepository.findById(request.getDepartmentId())
@@ -208,10 +228,18 @@ public class MeetingService {
     }
 
     /**
-     * Trình duyệt cuộc họp. Chuyển trạng thái sang CHỜ PHÊ DUYỆT.
+     * Trình duyệt cuộc họp. Cần ID đích danh người duyệt
      */
     @Transactional
     public void submitForApproval(UUID id) {
+        submitForApproval(id, null, null);
+    }
+
+    /**
+     * Trình duyệt cuộc họp. Chuyển trạng thái sang CHỜ PHÊ DUYỆT.
+     */
+    @Transactional
+    public void submitForApproval(UUID id, UUID approverUserId, UUID approverRoleId) {
         Meeting meeting = getMeeting(id);
         requireEditPermission(meeting);
 
@@ -240,7 +268,7 @@ public class MeetingService {
             throw new AppException(ErrorCode.MEETING_SECRETARY_REQUIRED);
         }
 
-        approvalService.submitResource(ResourceType.MEETING, id, null);
+        approvalService.submitResource(ResourceType.MEETING, id, null, approverUserId, approverRoleId);
     }
 
     /**
@@ -322,7 +350,42 @@ public class MeetingService {
         meeting.setStatus(MeetingStatus.CLOSED);
         meetingRepository.save(meeting);
 
+        // SPEAKER-08: Đóng tất cả hàng chờ và lượt phát biểu còn active
+        speakerService.closeAllQueuesAndTurns(id);
+        
+        // VOTE-14: Đóng tất cả phiên biểu quyết còn mở
+        motionService.closeAllOpenVoteSessions(id);
+
         auditLogPublisher.publish(currentUserService.getCurrentActiveUser(), AuditAction.CLOSE_MEETING, ResourceType.MEETING, meeting.getId(), Map.of("title", String.valueOf(meeting.getTitle())));
+    }
+
+    /**
+     * Xóa cuộc họp NHÁP. Dữ liệu sẽ được ẩn bằng soft delete.
+     */
+    @Transactional
+    public void delete(UUID id) {
+        Meeting meeting = getMeeting(id);
+        requireEditPermission(meeting);
+        if (meeting.getStatus() != MeetingStatus.DRAFT) {
+            throw new AppException(ErrorCode.MEETING_ONLY_DRAFT_ALLOWED);
+        }
+        meetingRepository.delete(meeting);
+        auditLogPublisher.publish(currentUserService.getCurrentActiveUser(), AuditAction.DELETE_MEETING, ResourceType.MEETING, meeting.getId(), Map.of("title", String.valueOf(meeting.getTitle())));
+    }
+
+    /**
+     * Khôi phục cuộc họp đã bị xóa.
+     */
+    @Transactional
+    public void restore(UUID id) {
+        Meeting meeting = meetingRepository.findByIdIncludingDeleted(id)
+                .orElseThrow(() -> new AppException(ErrorCode.MEETING_NOT_EXIST));
+        requireEditPermission(meeting);
+        if (meeting.getIsDeleted() == null || !meeting.getIsDeleted()) {
+            throw new AppException(ErrorCode.BAD_REQUEST);
+        }
+        meetingRepository.restoreMeetingNative(id);
+        auditLogPublisher.publish(currentUserService.getCurrentActiveUser(), AuditAction.UPDATE_MEETING, ResourceType.MEETING, meeting.getId(), Map.of("title", String.valueOf(meeting.getTitle()), "action", "RESTORE"));
     }
 
     /**
@@ -336,12 +399,20 @@ public class MeetingService {
     /**
      * Xác thực thời gian họp (phải lên lịch trước ít nhất 30 phút, kết thúc sau bắt đầu).
      */
-    private void validateMeetingTime(LocalDateTime start, LocalDateTime end) {
+    private void validateMeetingTime(MeetingUpsertRequest request) {
+        LocalDateTime start = request.getStartTime();
+        LocalDateTime end = request.getEndTime();
         if (start == null || end == null || !end.isAfter(start)) {
             throw new AppException(ErrorCode.MEETING_INVALID_TIME_RANGE);
         }
         if (start.isBefore(LocalDateTime.now().plusMinutes(30))) {
             throw new AppException(ErrorCode.MEETING_MUST_BE_SCHEDULED_BEFORE_30_MINUTES);
+        }
+        
+        if (request.getRsvpDeadline() == null) {
+            request.setRsvpDeadline(start);
+        } else if (request.getRsvpDeadline().isAfter(start)) {
+            throw new AppException(ErrorCode.MEETING_INVALID_RSVP_DEADLINE);
         }
     }
 

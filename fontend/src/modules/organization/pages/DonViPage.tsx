@@ -1,7 +1,7 @@
 import React from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { PageHeader } from "@/common/components/layout/PageHeader";
-import { Users, Building2, Building, Check, ChevronDown, ChevronRight, X } from "lucide-react";
+import { Building2, Building, Check, ChevronDown, ChevronRight, X } from "lucide-react";
 import { UnitInfoTab } from "@/modules/organization/components/UnitInfoTab";
 import { ChildUnitsTab } from "@/modules/organization/components/ChildUnitsTab";
 import { UnitUsersTab } from "@/modules/organization/components/UnitUsersTab";
@@ -12,18 +12,18 @@ import { DeleteUnitModal } from "@/modules/organization/components/DeleteUnitMod
 import { cn } from "@/common/utils/cn";
 import { StatCard } from "@/common/components/ui/StatCard";
 import { useDonVi } from "../hooks/useDonVi";
-import { TreeNode } from "../data/mockData";
+import { TreeNode } from "../types";
 
 const DonViPage = () => {
     const {
-        searchQuery, setSearchQuery,
-        filterStatus, setFilterStatus,
+        canEditUser, canDeleteUser, canAddUser, canEditUnit, canDeleteUnit, canAddUnit,
         selectedTreeNode, activeTab, setActiveTab,
         isPanelOpen, isLoadingDetail,
         treeData,
         totalItems, activeUnits, activeFiltersCount,
         selectedNode, currentUnitDetails,
         currentChildUnits, currentUnitUsers,
+        userTotal, userPage, setUserPage, userPageSize, setUserPageSize, userSearch, setUserSearch,
         childUnitTypeLabel, detailTabs,
         userFormModal, deleteUserModal, unitFormModal, deleteUnitModal,
         userFormData, deleteUserData, unitFormData, deleteUnitData,
@@ -36,7 +36,6 @@ const DonViPage = () => {
         handleOpenAddUnitModal, handleOpenEditUnitModal, handleOpenDeleteUnitModal,
         handleCloseUnitFormModal, handleCloseDeleteUnitModal,
         handleSubmitUnitForm, handleConfirmDeleteUnit,
-        findNodeById,
     } = useDonVi();
 
     const renderTreeNode = (node: TreeNode): React.ReactNode => {
@@ -234,24 +233,34 @@ const DonViPage = () => {
                                                     className="h-full flex flex-col min-h-[400px]"
                                                 >
                                                     {activeTab === "info" && currentUnitDetails && (
-                                                        <UnitInfoTab unit={currentUnitDetails} />
+                                                        <UnitInfoTab 
+                                                            unit={currentUnitDetails}
+                                                            onEdit={canEditUnit ? handleOpenEditUnitModal : undefined}
+                                                        />
                                                     )}
                                                     {activeTab === "child-units" && (
                                                         <ChildUnitsTab
                                                             units={currentChildUnits}
                                                             label={childUnitTypeLabel}
-                                                            onAdd={handleOpenAddUnitModal}
-                                                            onEdit={handleOpenEditUnitModal}
-                                                            onDelete={handleOpenDeleteUnitModal}
+                                                            onAdd={canAddUnit ? handleOpenAddUnitModal : undefined}
+                                                            onEdit={canEditUnit ? handleOpenEditUnitModal : undefined}
+                                                            onDelete={canDeleteUnit ? handleOpenDeleteUnitModal : undefined}
                                                         />
                                                     )}
                                                     {activeTab === "users" && (
                                                         <UnitUsersTab
                                                             users={currentUnitUsers}
-                                                            onAdd={handleAddUser}
+                                                            totalItems={userTotal}
+                                                            currentPage={userPage}
+                                                            pageSize={userPageSize}
+                                                            searchQuery={userSearch}
+                                                            onPageChange={setUserPage}
+                                                            onPageSizeChange={setUserPageSize}
+                                                            onSearchChange={setUserSearch}
+                                                            onAdd={canAddUser ? handleAddUser : undefined}
                                                             onView={handleViewUser}
-                                                            onEdit={handleEditUser}
-                                                            onDelete={handleDeleteUser}
+                                                            onEdit={canEditUser ? handleEditUser : undefined}
+                                                            onDelete={canDeleteUser ? handleDeleteUser : undefined}
                                                         />
                                                     )}
                                                 </motion.div>

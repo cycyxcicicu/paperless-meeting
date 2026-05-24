@@ -22,6 +22,7 @@ import vn.acme.paperless_meeting.dto.base.PageResponse;
 import vn.acme.paperless_meeting.dto.request.user.UserCreateRequest;
 import vn.acme.paperless_meeting.dto.request.user.UserUpdateRequest;
 import vn.acme.paperless_meeting.dto.response.user.UserResponse;
+import vn.acme.paperless_meeting.dto.response.user.UserStatsResponse;
 import vn.acme.paperless_meeting.service.User.UserService;
 
 @RestController
@@ -41,18 +42,27 @@ public class UserCrudController {
                 .build();
     }
 
+    @GetMapping("/stats")
+    public ApiResponse<UserStatsResponse> getStats() {
+        return ApiResponse.<UserStatsResponse>builder()
+                .success(true)
+                .message("Lấy thông số thống kê người dùng thành công")
+                .data(userService.getStats())
+                .build();
+    }
+
     @GetMapping
     public ApiResponse<PageResponse<UserResponse>> findAll(
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) String status,
-            @RequestParam(required = false) String role,
             @RequestParam(required = false, name = "departmentId") UUID departmentId,
+            @RequestParam(required = false, name = "roleCode") String roleCode,
             Pageable pageable) {
         return ApiResponse.<PageResponse<UserResponse>>builder()
-                .success(true)
-                .message("Lấy danh sách người dùng thành công")
-                .data(userService.findAll(keyword, status, role, departmentId, pageable))
-                .build();
+            .success(true)
+            .message("Lấy danh sách người dùng thành công")
+            .data(userService.findAll(keyword, status, departmentId, roleCode, pageable))
+            .build();
     }
 
     @GetMapping("/{id}")

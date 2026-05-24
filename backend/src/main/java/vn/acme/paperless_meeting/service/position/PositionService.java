@@ -12,8 +12,13 @@ import org.springframework.transaction.annotation.Transactional;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+
+import vn.acme.paperless_meeting.dto.base.PageResponse;
 import vn.acme.paperless_meeting.dto.request.position.PositionUpsertRequest;
 import vn.acme.paperless_meeting.dto.response.position.PositionResponse;
+import vn.acme.paperless_meeting.dto.response.position.PositionStatsResponse;
 import vn.acme.paperless_meeting.entity.Department;
 import vn.acme.paperless_meeting.entity.Position;
 import vn.acme.paperless_meeting.entity.User;
@@ -24,6 +29,7 @@ import vn.acme.paperless_meeting.exceptions.ErrorCode;
 import vn.acme.paperless_meeting.mapper.position.PositionMapper;
 import vn.acme.paperless_meeting.repository.DepartmentRepository;
 import vn.acme.paperless_meeting.repository.PositionRepository;
+import vn.acme.paperless_meeting.repository.UserRepository;
 import vn.acme.paperless_meeting.service.auth.CurrentUserService;
 import vn.acme.paperless_meeting.service.department.DepartmentService;
 
@@ -34,52 +40,75 @@ public class PositionService {
 
     PositionRepository positionRepository;
     DepartmentRepository departmentRepository;
+    UserRepository userRepository;
     PositionMapper positionMapper;
     CurrentUserService currentUserService;
     DepartmentService departmentService;
 
-    public List<PositionResponse> findAll() {
+    public PageResponse<PositionResponse> findAll(String search, Pageable pageable) {
+        Page<Position> pageData;
         if (currentUserService.hasRole(RoleName.SUPER_ADMIN)) {
-            // SUPER_ADMIN: only sees system positions by default
-            return positionRepository.findByDepartmentIsNull().stream()
-                    .map(positionMapper::toResponseWithDepartment)
-                    .toList();
+            // SUPER_ADMIN: mặc định chỉ thấy trạng thái hệ thống (chức vụ dùng chung)
+            pageData = positionRepository.findSystemPositionsWithSearch(search, pageable);
         } else {
-            // DEPARTMENT_ADMIN: sees system positions + their allowed department positions
+            // DEPARTMENT_ADMIN: thấy các chức vụ dùng chung + các chức vụ thuộc đơn vị quản lý
             User caller = currentUserService.getCurrentActiveUser();
             UUID callerDeptId = caller.getDepartment() != null ? caller.getDepartment().getId() : null;
             if (callerDeptId == null) {
-                return List.of(); // No access
+                return PageResponse.<PositionResponse>builder()
+                        .content(List.of())
+                        .page(pageable.getPageNumber())
+                        .size(pageable.getPageSize())
+                        .totalElements(0)
+                        .totalPages(0)
+                        .last(true)
+                        .build();
             }
             List<UUID> allowedDeptIds = departmentService.getAllSubDepartmentIds(callerDeptId);
-            return positionRepository.findSystemAndAllowedPositions(allowedDeptIds).stream()
-                    .map(positionMapper::toResponseWithDepartment)
-                    .toList();
+            pageData = positionRepository.findSystemAndAllowedPositionsWithSearch(allowedDeptIds, search, pageable);
         }
+
+        List<PositionResponse> responses = pageData.getContent().stream()
+                .map(positionMapper::toResponseWithDepartment)
+                .toList();
+
+        return PageResponse.<PositionResponse>builder()
+                .content(responses)
+                .page(pageData.getNumber())
+                .size(pageData.getSize())
+                .totalElements(pageData.getTotalElements())
+                .totalPages(pageData.getTotalPages())
+                .last(pageData.isLast())
+                .build();
     }
+
+    public PositionStatsResponse getStats() {
+        long totalPositions = 0;
+        long totalUsers = 0;
+
+        if (currentUserService.hasRole(RoleName.SUPER_ADMIN)) {
+            totalPositions = positionRepository.countByDepartmentIsNull(); 
+            totalUsers = userRepository.countUsersWithPosition();
+        } else {
+            User caller = currentUserService.getCurrentActiveUser();
+            UUID callerDeptId = caller.getDepartment() != null ? caller.getDepartment().getId() : null;
+            if (callerDeptId != null) {
+                List<UUID> allowedDeptIds = departmentService.getAllSubDepartmentIds(callerDeptId);
+                totalPositions = positionRepository.countSystemAndAllowedPositions(allowedDeptIds);
+                totalUsers = userRepository.countUsersWithPositionInDepartments(allowedDeptIds);
+            }
+        }
+
+        return PositionStatsResponse.builder()
+                .totalPositions(totalPositions)
+                .totalUsers(totalUsers)
+                .build();
+    }
+
 
     public PositionResponse findById(UUID id) {
         return positionMapper.toResponseWithDepartment(getPosition(id));
     }
-    public List<PositionResponse> findByDepartmentId(UUID departmentId) {
-        // Validate department exists
-        departmentRepository.findById(departmentId)
-                .orElseThrow(() -> new AppException(ErrorCode.DEPARTMENT_NOT_EXIST));
-
-        if (!currentUserService.hasRole(RoleName.SUPER_ADMIN)) {
-            User caller = currentUserService.getCurrentActiveUser();
-            UUID callerDeptId = caller.getDepartment() != null ? caller.getDepartment().getId() : null;
-            if (callerDeptId == null || !departmentService.getAllSubDepartmentIds(callerDeptId).contains(departmentId)) {
-                throw new AppException(ErrorCode.UNAUTHOZIZED);
-            }
-        }
-
-        // Return both System positions (null) and this specific department's positions
-        return positionRepository.findSystemAndAllowedPositions(List.of(departmentId)).stream()
-                .map(positionMapper::toResponseWithDepartment)
-                .toList();
-    }
-
 
     @Transactional
     public PositionResponse create(PositionUpsertRequest request) {
@@ -94,27 +123,31 @@ public class PositionService {
                 throw new AppException(ErrorCode.UNAUTHOZIZED);
             }
             department = caller.getDepartment();
-        } else {
-            // SUPER_ADMIN: nếu có phòng ban thì gán, không thì tạo position hệ thống (department = null)
-            if (callerDeptId != null) {
-                department = caller.getDepartment();
-            }
         }
+        // SUPER_ADMIN luôn tạo chức vụ hệ thống (department = null) dù họ có thuộc phòng ban nào hay không.
 
         // Validate duplicates
         Map<String, String> errors = new HashMap<>();
 
-        boolean existsCode = department == null 
-            ? positionRepository.existsByPositionCodeAndDepartmentIsNull(request.getPositionCode())
-            : positionRepository.existsByPositionCodeAndDepartmentId(request.getPositionCode(), department.getId());
+        boolean existsCode = false;
+        if (department == null) {
+            existsCode = positionRepository.existsByPositionCodeAndDepartmentIsNull(request.getPositionCode());
+        } else {
+            existsCode = positionRepository.existsByPositionCodeAndDepartmentIsNull(request.getPositionCode()) ||
+                         positionRepository.existsByPositionCodeAndDepartmentId(request.getPositionCode(), department.getId());
+        }
         
         if (existsCode) {
             errors.put("positionCode", ErrorCode.POSITION_EXISTED.getMessage());
         }
 
-        boolean existsName = department == null 
-            ? positionRepository.existsByPositionNameAndDepartmentIsNull(request.getPositionName())
-            : positionRepository.existsByPositionNameAndDepartmentId(request.getPositionName(), department.getId());
+        boolean existsName = false;
+        if (department == null) {
+            existsName = positionRepository.existsByPositionNameAndDepartmentIsNull(request.getPositionName());
+        } else {
+            existsName = positionRepository.existsByPositionNameAndDepartmentIsNull(request.getPositionName()) ||
+                         positionRepository.existsByPositionNameAndDepartmentId(request.getPositionName(), department.getId());
+        }
 
         if (existsName) {
             errors.put("positionName", ErrorCode.POSITION_EXISTED.getMessage());
@@ -124,7 +157,6 @@ public class PositionService {
             throw new AppValidationException(errors);
         }
 
-        // Create entity
         Position position = positionMapper.toEntity(request);
         position.setDepartment(department);
         position.setCreatedAt(LocalDateTime.now());
@@ -149,20 +181,29 @@ public class PositionService {
             requireAccessToDepartment(caller, currentDeptId);
         }
 
-        // Validate duplicates (excluding current position) — giữ nguyên department của position
+        // Kiểm tra trùng lặp dữ liệu (Ngoại trừ bản ghi hiện hành đang sửa)
         Map<String, String> errors = new HashMap<>();
 
-        boolean existsCode = currentDeptId == null 
-            ? positionRepository.existsByPositionCodeAndDepartmentIsNullAndIdNot(request.getPositionCode(), id)
-            : positionRepository.existsByPositionCodeAndDepartmentIdAndIdNot(request.getPositionCode(), currentDeptId, id);
+        boolean existsCode = false;
+        if (currentDeptId == null) {
+            existsCode = positionRepository.existsByPositionCodeAndDepartmentIsNullAndIdNot(request.getPositionCode(), id);
+        } else {
+            // Không được trùng trùng với chức vụ hệ thống và không được trùng với chức vụ khác trong cùng Department hiện hành
+            existsCode = positionRepository.existsByPositionCodeAndDepartmentIsNull(request.getPositionCode()) ||
+                         positionRepository.existsByPositionCodeAndDepartmentIdAndIdNot(request.getPositionCode(), currentDeptId, id);
+        }
 
         if (existsCode) {
             errors.put("positionCode", ErrorCode.POSITION_EXISTED.getMessage());
         }
 
-        boolean existsName = currentDeptId == null 
-            ? positionRepository.existsByPositionNameAndDepartmentIsNullAndIdNot(request.getPositionName(), id)
-            : positionRepository.existsByPositionNameAndDepartmentIdAndIdNot(request.getPositionName(), currentDeptId, id);
+        boolean existsName = false;
+        if (currentDeptId == null) {
+            existsName = positionRepository.existsByPositionNameAndDepartmentIsNullAndIdNot(request.getPositionName(), id);
+        } else {
+            existsName = positionRepository.existsByPositionNameAndDepartmentIsNull(request.getPositionName()) ||
+                         positionRepository.existsByPositionNameAndDepartmentIdAndIdNot(request.getPositionName(), currentDeptId, id);
+        }
 
         if (existsName) {
             errors.put("positionName", ErrorCode.POSITION_EXISTED.getMessage());
@@ -186,11 +227,15 @@ public class PositionService {
         if (!currentUserService.hasRole(RoleName.SUPER_ADMIN)) {
             UUID currentDeptId = position.getDepartment() != null ? position.getDepartment().getId() : null;
             if (currentDeptId == null) {
-                // DEPARTMENT_ADMIN cannot delete system-wide positions
+                // Quản trị viên của Đơn vị không được phép can thiệp xóa các chức vụ hệ thống dùng chung
                 throw new AppException(ErrorCode.UNAUTHOZIZED);
             }
             User caller = currentUserService.getCurrentActiveUser();
             requireAccessToDepartment(caller, currentDeptId);
+        }
+
+        if (userRepository.existsByPosition_Id(id)) {
+            throw new AppException(ErrorCode.POSITION_IN_USE);
         }
 
         positionRepository.delete(position);

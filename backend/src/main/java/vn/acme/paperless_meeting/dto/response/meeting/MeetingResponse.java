@@ -21,6 +21,7 @@ public class MeetingResponse {
     private String rejectReason;
     private LocalDateTime startTime;
     private LocalDateTime endTime;
+    private LocalDateTime rsvpDeadline;
     private String content;
     private String onlineLink;
     private Integer lateAfterMinutes;

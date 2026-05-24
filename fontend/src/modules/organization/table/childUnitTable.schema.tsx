@@ -1,6 +1,7 @@
 import React from 'react';
 import { Eye, Edit, Trash2, MapPin, Phone, Users } from 'lucide-react';
 import { ColumnDef, TableActionDef, TableTooltip } from '@/common/components/table-engine';
+import { BadgeStatus } from '@/common/components/ui/BadgeStatus';
 
 export interface ChildUnit {
   id: number;
@@ -59,13 +60,10 @@ export const getChildUnitTableColumns = (): ColumnDef<ChildUnit>[] => [
     header: 'Trạng thái',
     align: 'center',
     render: (row) => (
-      <span className={`inline-flex items-center px-2.5 py-1 text-xs btn-primary rounded-full border ${
-        row.isActive 
-          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-          : 'bg-gray-50 text-gray-600 border-gray-200'
-      }`}>
-        {row.isActive ? 'Hoạt động' : 'Ngừng hoạt động'}
-      </span>
+      <BadgeStatus 
+        status={row.isActive ? 'success' : 'neutral'} 
+        label={row.isActive ? 'Hoạt động' : 'Ngừng hoạt động'} 
+      />
     ),
   },
 ];

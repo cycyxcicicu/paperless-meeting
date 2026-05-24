@@ -1,10 +1,18 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import { Users, Plus } from 'lucide-react';
 import { DataTable, DataToolbar } from '@/common/components/table-engine';
 import { getUnitUserTableColumns, getUnitUserRowActions, UnitUser } from '../table/unitUserTable.schema';
+import { useAuth } from '@/app/context/AuthContext';
 
 interface UnitUsersTabProps {
   users: UnitUser[];
+  totalItems: number;
+  currentPage: number;
+  pageSize: number;
+  searchQuery: string;
+  onPageChange: (page: number) => void;
+  onPageSizeChange: (size: number) => void;
+  onSearchChange: (query: string) => void;
   onAdd?: () => void;
   onView?: (userId: number) => void;
   onEdit?: (userId: number) => void;
@@ -13,68 +21,50 @@ interface UnitUsersTabProps {
 
 export const UnitUsersTab: React.FC<UnitUsersTabProps> = ({
   users,
+  totalItems,
+  currentPage,
+  pageSize,
+  searchQuery,
+  onPageChange,
+  onPageSizeChange,
+  onSearchChange,
   onAdd,
   onView,
   onEdit,
   onDelete
 }) => {
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(5);
-  const [searchQuery, setSearchQuery] = useState('');
-
-  // Reset to first page when users change
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [users]);
-
-  // Reset to first page when search or pageSize changes
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchQuery, pageSize]);
+  const { user } = useAuth();
+  const isSuperAdmin = user?.role?.roleCode === 'SUPER_ADMIN';
 
   const columns = useMemo(() => getUnitUserTableColumns(), []);
 
   const rowActions = useMemo(() => {
     return getUnitUserRowActions(
       (user) => onView?.(user.id),
-      (user) => onEdit?.(user.id),
-      (user) => onDelete?.(user.id)
+      onEdit ? (user) => onEdit(user.id) : undefined,
+      onDelete ? (user) => onDelete(user.id) : undefined,
+      isSuperAdmin
     );
-  }, [onView, onEdit, onDelete]);
+  }, [onView, onEdit, onDelete, isSuperAdmin]);
 
-  const filteredUsers = useMemo(() => {
-    if (!searchQuery.trim()) return users;
-    const query = searchQuery.toLowerCase();
-    return users.filter(user =>
-      user.fullName.toLowerCase().includes(query) ||
-      user.email.toLowerCase().includes(query) ||
-      user.phone.toLowerCase().includes(query)
-    );
-  }, [users, searchQuery]);
-
-  const totalItems = filteredUsers.length;
   const totalPages = Math.ceil(totalItems / pageSize) || 1;
-  const currentData = filteredUsers.slice(
-    (currentPage - 1) * pageSize,
-    currentPage * pageSize
-  );
 
   return (
     <div className="flex flex-col h-full bg-white">
       <DataToolbar
         searchPlaceholder="Tìm kiếm người dùng theo tên, email, số điện thoại..."
         searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
-        primaryAction={{
+        onSearchChange={onSearchChange}
+        primaryAction={onAdd ? {
           label: 'Thêm mới',
           icon: <Plus className="h-4 w-4" />,
-          onClick: onAdd || (() => {})
-        }}
+          onClick: onAdd
+        } : undefined}
       />
 
       <div className="flex-1 p-6">
         <DataTable
-          data={currentData}
+          data={users}
           config={{
             columns,
             rowActions,
@@ -83,8 +73,8 @@ export const UnitUsersTab: React.FC<UnitUsersTabProps> = ({
           pageSize={pageSize}
           totalItems={totalItems}
           totalPages={totalPages}
-          onPageChange={setCurrentPage}
-          onPageSizeChange={setPageSize}
+          onPageChange={onPageChange}
+          onPageSizeChange={onPageSizeChange}
           pageSizeOptions={[5, 10, 20, 50]}
           itemLabel="nhân sự"
           emptyMessage={

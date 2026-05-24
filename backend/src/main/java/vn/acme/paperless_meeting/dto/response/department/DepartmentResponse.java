@@ -21,6 +21,14 @@ public class DepartmentResponse {
     private String email;
     private String headquartersAddress;
     private String description;
+    private String director;
+    
+    @Builder.Default
+    private Integer totalMembers = 0;
+    
+    @Builder.Default
+    private Integer totalChildUnits = 0;
+
     private UUID parentDepartmentId;
 
     @Builder.Default
