@@ -7,6 +7,7 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.Setter;
 import vn.acme.paperless_meeting.entity.enums.MeetingStatus;
+import vn.acme.paperless_meeting.entity.enums.InviteStatus;
 
 @Getter
 @Setter
@@ -34,4 +35,16 @@ public class MeetingResponse {
     private UUID createdById;
     private String createdByName;
     private String callerRole;
+    private InviteStatus callerInviteStatus;
+    private String chairName;
+    
+    private Integer participantsCount;
+    private Integer documentsCount;
+    private Boolean canEdit;
+    private Boolean canCancel;
+    private Boolean canPublish;
+    private Boolean canPostpone;
+    private Boolean canDelete;
+    private Boolean canSubmitApproval;
+    private Boolean canUploadDocs;
 }

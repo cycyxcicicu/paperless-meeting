@@ -30,7 +30,8 @@ public class SecurityConfig {
      * mỗi request phải gửi JWT token lên trong Authorization header hoặc cookie
      * CSRF không cần vì:
      * - JWT đã bảo vệ bằng signature, không thể giả mạo
-     * - REST API thường được gọi từ mobile app, backend-to-backend, không có CSRF risk
+     * - REST API thường được gọi từ mobile app, backend-to-backend, không có CSRF
+     * risk
      * - Access token lưu trong httpOnly cookie nên XSS không thể trích xuất
      */
 
@@ -45,8 +46,7 @@ public class SecurityConfig {
                 // Stateless: không tạo session server-side
                 // JWT handle authentication, mỗi request độc lập
                 .sessionManagement(session -> session
-                        .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
-                        )
+                        .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 // cái này để khi auth fail sẽ trả về 401,
                 // chứ không redirect sang trang login
                 .exceptionHandling(ex -> ex
@@ -78,8 +78,6 @@ public class SecurityConfig {
 
         return http.build();
     }
-
-  
 
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration configuration) throws Exception {

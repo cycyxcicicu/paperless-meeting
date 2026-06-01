@@ -23,5 +23,7 @@ public interface MeetingMapper {
     @Mapping(target = "createdByName", source = "createdBy.fullName")
     @Mapping(target = "approvedById", source = "approvedBy.id")
     @Mapping(target = "approvedByName", source = "approvedBy.fullName")
+    @Mapping(target = "participantsCount", expression = "java(meeting.getMeetingParticipantList() != null ? meeting.getMeetingParticipantList().size() : 0)")
+    @Mapping(target = "documentsCount", expression = "java(meeting.getMeetingDocumentList() != null ? meeting.getMeetingDocumentList().size() : 0)")
     MeetingResponse toResponse(Meeting meeting);
 }

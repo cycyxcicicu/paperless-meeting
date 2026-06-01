@@ -1,11 +1,14 @@
 package vn.acme.paperless_meeting.controller.meeting;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -26,6 +29,7 @@ import lombok.experimental.FieldDefaults;
 import vn.acme.paperless_meeting.dto.base.ApiResponse;
 import vn.acme.paperless_meeting.dto.base.PageResponse;
 import vn.acme.paperless_meeting.dto.request.meeting.MeetingUpsertRequest;
+import vn.acme.paperless_meeting.dto.request.meeting.MeetingPostponeRequest;
 import vn.acme.paperless_meeting.dto.response.meeting.MeetingResponse;
 import vn.acme.paperless_meeting.entity.enums.MeetingStatus;
 import vn.acme.paperless_meeting.service.meeting.MeetingService;
@@ -44,13 +48,30 @@ public class MeetingController {
     @GetMapping
     public ResponseEntity<ApiResponse<PageResponse<MeetingResponse>>> findAll(
             @RequestParam(required = false) String keyword,
-            @RequestParam(required = false) MeetingStatus status,
+            @RequestParam(required = false) List<MeetingStatus> statuses,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime fromDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime toDate,
-            Pageable pageable) {
+            @PageableDefault(sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
 
-        PageResponse<MeetingResponse> response = meetingService.findAll(keyword, status, fromDate, toDate, pageable);
+        PageResponse<MeetingResponse> response = meetingService.findAll(keyword, statuses, fromDate, toDate, pageable);
         return ResponseEntity.ok(ApiResponse.<PageResponse<MeetingResponse>>builder()
+                .success(true)
+                .data(response)
+                .build());
+    }
+
+    @Operation(summary = "Danh sách cuộc họp cho Lịch họp (không phân trang)",
+               description = "Lấy danh sách các cuộc họp thuộc khoảng thời gian fromDate - toDate, lọc theo danh sách trạng thái và lọc chỉ các cuộc họp mình tham gia.")
+    @GetMapping("/calendar")
+    public ResponseEntity<ApiResponse<List<MeetingResponse>>> findCalendarMeetings(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime fromDate,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime toDate,
+            @RequestParam(required = false) List<MeetingStatus> statuses,
+            @RequestParam(required = false) Boolean onlyMyMeetings) {
+
+        List<MeetingResponse> response = meetingService.findCalendarMeetings(fromDate, toDate, statuses, onlyMyMeetings);
+        return ResponseEntity.ok(ApiResponse.<List<MeetingResponse>>builder()
+                .success(true)
                 .data(response)
                 .build());
     }
@@ -60,6 +81,7 @@ public class MeetingController {
     public ResponseEntity<ApiResponse<MeetingResponse>> findById(@PathVariable UUID id) {
         MeetingResponse response = meetingService.findById(id);
         return ResponseEntity.ok(ApiResponse.<MeetingResponse>builder()
+                .success(true)
                 .data(response)
                 .build());
     }
@@ -70,6 +92,7 @@ public class MeetingController {
     public ResponseEntity<ApiResponse<MeetingResponse>> create(@RequestBody @Valid MeetingUpsertRequest request) {
         MeetingResponse response = meetingService.create(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.<MeetingResponse>builder()
+                .success(true)
                 .data(response)
                 .build());
     }
@@ -80,6 +103,7 @@ public class MeetingController {
     public ResponseEntity<ApiResponse<MeetingResponse>> update(@PathVariable UUID id, @RequestBody @Valid MeetingUpsertRequest request) {
         MeetingResponse response = meetingService.update(id, request);
         return ResponseEntity.ok(ApiResponse.<MeetingResponse>builder()
+                .success(true)
                 .data(response)
                 .build());
     }
@@ -93,6 +117,7 @@ public class MeetingController {
             @RequestParam(required = false) UUID approverRoleId) {
         meetingService.submitForApproval(id, approverUserId, approverRoleId);
         return ResponseEntity.ok(ApiResponse.<Void>builder()
+                .success(true)
                 .message("Đã trình duyệt cuộc họp thành công")
                 .build());
     }
@@ -103,6 +128,7 @@ public class MeetingController {
     public ResponseEntity<ApiResponse<Void>> approve(@PathVariable UUID id) {
         meetingService.approve(id);
         return ResponseEntity.ok(ApiResponse.<Void>builder()
+                .success(true)
                 .message("Đã phê duyệt cuộc họp thành công")
                 .build());
     }
@@ -113,7 +139,22 @@ public class MeetingController {
     public ResponseEntity<ApiResponse<Void>> publish(@PathVariable UUID id) {
         meetingService.publish(id);
         return ResponseEntity.ok(ApiResponse.<Void>builder()
+                .success(true)
                 .message("Đã công bố cuộc họp thành công")
+                .build());
+    }
+
+    @Operation(summary = "Hoãn cuộc họp",
+               description = "Hoãn cuộc họp đã được phê duyệt hoặc sắp diễn ra sang thời gian mới.")
+    @PostMapping("/{id}/postpone")
+    public ResponseEntity<ApiResponse<MeetingResponse>> postpone(
+            @PathVariable UUID id,
+            @RequestBody @Valid MeetingPostponeRequest request) {
+        MeetingResponse response = meetingService.postpone(id, request);
+        return ResponseEntity.ok(ApiResponse.<MeetingResponse>builder()
+                .success(true)
+                .data(response)
+                .message("Đã hoãn cuộc họp thành công")
                 .build());
     }
 
@@ -123,6 +164,7 @@ public class MeetingController {
     public ResponseEntity<ApiResponse<Void>> reject(@PathVariable UUID id, @RequestParam String rejectReason) {
         meetingService.reject(id, rejectReason);
         return ResponseEntity.ok(ApiResponse.<Void>builder()
+                .success(true)
                 .message("Đã từ chối cuộc họp")
                 .build());
     }
@@ -133,6 +175,7 @@ public class MeetingController {
     public ResponseEntity<ApiResponse<Void>> cancel(@PathVariable UUID id, @RequestParam String cancelReason) {
         meetingService.cancel(id, cancelReason);
         return ResponseEntity.ok(ApiResponse.<Void>builder()
+                .success(true)
                 .message("Đã hủy cuộc họp thành công")
                 .build());
     }
@@ -143,6 +186,7 @@ public class MeetingController {
     public ResponseEntity<ApiResponse<Void>> close(@PathVariable UUID id) {
         meetingService.close(id);
         return ResponseEntity.ok(ApiResponse.<Void>builder()
+                .success(true)
                 .message("Đã kết thúc cuộc họp")
                 .build());
     }
@@ -153,6 +197,7 @@ public class MeetingController {
     public ResponseEntity<ApiResponse<Void>> delete(@PathVariable UUID id) {
         meetingService.delete(id);
         return ResponseEntity.ok(ApiResponse.<Void>builder()
+                .success(true)
                 .message("Đã xóa cuộc họp thành công")
                 .build());
     }
@@ -163,6 +208,7 @@ public class MeetingController {
     public ResponseEntity<ApiResponse<Void>> restore(@PathVariable UUID id) {
         meetingService.restore(id);
         return ResponseEntity.ok(ApiResponse.<Void>builder()
+                .success(true)
                 .message("Đã khôi phục cuộc họp thành công")
                 .build());
     }

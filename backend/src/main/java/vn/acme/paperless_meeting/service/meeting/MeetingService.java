@@ -16,6 +16,7 @@ import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
 import vn.acme.paperless_meeting.dto.base.PageResponse;
 import vn.acme.paperless_meeting.dto.request.meeting.MeetingUpsertRequest;
+import vn.acme.paperless_meeting.dto.request.meeting.MeetingPostponeRequest;
 import vn.acme.paperless_meeting.dto.response.meeting.MeetingResponse;
 import vn.acme.paperless_meeting.entity.Department;
 import vn.acme.paperless_meeting.entity.Location;
@@ -88,7 +89,7 @@ public class MeetingService {
      * Tìm kiếm và phân trang danh sách cuộc họp theo bộ lọc (từ khóa, trạng thái, thời gian).
      */
     @Transactional(readOnly = true)
-    public PageResponse<MeetingResponse> findAll(String keyword, MeetingStatus status, LocalDateTime fromDate, LocalDateTime toDate, Pageable pageable) {
+    public PageResponse<MeetingResponse> findAll(String keyword, List<MeetingStatus> statuses, LocalDateTime fromDate, LocalDateTime toDate, Pageable pageable) {
         User caller = currentUserService.getCurrentActiveUser();
         boolean isSuperAdmin = currentUserService.hasRole(RoleName.SUPER_ADMIN);
         
@@ -100,17 +101,52 @@ public class MeetingService {
             }
         }
 
-        Specification<Meeting> spec = MeetingSpecification.build(keyword, status, fromDate, toDate, allowedDeptIds, caller.getId(), isSuperAdmin);
+        Specification<Meeting> spec = MeetingSpecification.build(keyword, null, statuses, fromDate, toDate, allowedDeptIds, caller.getId(), isSuperAdmin, false);
         Page<Meeting> page = meetingRepository.findAll(spec, pageable);
 
+        List<MeetingResponse> content = page.getContent().stream()
+                .map(meeting -> {
+                    MeetingResponse resp = meetingMapper.toResponse(meeting);
+                    populateResponseExtraFields(resp, meeting, caller);
+                    return resp;
+                })
+                .toList();
+
         return PageResponse.<MeetingResponse>builder()
-                .content(page.getContent().stream().map(meetingMapper::toResponse).toList())
+                .content(content)
                 .page(page.getNumber())
                 .size(page.getSize())
                 .totalElements(page.getTotalElements())
                 .totalPages(page.getTotalPages())
                 .last(page.isLast())
                 .build();
+    }
+
+    /**
+     * Lấy danh sách cuộc họp hiển thị trên Lịch (không phân trang).
+     */
+    @Transactional(readOnly = true)
+    public List<MeetingResponse> findCalendarMeetings(LocalDateTime fromDate, LocalDateTime toDate, List<MeetingStatus> statuses, Boolean onlyMyMeetings) {
+        User caller = currentUserService.getCurrentActiveUser();
+        boolean isSuperAdmin = currentUserService.hasRole(RoleName.SUPER_ADMIN);
+        
+        List<UUID> allowedDeptIds = null;
+        if (!isSuperAdmin) {
+            if (currentUserService.hasRole(RoleName.DEPARTMENT_ADMIN) && caller.getDepartment() != null) {
+                allowedDeptIds = departmentService.getAllSubDepartmentIds(caller.getDepartment().getId());
+            }
+        }
+
+        Specification<Meeting> spec = MeetingSpecification.build(null, null, statuses, fromDate, toDate, allowedDeptIds, caller.getId(), isSuperAdmin, onlyMyMeetings);
+        List<Meeting> meetings = meetingRepository.findAll(spec);
+
+        return meetings.stream()
+                .map(meeting -> {
+                    MeetingResponse resp = meetingMapper.toResponse(meeting);
+                    populateResponseExtraFields(resp, meeting, caller);
+                    return resp;
+                })
+                .toList();
     }
 
     /**
@@ -122,7 +158,7 @@ public class MeetingService {
         
         MeetingResponse response = meetingMapper.toResponse(meeting);
         User caller = currentUserService.getCurrentActiveUser();
-        response.setCallerRole(determineCallerRole(meeting, caller));
+        populateResponseExtraFields(response, meeting, caller);
         return response;
     }
 
@@ -189,7 +225,9 @@ public class MeetingService {
 
         auditLogPublisher.publish(caller, AuditAction.CREATE_MEETING, ResourceType.MEETING, savedMeeting.getId(), Map.of("title", String.valueOf(savedMeeting.getTitle())));
 
-        return meetingMapper.toResponse(savedMeeting);
+        MeetingResponse resp = meetingMapper.toResponse(savedMeeting);
+        populateResponseExtraFields(resp, savedMeeting, caller);
+        return resp;
     }
 
     /**
@@ -224,7 +262,9 @@ public class MeetingService {
         
         auditLogPublisher.publish(currentUserService.getCurrentActiveUser(), AuditAction.UPDATE_MEETING, ResourceType.MEETING, savedMeeting.getId(), Map.of("title", String.valueOf(savedMeeting.getTitle())));
 
-        return meetingMapper.toResponse(savedMeeting);
+        MeetingResponse resp = meetingMapper.toResponse(savedMeeting);
+        populateResponseExtraFields(resp, savedMeeting, currentUserService.getCurrentActiveUser());
+        return resp;
     }
 
     /**
@@ -285,9 +325,10 @@ public class MeetingService {
     @Transactional
     public void publish(UUID id) {
         Meeting meeting = getMeeting(id);
-        
-        // Quyền chỉnh sửa (Ban Lãnh đạo hoặc Người tạo)
-        requireEditPermission(meeting);
+        User caller = currentUserService.getCurrentActiveUser();
+        if (meeting.getCreatedBy() == null || !meeting.getCreatedBy().getId().equals(caller.getId())) {
+            throw new AppException(ErrorCode.UNAUTHOZIZED);
+        }
 
         if (meeting.getStatus() != MeetingStatus.APPROVED) {
             throw new AppException(ErrorCode.MEETING_STATUS_TRANSITION_INVALID);
@@ -295,6 +336,63 @@ public class MeetingService {
 
         meeting.setStatus(MeetingStatus.UPCOMING);
         meetingRepository.save(meeting);
+    }
+
+    /**
+     * Hoãn cuộc họp. Cập nhật thời gian mới và lý do hoãn. Chỉ người tạo mới thực hiện được.
+     */
+    @Transactional
+    public MeetingResponse postpone(UUID id, MeetingPostponeRequest request) {
+        Meeting meeting = getMeeting(id);
+        User caller = currentUserService.getCurrentActiveUser();
+
+        // Chỉ người tạo mới được hoãn
+        if (meeting.getCreatedBy() == null || !meeting.getCreatedBy().getId().equals(caller.getId())) {
+            throw new AppException(ErrorCode.UNAUTHOZIZED);
+        }
+
+        // Chỉ cho phép hoãn cuộc họp APPROVED hoặc UPCOMING
+        if (meeting.getStatus() != MeetingStatus.APPROVED && meeting.getStatus() != MeetingStatus.UPCOMING) {
+            throw new AppException(ErrorCode.MEETING_STATUS_TRANSITION_INVALID);
+        }
+
+        // Validate thời gian mới
+        LocalDateTime start = request.getNewStartTime();
+        LocalDateTime end = request.getNewEndTime();
+        if (start == null || end == null || !end.isAfter(start)) {
+            throw new AppException(ErrorCode.MEETING_INVALID_TIME_RANGE);
+        }
+        if (start.isBefore(LocalDateTime.now().plusMinutes(30))) {
+            throw new AppException(ErrorCode.MEETING_MUST_BE_SCHEDULED_BEFORE_30_MINUTES);
+        }
+
+        // Validate location conflict
+        UUID locationId = meeting.getLocation() != null ? meeting.getLocation().getId() : null;
+        validateLocationConflict(id, locationId, start, end);
+
+        // Cập nhật thông tin
+        meeting.setStartTime(start);
+        meeting.setEndTime(end);
+
+        // Tự động dịch deadline RSVP nếu nó đang muộn hơn start time mới
+        if (meeting.getRsvpDeadline() != null && meeting.getRsvpDeadline().isAfter(start)) {
+            meeting.setRsvpDeadline(start);
+        }
+
+        // Lưu lý do hoãn
+        if (request.getReason() != null && !request.getReason().trim().isEmpty()) {
+            String currentContent = meeting.getContent() != null ? meeting.getContent() : "";
+            meeting.setContent(currentContent + "\n[Hoãn cuộc họp]: " + request.getReason());
+        }
+
+        Meeting savedMeeting = meetingRepository.save(meeting);
+
+        auditLogPublisher.publish(caller, AuditAction.UPDATE_MEETING, ResourceType.MEETING, savedMeeting.getId(), 
+            Map.of("title", String.valueOf(savedMeeting.getTitle()), "action", "POSTPONE", "reason", String.valueOf(request.getReason())));
+
+        MeetingResponse resp = meetingMapper.toResponse(savedMeeting);
+        populateResponseExtraFields(resp, savedMeeting, caller);
+        return resp;
     }
 
     /**
@@ -311,7 +409,10 @@ public class MeetingService {
     @Transactional
     public void cancel(UUID id, String cancelReason) {
         Meeting meeting = getMeeting(id);
-        requireEditPermission(meeting); // Yêu cầu quyền chỉnh sửa / Ban Lãnh đạo
+        User caller = currentUserService.getCurrentActiveUser();
+        if (meeting.getCreatedBy() == null || !meeting.getCreatedBy().getId().equals(caller.getId())) {
+            throw new AppException(ErrorCode.UNAUTHOZIZED);
+        }
 
         if (meeting.getStatus() != MeetingStatus.UPCOMING 
             && meeting.getStatus() != MeetingStatus.PENDING_APPROVAL 
@@ -365,7 +466,10 @@ public class MeetingService {
     @Transactional
     public void delete(UUID id) {
         Meeting meeting = getMeeting(id);
-        requireEditPermission(meeting);
+        User caller = currentUserService.getCurrentActiveUser();
+        if (meeting.getCreatedBy() == null || !meeting.getCreatedBy().getId().equals(caller.getId())) {
+            throw new AppException(ErrorCode.UNAUTHOZIZED);
+        }
         if (meeting.getStatus() != MeetingStatus.DRAFT) {
             throw new AppException(ErrorCode.MEETING_ONLY_DRAFT_ALLOWED);
         }
@@ -502,5 +606,41 @@ public class MeetingService {
         throw new AppException(ErrorCode.UNAUTHOZIZED);
     }
 
+    private boolean hasEditPermission(Meeting meeting, User caller) {
+        if (currentUserService.hasRole(RoleName.SUPER_ADMIN)) return true;
+        if (meeting.getCreatedBy() != null && meeting.getCreatedBy().getId().equals(caller.getId())) return true;
+        if (currentUserService.hasRole(RoleName.DEPARTMENT_ADMIN) && meeting.getDepartment() != null && caller.getDepartment() != null) {
+            List<UUID> subDepts = departmentService.getAllSubDepartmentIds(caller.getDepartment().getId());
+            if (subDepts.contains(meeting.getDepartment().getId())) return true;
+        }
+        return meetingParticipantRepository.existsByMeetingIdAndUserIdAndParticipantRole(
+            meeting.getId(), caller.getId(), ParticipantRole.CHAIR);
+    }
 
+    private void populateResponseExtraFields(MeetingResponse resp, Meeting meeting, User caller) {
+        resp.setCallerRole(determineCallerRole(meeting, caller));
+        
+        var participantOpt = meetingParticipantRepository.findByMeetingIdAndUserId(meeting.getId(), caller.getId());
+        participantOpt.ifPresent(p -> resp.setCallerInviteStatus(p.getInviteStatus()));
+        
+        List<MeetingParticipant> participants = meetingParticipantRepository.findByMeetingId(meeting.getId());
+        String chairs = participants.stream()
+                .filter(p -> p.getParticipantRole() == ParticipantRole.CHAIR)
+                .map(p -> p.getUser().getFullName())
+                .collect(java.util.stream.Collectors.joining(", "));
+        resp.setChairName(chairs.isEmpty() ? null : chairs);
+
+        // Phân quyền
+        boolean isCreatorOrAdminOrChair = hasEditPermission(meeting, caller);
+        boolean isCreatorOnly = meeting.getCreatedBy() != null && meeting.getCreatedBy().getId().equals(caller.getId());
+        boolean isPreparer = agendaItemRepository.existsByMeetingIdAndPreparedByUserId(meeting.getId(), caller.getId());
+
+        resp.setCanEdit(isCreatorOrAdminOrChair && (meeting.getStatus() == MeetingStatus.DRAFT || meeting.getStatus() == MeetingStatus.REJECTED));
+        resp.setCanCancel(isCreatorOnly && (meeting.getStatus() == MeetingStatus.PENDING_APPROVAL || meeting.getStatus() == MeetingStatus.APPROVED || meeting.getStatus() == MeetingStatus.UPCOMING));
+        resp.setCanPublish(isCreatorOnly && meeting.getStatus() == MeetingStatus.APPROVED);
+        resp.setCanPostpone(isCreatorOnly && (meeting.getStatus() == MeetingStatus.APPROVED || meeting.getStatus() == MeetingStatus.UPCOMING));
+        resp.setCanDelete(isCreatorOnly && meeting.getStatus() == MeetingStatus.DRAFT);
+        resp.setCanSubmitApproval(isCreatorOrAdminOrChair && (meeting.getStatus() == MeetingStatus.DRAFT || meeting.getStatus() == MeetingStatus.REJECTED));
+        resp.setCanUploadDocs(isPreparer && (meeting.getStatus() == MeetingStatus.DRAFT || meeting.getStatus() == MeetingStatus.REJECTED));
+    }
 }

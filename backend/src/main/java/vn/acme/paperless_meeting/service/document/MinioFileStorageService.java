@@ -54,8 +54,8 @@ public class MinioFileStorageService implements FileStorageService {
             "application/zip"
     );
 
-    /** Kích thước file tối đa: 50MB */
-    private static final long MAX_FILE_SIZE = 50L * 1024 * 1024;
+    /** Kích thước file tối đa: 20MB */
+    private static final long MAX_FILE_SIZE = 20L * 1024 * 1024;
 
     /**
      * Khởi tạo bucket nếu chưa tồn tại khi ứng dụng start.

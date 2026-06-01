@@ -15,6 +15,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import vn.acme.paperless_meeting.dto.base.ApiResponse;
 import vn.acme.paperless_meeting.dto.request.agenda.AgendaItemUpsertRequest;
+import vn.acme.paperless_meeting.dto.request.agenda.AgendaItemPrepRequest;
 import vn.acme.paperless_meeting.dto.response.agenda.AgendaItemResponse;
 import vn.acme.paperless_meeting.dto.response.meeting.MeetingResponse;
 import vn.acme.paperless_meeting.service.agenda.AgendaItemService;
@@ -68,9 +69,10 @@ public class AgendaItemController {
                description = "Chuyển agenda item sang PENDING_PREPARATION và thông báo đến người được phân công chuẩn bị.")
     @PostMapping("/meetings/{meetingId}/agenda-items/{id}/send-prep-request")
     public ResponseEntity<ApiResponse<AgendaItemResponse>> sendPrepRequest(
-            @PathVariable UUID meetingId, @PathVariable UUID id) {
+            @PathVariable UUID meetingId, @PathVariable UUID id,
+            @RequestBody(required = false) AgendaItemPrepRequest request) {
         return ResponseEntity.ok(ApiResponse.<AgendaItemResponse>builder()
-                .data(agendaItemService.sendPrepRequest(meetingId, id))
+                .data(agendaItemService.sendPrepRequest(meetingId, id, request))
                 .message("Đã gửi yêu cầu chuẩn bị tài liệu thành công").build());
     }
 

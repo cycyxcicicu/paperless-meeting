@@ -23,6 +23,7 @@ public class AgendaItemResponse {
     private LocalDateTime startTime;
     private LocalDateTime endTime;
     private String rejectReason;
+    private LocalDateTime prepDeadline;
     private UUID meetingId;
     private List<AgendaDocumentResponse> documents;
 

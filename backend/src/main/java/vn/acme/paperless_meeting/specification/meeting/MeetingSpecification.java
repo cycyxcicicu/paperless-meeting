@@ -13,7 +13,7 @@ import vn.acme.paperless_meeting.entity.Meeting;
 import vn.acme.paperless_meeting.entity.enums.MeetingStatus;
 
 public class MeetingSpecification {
-    public static Specification<Meeting> build(String keyword, MeetingStatus status, LocalDateTime fromDate, LocalDateTime toDate, List<UUID> allowedDeptIds, UUID userId, boolean isSuperAdmin) {
+    public static Specification<Meeting> build(String keyword, MeetingStatus status, List<MeetingStatus> statuses, LocalDateTime fromDate, LocalDateTime toDate, List<UUID> allowedDeptIds, UUID userId, boolean isSuperAdmin, Boolean onlyMyMeetings) {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
 
@@ -22,9 +22,14 @@ public class MeetingSpecification {
                 predicates.add(cb.like(cb.lower(root.get("title")), "%" + keyword.toLowerCase() + "%"));
             }
 
-            // Lọc theo trạng thái
+            // Lọc theo trạng thái đơn lẻ
             if (status != null) {
                 predicates.add(cb.equal(root.get("status"), status));
+            }
+
+            // Lọc theo danh sách trạng thái
+            if (statuses != null && !statuses.isEmpty()) {
+                predicates.add(root.get("status").in(statuses));
             }
 
             // Lọc theo khoảng thời gian (dựa trên giờ bắt đầu)
@@ -35,8 +40,15 @@ public class MeetingSpecification {
                 predicates.add(cb.lessThanOrEqualTo(root.get("startTime"), toDate));
             }
 
-            // Lọc phân quyền (RBAC)
-            if (!isSuperAdmin) {
+            // Lọc chỉ cuộc họp mà user tham gia
+            if (Boolean.TRUE.equals(onlyMyMeetings)) {
+                Join<Object, Object> participantJoin = root.join("meetingParticipantList");
+                predicates.add(cb.equal(participantJoin.get("user").get("id"), userId));
+                query.distinct(true);
+            }
+
+            // Lọc phân quyền (RBAC) - chỉ áp dụng khi không yêu cầu lọc "chỉ cuộc họp của tôi" hoặc khi không phải Super Admin
+            if (!isSuperAdmin && !Boolean.TRUE.equals(onlyMyMeetings)) {
                 List<Predicate> securityPredicates = new ArrayList<>();
                 
                 // 1. Bạn có thể nhìn thấy các cuộc họp do chính mình tạo ra

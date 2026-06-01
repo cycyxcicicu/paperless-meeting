@@ -41,7 +41,7 @@ public class DocumentController {
     // ========== NHÓM A — Document CRUD ==========
 
     @Operation(summary = "Upload file tài liệu lên MinIO",
-               description = "Upload file (PDF/DOCX/XLSX/PPTX/PNG/JPG/ZIP, tối đa 50MB). Trả về Document đã tạo kèm URL file.")
+               description = "Upload file (PDF/DOCX/XLSX/PPTX/PNG/JPG/ZIP, tối đa 20MB). Trả về Document đã tạo kèm URL file.")
     @PostMapping(value = "/documents/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<ApiResponse<DocumentResponse>> uploadDocument(
             @RequestPart("file") MultipartFile file,

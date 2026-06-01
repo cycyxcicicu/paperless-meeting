@@ -17,6 +17,7 @@ import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import vn.acme.paperless_meeting.dto.request.agenda.AgendaItemUpsertRequest;
+import vn.acme.paperless_meeting.dto.request.agenda.AgendaItemPrepRequest;
 import vn.acme.paperless_meeting.dto.response.agenda.AgendaItemResponse;
 import vn.acme.paperless_meeting.dto.response.agenda.AgendaDocumentResponse;
 import vn.acme.paperless_meeting.dto.response.meeting.MeetingResponse;
@@ -142,7 +143,9 @@ public class AgendaItemService {
      * Lấy danh sách nội dung cuộc họp của cuộc họp
      */
     public List<AgendaItemResponse> getAgendaItems(UUID meetingId) {
-        getMeeting(meetingId); // verify meeting exists
+        Meeting meeting = getMeeting(meetingId);
+        User caller = currentUserService.getCurrentActiveUser();
+        boolean isCreator = meeting.getCreatedBy() != null && meeting.getCreatedBy().getId().equals(caller.getId());
         
         // 1. Tải toàn bộ danh sách Agenda của cuộc họp kèm theo preparedByUser bằng 1 query duy nhất
         List<AgendaItem> list = agendaItemRepository.findByMeetingIdOrderByOrderNoAscWithPreparer(meetingId);
@@ -155,9 +158,29 @@ public class AgendaItemService {
                 .filter(md -> md.getAgendaItem() != null)
                 .collect(Collectors.groupingBy(md -> md.getAgendaItem().getId()));
         
+        List<MeetingStatus> publishedStatuses = List.of(
+            MeetingStatus.APPROVED, MeetingStatus.UPCOMING, MeetingStatus.IN_PROGRESS, 
+            MeetingStatus.CLOSED, MeetingStatus.CANCELLED, MeetingStatus.EXPIRED
+        );
+        boolean isPublished = publishedStatuses.contains(meeting.getStatus());
+
         // 4. Ánh xạ danh sách Response kết hợp dữ liệu in-memory mà không bị N+1 query
         return list.stream()
-                .map(item -> toResponseWithPreloadedDocs(item, docsByAgendaId.getOrDefault(item.getId(), Collections.emptyList())))
+                .map(item -> {
+                    AgendaItemResponse res = toResponseWithPreloadedDocs(item, docsByAgendaId.getOrDefault(item.getId(), Collections.emptyList()));
+                    boolean isPreparerOfThis = item.getPreparedByUser() != null && item.getPreparedByUser().getId().equals(caller.getId());
+                    
+                    // Nếu không phải người tạo và không phải người được giao chuẩn bị của Agenda này
+                    if (!isCreator && !isPreparerOfThis) {
+                        res.setRejectReason(null);
+                        
+                        // Nếu cuộc họp chưa công bố (đang thảo luận nháp), ẩn luôn tài liệu của Agenda này
+                        if (!isPublished) {
+                            res.setDocuments(Collections.emptyList());
+                        }
+                    }
+                    return res;
+                })
                 .collect(Collectors.toList());
     }
 
@@ -165,7 +188,7 @@ public class AgendaItemService {
      * Gửi yêu cầu chuẩn bị tài liệu (Trực tiếp từ Người tạo tới Người chuẩn bị)
      */
     @Transactional
-    public AgendaItemResponse sendPrepRequest(UUID meetingId, UUID id) {
+    public AgendaItemResponse sendPrepRequest(UUID meetingId, UUID id, AgendaItemPrepRequest request) {
         Meeting meeting = getMeeting(meetingId);
         validateEditPermission(meeting);
 
@@ -182,6 +205,15 @@ public class AgendaItemService {
 
         if (agendaItem.getPreparedByUser() == null) {
             throw new AppException(ErrorCode.USER_ID_REQUIRED);
+        }
+
+        if (request != null) {
+            if (request.getPrepDeadline() != null) {
+                agendaItem.setPrepDeadline(request.getPrepDeadline());
+            }
+            if (request.getContent() != null) {
+                agendaItem.setContent(request.getContent());
+            }
         }
 
         agendaItem.setStatus(AgendaItemStatus.PENDING_PREPARATION);

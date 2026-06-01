@@ -18,7 +18,7 @@ public class CorsConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOrigins(List.of(frontendOrigin));
+            config.setAllowedOrigins(List.of(frontendOrigin));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*")); // Allow tất cả headers (hoặc chi tiết: Content-Type, Authorization,
                                                 // X-XSRF-TOKEN, Accept)

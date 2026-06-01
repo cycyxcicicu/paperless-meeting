@@ -188,7 +188,7 @@ public enum ErrorCode implements BaseErrorCode {
         FILE_UPLOAD_FAILED(2107, "Upload file thất bại", HttpStatus.INTERNAL_SERVER_ERROR),
         FILE_TYPE_NOT_ALLOWED(2108, "Loại file không được hỗ trợ. Chỉ chấp nhận PDF, DOCX, XLSX, PPTX, PNG, JPG, ZIP",
                         HttpStatus.BAD_REQUEST),
-        FILE_SIZE_EXCEEDED(2109, "Kích thước file vượt quá giới hạn 50MB", HttpStatus.BAD_REQUEST);
+        FILE_SIZE_EXCEEDED(2109, "Kích thước file vượt quá giới hạn 20MB", HttpStatus.BAD_REQUEST);
 
         int code;
         String message;
