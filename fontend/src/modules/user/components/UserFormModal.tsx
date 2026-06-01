@@ -312,6 +312,7 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
       onClose={handleClose}
       title={getModalTitle()}
       className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto"
+      preventAutoFocus={true}
     >
       <FormProvider {...methods}>
         {isLoading ? (

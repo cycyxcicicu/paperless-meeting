@@ -128,6 +128,7 @@ export const PositionFormModal: React.FC<PositionFormModalProps> = ({
       onClose={handleClose}
       title={getModalTitle()}
       className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto"
+      preventAutoFocus={true}
     >
       <FormProvider {...methods}>
         {isLoading ? (

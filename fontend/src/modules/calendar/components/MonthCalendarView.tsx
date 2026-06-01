@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router';
-import { CalendarEvent } from './CalendarEventCard';
+import { CalendarEvent, CalendarEventCard } from './CalendarEventCard';
 import { cn } from '@/common/utils/cn';
 
 interface MonthDay {
@@ -35,79 +35,6 @@ export const MonthCalendarView: React.FC<MonthCalendarViewProps> = ({
 }) => {
   const navigate = useNavigate();
   const weekDays = ['Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy', 'Chủ Nhật'];
-
-  const getEventStyle = (status: string) => {
-    switch (status) {
-      case 'ongoing':
-        return 'bg-green-50 border-l-2 border-green-500 text-green-700';
-      case 'upcoming':
-        return 'bg-blue-50 border-l-2 border-blue-500 text-blue-700';
-      case 'finished':
-        return 'bg-red-50 border-l-2 border-red-500 text-red-700';
-      default:
-        return 'bg-gray-50 border-l-2 border-gray-500 text-gray-700';
-    }
-  };
-
-  const getDotStyle = (status: string) => {
-    switch (status) {
-      case 'ongoing':
-        return 'bg-green-500';
-      case 'upcoming':
-        return 'bg-blue-500';
-      case 'finished':
-        return 'bg-red-500';
-      default:
-        return 'bg-gray-500';
-    }
-  };
-
-  const formatDate = (date: Date): string => {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  };
-
-  const handleDayClick = (day: MonthDay) => {
-    const dateStr = formatDate(day.date);
-    navigate(`/quan-ly-phien-hop?date=${dateStr}`);
-  };
-
-  const renderEventCard = (event: CalendarEvent) => (
-    <div
-      key={event.id}
-      onClick={(e) => {
-        e.stopPropagation();
-        navigate(`/phien-hop/${event.id}`);
-      }}
-      className={cn(
-        'relative px-2 py-1.5 rounded-lg text-xs cursor-pointer transition-all hover:shadow-md mb-1.5',
-        getEventStyle(event.status),
-        event.status === 'ongoing' && 'animate-pulse-subtle'
-      )}
-    >
-      {/* Status dot */}
-      <div className={cn(
-        'absolute top-1.5 left-2 w-1.5 h-1.5 rounded-full',
-        getDotStyle(event.status)
-      )} />
-
-      <div className="pl-3">
-        <div className="btn-primary text-gray-900 leading-tight truncate mb-0.5">
-          {event.title}
-        </div>
-        <div className="text-[10px] text-gray-600 leading-tight">
-          {event.startTime} - {event.endTime}
-        </div>
-        {event.location && (
-          <div className="text-[10px] text-gray-500 leading-tight truncate mt-0.5">
-            {event.location}
-          </div>
-        )}
-      </div>
-    </div>
-  );
 
   return (
     <div>
@@ -151,8 +78,10 @@ export const MonthCalendarView: React.FC<MonthCalendarViewProps> = ({
                   </div>
 
                   {/* Event list with scroll */}
-                  <div className="flex-1 overflow-y-auto overflow-x-hidden pr-1 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent">
-                    {day.events.map((event) => renderEventCard(event))}
+                  <div className="flex-1 overflow-y-auto overflow-x-hidden pr-1 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent space-y-1">
+                    {day.events.map((event) => (
+                      <CalendarEventCard key={event.id} event={event} />
+                    ))}
                   </div>
                 </div>
               );

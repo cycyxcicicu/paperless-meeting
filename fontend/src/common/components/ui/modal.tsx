@@ -9,9 +9,10 @@ export interface ModalProps {
   children: React.ReactNode;
   className?: string;
   preventClose?: boolean; // Thêm prop này
+  preventAutoFocus?: boolean; // Chặn tự động focus / bôi đen input đầu tiên khi mở
 }
 
-export function Modal({ isOpen, onClose, title, description, children, className, preventClose }: ModalProps) {
+export function Modal({ isOpen, onClose, title, description, children, className, preventClose, preventAutoFocus }: ModalProps) {
   return (
     <Dialog 
       open={isOpen} 
@@ -27,6 +28,11 @@ export function Modal({ isOpen, onClose, title, description, children, className
         // Chặn phím Esc và click ra ngoài nếu preventClose = true
         onPointerDownOutside={(e) => preventClose && e.preventDefault()}
         onEscapeKeyDown={(e) => preventClose && e.preventDefault()}
+        onOpenAutoFocus={(e) => {
+          if (preventAutoFocus) {
+            e.preventDefault();
+          }
+        }}
       >
         {(title || description) && (
           <DialogHeader>

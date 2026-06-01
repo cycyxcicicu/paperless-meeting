@@ -113,6 +113,7 @@ export const RoleFormModal: React.FC<RoleFormModalProps> = ({
       onClose={handleClose}
       title={getModalTitle()}
       className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto"
+      preventAutoFocus={true}
     >
       <FormProvider {...methods}>
         <form onSubmit={methods.handleSubmit(onFormSubmit)} className="space-y-6 pt-4" autoComplete="off" noValidate>

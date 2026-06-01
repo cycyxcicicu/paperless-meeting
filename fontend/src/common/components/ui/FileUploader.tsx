@@ -3,7 +3,7 @@ import { Upload, FileText, FileSpreadsheet, File as FileIcon, Trash2, Plus, Eye,
 import { Label } from './label';
 
 export interface FileUploaderProps {
-  files: File[];
+  files: any[];
   onChange: (files: File[]) => void;
   multiple?: boolean;
   accept?: string;
@@ -45,7 +45,7 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
   placeholder,
   allowedExtensionsText = 'PDF, DOC, DOCX, XLS, XLSX',
 }) => {
-  const [previewFile, setPreviewFile] = React.useState<File | null>(null);
+  const [previewFile, setPreviewFile] = React.useState<any | null>(null);
   const [previewUrl, setPreviewUrl] = React.useState<string>('');
   const [textPreviewContent, setTextPreviewContent] = React.useState<string>('');
 
@@ -57,20 +57,27 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
     }
 
     const ext = previewFile.name.split('.').pop()?.toLowerCase();
-    const objectUrl = URL.createObjectURL(previewFile);
-    setPreviewUrl(objectUrl);
 
-    if (ext === 'txt') {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setTextPreviewContent(e.target?.result as string || '');
+    if (previewFile instanceof File) {
+      const objectUrl = URL.createObjectURL(previewFile);
+      setPreviewUrl(objectUrl);
+
+      if (ext === 'txt') {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          setTextPreviewContent(e.target?.result as string || '');
+        };
+        reader.readAsText(previewFile);
+      }
+
+      return () => {
+        URL.revokeObjectURL(objectUrl);
       };
-      reader.readAsText(previewFile);
+    } else {
+      // Pre-existing file with direct URL
+      const directUrl = previewFile.url || previewFile.fileUrl || '';
+      setPreviewUrl(directUrl);
     }
-
-    return () => {
-      URL.revokeObjectURL(objectUrl);
-    };
   }, [previewFile]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {

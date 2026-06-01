@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, X, Trash2, CalendarIcon } from 'lucide-react';
+import { Plus, X, Trash2, CalendarIcon, Send } from 'lucide-react';
 import { FileUploader } from '@/common/components/ui/FileUploader';
+import { toast } from '@/lib/toast';
 import { Button } from '@/common/components/ui/button';
 import { Label } from '@/common/components/ui/label';
 import { Input } from '@/common/components/ui/input';
@@ -12,6 +13,8 @@ import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
 import { cn } from '@/common/utils/cn';
 import { Member } from './SelectUnitModal';
+import { Modal } from '@/common/components/ui/modal';
+import { meetingApi } from '../services/meeting.api';
 
 interface BieuQuyetIssue {
   id: string;
@@ -32,6 +35,9 @@ interface NoiDungItem {
     donVi: Member[];
     khachMoi: any[];
   };
+  status?: string;
+  rejectReason?: string;
+  prepDeadline?: string;
 }
 
 interface NoiDungHopData {
@@ -50,6 +56,8 @@ interface NoiDungHopStepProps {
   singleContentMode: boolean;
   errors?: Record<string, any>;
   inheritedParticipants?: ThanhPhanThamDuData;
+  isUpdateMode?: boolean;
+  meetingId?: string;
 }
 
 
@@ -60,8 +68,60 @@ const NoiDungHopStep: React.FC<NoiDungHopStepProps> = ({
   singleContentMode,
   errors = {},
   inheritedParticipants,
+  isUpdateMode,
+  meetingId,
 }) => {
   const [activeContentId, setActiveContentId] = useState(data.contents[0]?.id || '');
+  const [prepModal, setPrepModal] = useState<{
+    isOpen: boolean;
+    agendaId: string;
+    title: string;
+    instructions: string;
+    deadline: string;
+    preparerName: string;
+  } | null>(null);
+
+  const handleOpenPrepModal = (item: NoiDungItem) => {
+    const person = participantOptions.find(opt => opt.value === item.nguoiChuanBi);
+    setPrepModal({
+      isOpen: true,
+      agendaId: item.id,
+      title: item.noiDungChiTiet || '',
+      instructions: item.noiDungChiTiet || '',
+      deadline: '',
+      preparerName: person ? person.label : 'Người chuẩn bị'
+    });
+  };
+
+  const handleConfirmSendPrepRequest = async () => {
+    if (!prepModal || !meetingId) return;
+
+    try {
+      const res = await meetingApi.sendPrepRequest(meetingId, prepModal.agendaId, {
+        prepDeadline: prepModal.deadline,
+        content: prepModal.instructions
+      });
+
+      if (res.success) {
+        toast.success(
+          "Gửi yêu cầu thành công",
+          "Yêu cầu chuẩn bị tài liệu đã được gửi tới người chuẩn bị"
+        );
+        handleUpdateContent(prepModal.agendaId, { 
+          status: 'PENDING_PREPARATION',
+          noiDungChiTiet: prepModal.instructions,
+          prepDeadline: prepModal.deadline
+        });
+      } else {
+        toast.error("Thất bại", res.message || "Không thể gửi yêu cầu");
+      }
+    } catch (error) {
+      console.error("Error sending prep request:", error);
+      toast.error("Lỗi hệ thống", "Đã xảy ra lỗi khi gửi yêu cầu chuẩn bị tài liệu.");
+    } finally {
+      setPrepModal(null);
+    }
+  };
 
   // Sync inherited participants from step 2 to all content items
   useEffect(() => {
@@ -363,6 +423,20 @@ const NoiDungHopStep: React.FC<NoiDungHopStepProps> = ({
                 }
                 disabled={participantOptions.length === 0}
               />
+              {isUpdateMode && activeContent.id && !activeContent.id.startsWith('content-') && activeContent.nguoiChuanBi && (
+                <div className="flex justify-end mt-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="flex items-center gap-1.5 bg-red-50 text-[#C8102E] border-[#C8102E]/30 hover:bg-red-100 hover:text-[#C8102E] rounded-xl"
+                    onClick={() => handleOpenPrepModal(activeContent)}
+                  >
+                    <Send className="h-4 w-4" />
+                    Gửi yêu cầu chuẩn bị
+                  </Button>
+                </div>
+              )}
             </div>
 
             {/* Upload tài liệu */}
@@ -522,6 +596,79 @@ const NoiDungHopStep: React.FC<NoiDungHopStepProps> = ({
           </div>
         )}
       </div>
+
+      {prepModal && (
+        <Modal
+          isOpen={prepModal.isOpen}
+          onClose={() => setPrepModal(null)}
+          title="Yêu cầu chuẩn bị tài liệu"
+          className="max-w-lg"
+        >
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Người nhận</Label>
+              <Input value={prepModal.preparerName} disabled className="bg-gray-50 border-gray-300 rounded-xl" />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Hạn nộp tài liệu <span className="text-[#C8102E]">*</span></Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      'w-full justify-start text-left border-gray-400 hover:border-gray-500 rounded-xl font-normal',
+                      !prepModal.deadline && 'text-gray-500'
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {prepModal.deadline ? (
+                      format(new Date(prepModal.deadline), 'dd/MM/yyyy HH:mm', { locale: vi })
+                    ) : (
+                      <span>Chọn hạn nộp</span>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0 z-[60]" align="start">
+                  <ScrollDatePicker
+                    value={prepModal.deadline ? new Date(prepModal.deadline) : undefined}
+                    onChange={(date) =>
+                      setPrepModal(prev => prev ? { ...prev, deadline: date.toISOString() } : null)
+                    }
+                    showTime={true}
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Nội dung ghi chú / Hướng dẫn</Label>
+              <Textarea
+                value={prepModal.instructions}
+                onChange={(e) =>
+                  setPrepModal(prev => prev ? { ...prev, instructions: e.target.value } : null)
+                }
+                placeholder="Nhập nội dung ghi chú giao việc hoặc hướng dẫn chuẩn bị..."
+                rows={4}
+                className="resize-none rounded-xl border-gray-400 hover:border-gray-500"
+              />
+            </div>
+
+            <div className="flex justify-end gap-3 pt-4">
+              <Button variant="outline" className="rounded-xl border-gray-400 hover:border-gray-500" onClick={() => setPrepModal(null)}>
+                Đóng
+              </Button>
+              <Button
+                className="bg-[#C8102E] hover:bg-[#A90F14] text-white rounded-xl"
+                disabled={!prepModal.deadline}
+                onClick={handleConfirmSendPrepRequest}
+              >
+                Gửi yêu cầu
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 };

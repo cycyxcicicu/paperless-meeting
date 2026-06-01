@@ -27,159 +27,17 @@ interface SelectUnitModalProps {
   title?: string;
 }
 
-// Mock unit tree structure
-const mockUnits: UnitNode[] = [
-  {
-    id: '1',
-    name: 'UBND Thành phố Hải Phòng',
-    children: [
-      {
-        id: '1-1',
-        name: 'Văn phòng UBND',
-        children: [
-          { id: '1-1-1', name: 'Phòng Hành chính' },
-          { id: '1-1-2', name: 'Phòng Tổ chức' },
-          { id: '1-1-3', name: 'Phòng Pháp chế' },
-        ],
-      },
-      {
-        id: '1-2',
-        name: 'Sở Nội vụ',
-        children: [
-          { id: '1-2-1', name: 'Phòng Tổ chức cán bộ' },
-          { id: '1-2-2', name: 'Phòng Chính quyền' },
-          { id: '1-2-3', name: 'Phòng Văn thư - Lưu trữ' },
-        ],
-      },
-      {
-        id: '1-3',
-        name: 'Sở Tài chính',
-        children: [
-          { id: '1-3-1', name: 'Phòng Ngân sách' },
-          { id: '1-3-2', name: 'Phòng Kế toán' },
-        ],
-      },
-      {
-        id: '1-4',
-        name: 'Sở Kế hoạch và Đầu tư',
-        children: [
-          { id: '1-4-1', name: 'Phòng Kế hoạch tổng hợp' },
-          { id: '1-4-2', name: 'Phòng Quản lý đầu tư' },
-        ],
-      },
-      {
-        id: '1-5',
-        name: 'Sở Xây dựng',
-      },
-      {
-        id: '1-6',
-        name: 'Sở Giao thông vận tải',
-      },
-    ],
-  },
-];
+import { departmentApi } from '@/modules/organization/services/department.api';
+import { userApi } from '@/modules/user/services/user.api';
 
-// Generate realistic mock members database
-const generateMockMembers = (): Member[] => {
-  const positions = [
-    'Giám đốc',
-    'Phó Giám đốc',
-    'Trưởng phòng',
-    'Phó phòng',
-    'Chuyên viên chính',
-    'Chuyên viên',
-    'Cán sự',
-  ];
-
-  const firstNames = [
-    'Nguyễn', 'Trần', 'Lê', 'Phạm', 'Hoàng', 'Huỳnh', 'Phan', 'Vũ', 'Võ', 'Đặng', 'Bùi', 'Đỗ', 'Hồ', 'Ngô', 'Dương',
-  ];
-
-  const middleNames = ['Văn', 'Thị', 'Minh', 'Hữu', 'Đức', 'Quốc', 'Thanh', 'Thu', 'Hồng', 'Tuấn'];
-
-  const lastNames = [
-    'An', 'Bình', 'Cường', 'Dũng', 'Hà', 'Hằng', 'Hương', 'Khoa', 'Linh', 'Long',
-    'Mai', 'Nam', 'Nga', 'Phong', 'Quân', 'Sơn', 'Tâm', 'Thắng', 'Trang', 'Tú',
-    'Uyên', 'Vân', 'Vinh', 'Yến', 'Anh', 'Bảo', 'Chi', 'Đạt', 'Giang', 'Hiền',
-  ];
-
-  const units = [
-    { id: '1-1-1', name: 'Phòng Hành chính' },
-    { id: '1-1-2', name: 'Phòng Tổ chức' },
-    { id: '1-1-3', name: 'Phòng Pháp chế' },
-    { id: '1-2-1', name: 'Phòng Tổ chức cán bộ' },
-    { id: '1-2-2', name: 'Phòng Chính quyền' },
-    { id: '1-2-3', name: 'Phòng Văn thư - Lưu trữ' },
-    { id: '1-3-1', name: 'Phòng Ngân sách' },
-    { id: '1-3-2', name: 'Phòng Kế toán' },
-    { id: '1-3', name: 'Sở Tài chính' },
-    { id: '1-4-1', name: 'Phòng Kế hoạch tổng hợp' },
-    { id: '1-4-2', name: 'Phòng Quản lý đầu tư' },
-    { id: '1-4', name: 'Sở Kế hoạch và Đầu tư' },
-    { id: '1-5', name: 'Sở Xây dựng' },
-    { id: '1-6', name: 'Sở Giao thông vận tải' },
-  ];
-
-  const members: Member[] = [];
-  let idCounter = 1;
-
-  // Generate 5-15 members per unit
-  units.forEach((unit) => {
-    const memberCount = Math.floor(Math.random() * 11) + 5; // 5-15 members
-    for (let i = 0; i < memberCount; i++) {
-      const firstName = firstNames[Math.floor(Math.random() * firstNames.length)];
-      const middleName = middleNames[Math.floor(Math.random() * middleNames.length)];
-      const lastName = lastNames[Math.floor(Math.random() * lastNames.length)];
-      const fullName = `${firstName} ${middleName} ${lastName}`;
-
-      const position = positions[Math.floor(Math.random() * positions.length)];
-
-      const emailName = `${firstName.toLowerCase()}${lastName.toLowerCase()}${idCounter}`;
-
-      members.push({
-        id: `m${idCounter}`,
-        name: fullName,
-        position,
-        unit: unit.name,
-        unitId: unit.id,
-        email: `${emailName}@haiphong.gov.vn`,
-      });
-
-      idCounter++;
-    }
-  });
-
-  return members;
-};
-
-const mockMembersDatabase = generateMockMembers();
-
-// Recursive function to get all child unit IDs
-const getAllChildUnitIds = (unitId: string, units: UnitNode[]): string[] => {
-  const result: string[] = [unitId];
-
-  const findAndCollect = (nodes: UnitNode[]) => {
-    for (const node of nodes) {
-      if (node.id === unitId && node.children) {
-        const collectChildren = (children: UnitNode[]) => {
-          children.forEach((child) => {
-            result.push(child.id);
-            if (child.children) {
-              collectChildren(child.children);
-            }
-          });
-        };
-        collectChildren(node.children);
-        return;
-      }
-      if (node.children) {
-        findAndCollect(node.children);
-      }
-    }
-  };
-
-  findAndCollect(units);
-  return result;
+// Map tree nodes from backend structure
+const mapDepartmentTree = (nodes: any[]): UnitNode[] => {
+  if (!nodes) return [];
+  return nodes.map(node => ({
+    id: String(node.id),
+    name: node.deptName || node.name || '',
+    children: node.children ? mapDepartmentTree(node.children) : undefined
+  }));
 };
 
 const UnitTreeNode: React.FC<{
@@ -252,32 +110,79 @@ const SelectUnitModal: React.FC<SelectUnitModalProps> = ({
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [isLoading, setIsLoading] = useState(false);
+  const [isTreeLoading, setIsTreeLoading] = useState(false);
+  const [unitTree, setUnitTree] = useState<UnitNode[]>([]);
+  const [membersDatabase, setMembersDatabase] = useState<Member[]>([]);
+
+  // Fetch Tree on open
+  useEffect(() => {
+    if (isOpen) {
+      setIsTreeLoading(true);
+      departmentApi.getTree()
+        .then(res => {
+          if (res.success && res.data) {
+            setUnitTree(mapDepartmentTree(res.data));
+          }
+        })
+        .catch(err => {
+          console.error("Failed to load department tree", err);
+        })
+        .finally(() => {
+          setIsTreeLoading(false);
+        });
+    }
+  }, [isOpen]);
+
+  // Fetch Members on unit selection
+  useEffect(() => {
+    if (selectedUnitId) {
+      setIsLoading(true);
+      userApi.getUsers({ departmentId: selectedUnitId, size: 1000 })
+        .then(res => {
+          if (res.success && res.data?.content) {
+            const mapped = res.data.content.map((u: any) => {
+              let posName = '';
+              if (u.position) {
+                posName = typeof u.position === 'object' ? (u.position.positionName || u.position.name || '') : u.position;
+              }
+              let deptName = '';
+              let deptId = '';
+              if (u.department) {
+                deptName = typeof u.department === 'object' ? (u.department.deptName || u.department.name || '') : u.department;
+                deptId = typeof u.department === 'object' ? (u.department.id || '') : u.department;
+              }
+              return {
+                id: String(u.id),
+                name: u.fullName || u.username,
+                position: posName,
+                unit: deptName,
+                unitId: deptId || selectedUnitId,
+                email: u.email || '',
+              };
+            });
+            setMembersDatabase(mapped);
+          }
+        })
+        .catch(err => {
+          console.error("Failed to load users for department", err);
+        })
+        .finally(() => {
+          setIsLoading(false);
+        });
+    } else {
+      setMembersDatabase([]);
+    }
+  }, [selectedUnitId]);
 
   // Reset page when unit or search changes
   useEffect(() => {
     setCurrentPage(1);
   }, [selectedUnitId, memberSearchQuery]);
 
-  // Simulate loading when changing units
-  useEffect(() => {
-    if (selectedUnitId) {
-      setIsLoading(true);
-      const timer = setTimeout(() => {
-        setIsLoading(false);
-      }, 300);
-      return () => clearTimeout(timer);
-    }
-  }, [selectedUnitId]);
-
   // Filter members by selected unit (including child units)
   const unitFilteredMembers = useMemo(() => {
-    if (!selectedUnitId) {
-      return mockMembersDatabase;
-    }
-
-    const allowedUnitIds = getAllChildUnitIds(selectedUnitId, mockUnits);
-    return mockMembersDatabase.filter((m) => allowedUnitIds.includes(m.unitId));
-  }, [selectedUnitId]);
+    return membersDatabase;
+  }, [membersDatabase]);
 
   // Apply search filter
   const searchFilteredMembers = useMemo(() => {
@@ -339,7 +244,7 @@ const SelectUnitModal: React.FC<SelectUnitModalProps> = ({
   };
 
   const handleConfirm = () => {
-    const selected = mockMembersDatabase.filter((m) => selectedMembers.has(m.id));
+    const selected = membersDatabase.filter((m) => selectedMembers.has(m.id));
     onConfirm(selected);
     setSelectedMembers(new Set());
     setSelectedUnitId(null);
@@ -396,15 +301,23 @@ const SelectUnitModal: React.FC<SelectUnitModalProps> = ({
           <div className="w-1/3 border-r border-gray-200 flex flex-col">
 
             <div className="flex-1 overflow-y-auto p-2">
-              {mockUnits.map((unit) => (
-                <UnitTreeNode
-                  key={unit.id}
-                  node={unit}
-                  level={0}
-                  selectedUnitId={selectedUnitId}
-                  onSelect={handleUnitSelect}
-                />
-              ))}
+              {isTreeLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 text-[#C8102E] animate-spin" />
+                </div>
+              ) : unitTree.length === 0 ? (
+                <p className="text-sm text-gray-500 p-4">Không có dữ liệu đơn vị</p>
+              ) : (
+                unitTree.map((unit) => (
+                  <UnitTreeNode
+                    key={unit.id}
+                    node={unit}
+                    level={0}
+                    selectedUnitId={selectedUnitId}
+                    onSelect={handleUnitSelect}
+                  />
+                ))
+              )}
             </div>
           </div>
 

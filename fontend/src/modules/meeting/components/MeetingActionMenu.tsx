@@ -1,27 +1,42 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MoreVertical, Eye, Edit, Copy, Clock, XCircle, Send } from 'lucide-react';
+import { MoreVertical, Edit, Copy, Clock, XCircle, Send, FileUp } from 'lucide-react';
 import { cn } from '@/common/utils/cn';
 
 interface MeetingActionMenuProps {
-  meetingId: number;
-  status: string;
-  onViewDetail: (id: number) => void;
-  onUpdate: (id: number) => void;
-  onCopy: (id: number) => void;
-  onPostpone?: (id: number) => void;
-  onCancel?: (id: number) => void;
-  onSend?: (id: number) => void;
+  meetingId: string;
+  canEdit?: boolean;
+  canCancel?: boolean;
+  canPublish?: boolean;
+  canPostpone?: boolean;
+  canDelete?: boolean;
+  canSubmitApproval?: boolean;
+  canUploadDocs?: boolean;
+  canCopy?: boolean;
+  onViewDetail: (id: string) => void;
+  onUpdate: (id: string) => void;
+  onCopy: (id: string) => void;
+  onPostpone?: (id: string) => void;
+  onCancel?: (id: string) => void;
+  onSend?: (id: string) => void;
+  onUploadDocs?: (id: string) => void;
 }
 
 export const MeetingActionMenu: React.FC<MeetingActionMenuProps> = ({
   meetingId,
-  status,
+  canEdit,
+  canCancel,
+  canPublish,
+  canPostpone,
+  canSubmitApproval,
+  canUploadDocs,
+  canCopy,
   onViewDetail,
   onUpdate,
   onCopy,
   onPostpone,
   onCancel,
   onSend,
+  onUploadDocs,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -48,41 +63,78 @@ export const MeetingActionMenu: React.FC<MeetingActionMenuProps> = ({
     setIsOpen(false);
   };
 
-  // Get actions based on status
+  // Get actions based on permissions
   const getActions = () => {
     const actions = [];
 
-    switch (status) {
-      case 'Sắp diễn ra':
-        actions.push(
-          { icon: Edit, label: 'Cập nhật', onClick: () => onUpdate(meetingId), variant: 'default' },
-          { icon: Copy, label: 'Sao chép phiên họp', onClick: () => onCopy(meetingId), variant: 'default' },
-          { icon: Clock, label: 'Hoãn', onClick: () => onPostpone?.(meetingId), variant: 'default' },
-          { icon: XCircle, label: 'Hủy', onClick: () => onCancel?.(meetingId), variant: 'danger' }
-        );
-        break;
+    // 1. Quyền sửa toàn phần (Creator/Chair/Admin)
+    if (canEdit) {
+      actions.push({
+        icon: Edit,
+        label: 'Cập nhật phiên họp',
+        onClick: () => onUpdate(meetingId),
+        variant: 'default'
+      });
+    }
 
-      case 'Nháp':
-        actions.push(
-          { icon: Edit, label: 'Cập nhật', onClick: () => onUpdate(meetingId), variant: 'default' },
-          { icon: Copy, label: 'Sao chép phiên họp', onClick: () => onCopy(meetingId), variant: 'default' },
-          { icon: Send, label: 'Gửi đi', onClick: () => onSend?.(meetingId), variant: 'primary' }
-        );
-        break;
+    // 2. Quyền chuẩn bị tài liệu (Preparer - chỉ hiển thị khi không có quyền sửa toàn phần)
+    if (canUploadDocs && !canEdit) {
+      actions.push({
+        icon: FileUp,
+        label: 'Cập nhật tài liệu',
+        onClick: () => onUploadDocs?.(meetingId),
+        variant: 'primary'
+      });
+    }
 
-      case 'Đang diễn ra':
-        actions.push(
-          { icon: Edit, label: 'Cập nhật', onClick: () => onUpdate(meetingId), variant: 'default' },
-          { icon: Copy, label: 'Sao chép phiên họp', onClick: () => onCopy(meetingId), variant: 'default' }
-        );
-        break;
+    // 3. Quyền gửi đi / gửi duyệt
+    if (canSubmitApproval) {
+      actions.push({
+        icon: Send,
+        label: 'Gửi đi',
+        onClick: () => onSend?.(meetingId),
+        variant: 'primary'
+      });
+    }
 
-      case 'Đã kết thúc':
-        // No additional actions, only "Xem chi tiết" button shown outside menu
-        break;
+    // 4. Quyền công bố (Publish)
+    if (canPublish) {
+      actions.push({
+        icon: Send,
+        label: 'Công bố phiên họp',
+        onClick: () => onSend?.(meetingId),
+        variant: 'primary'
+      });
+    }
 
-      default:
-        break;
+    // 5. Quyền hoãn họp (Postpone)
+    if (canPostpone) {
+      actions.push({
+        icon: Clock,
+        label: 'Hoãn phiên họp',
+        onClick: () => onPostpone?.(meetingId),
+        variant: 'default'
+      });
+    }
+
+    // 6. Quyền hủy họp (Cancel)
+    if (canCancel) {
+      actions.push({
+        icon: XCircle,
+        label: 'Hủy phiên họp',
+        onClick: () => onCancel?.(meetingId),
+        variant: 'danger'
+      });
+    }
+
+    // 7. Quyền sao chép (Chỉ cho phép khi có quyền copy / là người tạo)
+    if (canCopy) {
+      actions.push({
+        icon: Copy,
+        label: 'Sao chép phiên họp',
+        onClick: () => onCopy(meetingId),
+        variant: 'default'
+      });
     }
 
     return actions;
@@ -90,8 +142,8 @@ export const MeetingActionMenu: React.FC<MeetingActionMenuProps> = ({
 
   const actions = getActions();
 
-  // If status is "Đã kết thúc", no menu needed
-  if (status === 'Đã kết thúc') {
+  // Nếu không có hành động nào khả dụng, không hiển thị menu 3 chấm
+  if (actions.length === 0) {
     return null;
   }
 
@@ -123,7 +175,7 @@ export const MeetingActionMenu: React.FC<MeetingActionMenuProps> = ({
                     action.variant === 'danger'
                       ? 'text-red-600 hover:bg-red-50'
                       : action.variant === 'primary'
-                      ? 'text-[#C8102E] hover:bg-red-50 body'
+                      ? 'text-[#C8102E] hover:bg-red-50 body font-semibold'
                       : 'text-gray-700 hover:bg-gray-50'
                   )}
                 >

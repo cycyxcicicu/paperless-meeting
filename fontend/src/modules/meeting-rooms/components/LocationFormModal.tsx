@@ -77,6 +77,7 @@ export const LocationFormModal: React.FC<LocationFormModalProps> = ({
       onClose={onClose}
       title={getTitle()}
       className="sm:max-w-[600px]"
+      preventAutoFocus={true}
     >
       <FormProvider {...methods}>
         <form onSubmit={methods.handleSubmit(onFormSubmit)} className="space-y-6 pt-4">

@@ -10,7 +10,6 @@ interface WizardFooterProps {
   totalSteps: number;
   onBack: () => void;
   onNext: () => void;
-  onSaveDraft: () => void;
   onSubmitForApproval?: () => void;
   onSubmitMeeting?: () => void;
   onCancel?: () => void;
@@ -24,7 +23,6 @@ const WizardFooter: React.FC<WizardFooterProps> = ({
   totalSteps,
   onBack,
   onNext,
-  onSaveDraft,
   onSubmitForApproval,
   onSubmitMeeting,
   onCancel,
@@ -77,15 +75,6 @@ const WizardFooter: React.FC<WizardFooterProps> = ({
               </div>
             )}
 
-            {/* Save Draft - always visible */}
-            <button
-              onClick={onSaveDraft}
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-gray-300 text-gray-700 btn-primary text-sm hover:bg-gray-50 transition-all"
-            >
-              <Save className="h-4 w-4" />
-              Lưu nháp
-            </button>
-
             {/* Last step: Submit for Approval + Submit Meeting */}
             {isLastStep ? (
               <>
@@ -135,7 +124,7 @@ const WizardFooter: React.FC<WizardFooterProps> = ({
                 onClick={onNext}
                 className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#C8102E] to-[#A90F14] text-white btn-primary text-sm hover:shadow-lg hover:shadow-red-500/25 transition-all"
               >
-                Tiếp tục
+                Lưu và tiếp tục
               </button>
             )}
           </div>

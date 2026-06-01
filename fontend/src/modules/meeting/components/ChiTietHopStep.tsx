@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useForm, FormProvider } from 'react-hook-form';
 import { Label } from '@/common/components/ui/label';
 import { RichTextEditor } from './RichTextEditor';
@@ -6,6 +6,10 @@ import { DynamicFormRenderer } from '@/common/components/form-engine/DynamicForm
 import { createChiTietHopFormSchema } from '../form/meetingForm.schema';
 import { FormMode } from '@/common/components/form-engine/form.types';
 import { FileUploader } from '@/common/components/ui/FileUploader';
+import { locationApi } from '@/modules/meeting-rooms/services/location.api';
+import { meetingApi } from '../services/meeting.api';
+import { toast } from '@/lib/toast';
+import { getErrorMessage } from '@/lib/api/error';
 
 interface ChiTietHopData {
   tenPhienHop: string;
@@ -16,7 +20,7 @@ interface ChiTietHopData {
   soPhutDenMuon: number;
   noiDungChuongTrinh: 'upload' | 'text';
   noiDungChuongTrinhText: string;
-  noiDungChuongTrinhFile?: File | null;
+  noiDungChuongTrinhFile?: any | null;
 }
 
 interface ChiTietHopStepProps {
@@ -25,26 +29,25 @@ interface ChiTietHopStepProps {
   errors?: Record<string, string>;
 }
 
-// Danh sách phòng họp mock
-const phongHopList = [
-  { id: 'ph1', name: 'Phòng họp A - Tầng 5' },
-  { id: 'ph2', name: 'Phòng họp B - Tầng 3' },
-  { id: 'ph3', name: 'Phòng họp C - Tầng 4' },
-  { id: 'ph4', name: 'Hội trường lớn - Tầng 1' },
-  { id: 'ph5', name: 'Hội trường nhỏ - Tầng 2' },
-  { id: 'ph6', name: 'Phòng họp VIP - Tầng 6' },
-  { id: 'ph7', name: 'Phòng họp D - Tầng 2' },
-  { id: 'ph8', name: 'Phòng họp E - Tầng 3' },
-];
-
-const phongHopOptions = phongHopList.map((phong) => ({
-  value: phong.name,
-  label: phong.name,
-}));
-
-
-
 const ChiTietHopStep: React.FC<ChiTietHopStepProps> = ({ data, onChange, errors = {} }) => {
+  const [phongHopOptions, setPhongHopOptions] = useState<{ value: string; label: string }[]>([]);
+
+  useEffect(() => {
+    locationApi.getLocations({ isActive: true, size: 100 })
+      .then((res) => {
+        if (res.success && res.data?.content) {
+          const opts = res.data.content.map((phong: any) => ({
+            value: phong.id,
+            label: `${phong.name} (Sức chứa: ${phong.capacity || 0})`,
+          }));
+          setPhongHopOptions(opts);
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to load locations', err);
+      });
+  }, []);
+
   const methods = useForm<ChiTietHopData>({
     defaultValues: data,
     mode: 'onChange'
@@ -123,7 +126,31 @@ const ChiTietHopStep: React.FC<ChiTietHopStepProps> = ({ data, onChange, errors 
               <div className="mt-2">
                 <FileUploader
                   files={noiDungChuongTrinhFile ? [noiDungChuongTrinhFile] : []}
-                  onChange={(selectedFiles) => setValue('noiDungChuongTrinhFile', selectedFiles[0] || null)}
+                  onChange={async (selectedFiles) => {
+                    const file = selectedFiles[0];
+                    if (file) {
+                      try {
+                        toast.info("Đang tải tài liệu chương trình họp lên...");
+                        const res = await meetingApi.uploadDocument(file, file.name, 'AGENDA', 'Tài liệu chương trình họp');
+                        if (res.success && res.data) {
+                          setValue('noiDungChuongTrinhFile', {
+                            id: res.data.id,
+                            name: res.data.fileName || res.data.title,
+                            url: res.data.fileUrl
+                          });
+                          toast.success("Tải tài liệu lên thành công");
+                        } else {
+                          toast.error(res.message || "Tải tài liệu lên thất bại");
+                        }
+                      } catch (err: any) {
+                        console.error(err);
+                        const msg = getErrorMessage(err, "Lỗi khi tải tài liệu lên hệ thống");
+                        toast.error(msg);
+                      }
+                    } else {
+                      setValue('noiDungChuongTrinhFile', null);
+                    }
+                  }}
                   multiple={false}
                   accept=".pdf,.doc,.docx"
                   allowedExtensionsText="PDF, DOC, DOCX"

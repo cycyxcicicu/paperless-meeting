@@ -18,7 +18,7 @@ export const chiTietHopSchema = z.object({
   thoiGianKetThuc: z.string().min(1, 'Vui lòng chọn thời gian kết thúc'),
   diaDiem: z.string().min(1, 'Vui lòng chọn địa điểm họp'),
   linkHopTrucTuyen: z.string().url('Link không đúng định dạng').optional().or(z.literal('')),
-  soPhutDenMuon: z.number().min(0, 'Số phút đến muộn không được âm').optional(),
+  soPhutDenMuon: z.coerce.number().min(0, 'Số phút đến muộn không được âm').optional(),
 }).superRefine((data, ctx) => {
   if (data.thoiGianBatDau && data.thoiGianKetThuc) {
     const start = new Date(data.thoiGianBatDau).getTime();

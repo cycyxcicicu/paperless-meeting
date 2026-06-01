@@ -7,12 +7,13 @@ import { Meeting } from '../table/meetingTable.schema';
 
 interface MeetingCardProps {
     meeting: Meeting;
-    onViewDetail: (id: number) => void;
-    onUpdate: (id: number) => void;
-    onCopy: (id: number) => void;
-    onPostpone: (id: number) => void;
-    onCancel: (id: number) => void;
-    onSend: (id: number) => void;
+    onViewDetail: (id: string) => void;
+    onUpdate: (id: string) => void;
+    onCopy: (id: string) => void;
+    onPostpone: (id: string) => void;
+    onCancel: (id: string) => void;
+    onSend: (id: string) => void;
+    onUploadDocs: (id: string) => void;
 }
 
 export const MeetingCard: React.FC<MeetingCardProps> = ({
@@ -22,8 +23,13 @@ export const MeetingCard: React.FC<MeetingCardProps> = ({
     onCopy,
     onPostpone,
     onCancel,
-    onSend
+    onSend,
+    onUploadDocs
 }) => {
+    // Tách ngày tháng an toàn
+    const day = meeting.date.includes('/') ? meeting.date.split('/')[0] : '01';
+    const month = meeting.date.includes('/') ? meeting.date.split('/')[1] : '01';
+
     return (
         <Card className="hover:shadow-lg transition-all">
             <CardContent className="p-6">
@@ -32,10 +38,10 @@ export const MeetingCard: React.FC<MeetingCardProps> = ({
                     <div className="flex gap-4 flex-1">
                         <div className="w-14 h-14 rounded-xl bg-[#FEF2F2] flex flex-col items-center justify-center flex-shrink-0">
                             <span className="text-xs text-[#C8102E] body">
-                                {meeting.date.split("/")[0]}
+                                {day}
                             </span>
                             <span className="text-lg heading text-[#C8102E]">
-                                T{meeting.date.split("/")[1]}
+                                T{month}
                             </span>
                         </div>
 
@@ -46,7 +52,7 @@ export const MeetingCard: React.FC<MeetingCardProps> = ({
                                     {meeting.title}
                                 </h3>
                                 <p className="text-sm text-[#6B7280]">
-                                    Chủ trì: {meeting.host}
+                                    Chủ trì: {meeting.host || 'Chưa xác định'}
                                 </p>
                             </div>
 
@@ -104,18 +110,42 @@ export const MeetingCard: React.FC<MeetingCardProps> = ({
                         </div>
 
                         {/* Action Menu (3 dots) */}
-                        <div className="w-10 flex justify-center flex-shrink-0">
-                            <MeetingActionMenu
-                                meetingId={meeting.id}
-                                status={meeting.status}
-                                onViewDetail={onViewDetail}
-                                onUpdate={onUpdate}
-                                onCopy={onCopy}
-                                onPostpone={onPostpone}
-                                onCancel={onCancel}
-                                onSend={onSend}
-                            />
-                        </div>
+                        {(() => {
+                            const hasActions = 
+                                meeting.canEdit || 
+                                meeting.canCancel || 
+                                meeting.canPublish || 
+                                meeting.canPostpone || 
+                                meeting.canDelete || 
+                                meeting.canSubmitApproval || 
+                                meeting.canUploadDocs || 
+                                meeting.canCopy;
+                            
+                            if (!hasActions) return null;
+
+                            return (
+                                <div className="w-10 flex justify-center flex-shrink-0">
+                                    <MeetingActionMenu
+                                        meetingId={meeting.id}
+                                        canEdit={meeting.canEdit}
+                                        canCancel={meeting.canCancel}
+                                        canPublish={meeting.canPublish}
+                                        canPostpone={meeting.canPostpone}
+                                        canDelete={meeting.canDelete}
+                                        canSubmitApproval={meeting.canSubmitApproval}
+                                        canUploadDocs={meeting.canUploadDocs}
+                                        canCopy={meeting.canCopy}
+                                        onViewDetail={onViewDetail}
+                                        onUpdate={onUpdate}
+                                        onCopy={onCopy}
+                                        onPostpone={onPostpone}
+                                        onCancel={onCancel}
+                                        onSend={onSend}
+                                        onUploadDocs={onUploadDocs}
+                                    />
+                                </div>
+                            );
+                        })()}
                     </div>
                 </div>
             </CardContent>

@@ -1,9 +1,7 @@
 import { ColumnDef } from "@/common/components/table-engine/table.types";
-import { Badge } from "@/common/components/ui/badge";
-import { Clock, Users, MapPin, FileText } from "lucide-react";
 
 export interface Meeting {
-    id: number;
+    id: string;
     title: string;
     date: string;
     time: string;
@@ -12,16 +10,25 @@ export interface Meeting {
     participants: number;
     documents: number;
     status: string;
-    statusVariant: "success" | "warning" | "info" | "default";
+    statusVariant: "success" | "warning" | "info" | "default" | "destructive" | "secondary";
+    
+    canEdit?: boolean;
+    canCancel?: boolean;
+    canPublish?: boolean;
+    canPostpone?: boolean;
+    canDelete?: boolean;
+    canSubmitApproval?: boolean;
+    canUploadDocs?: boolean;
+    canCopy?: boolean;
 }
 
 export const createMeetingColumns = (handlers: {
-    onView: (id: number) => void;
-    onUpdate: (id: number) => void;
-    onCopy: (id: number) => void;
-    onPostpone: (id: number) => void;
-    onCancel: (id: number) => void;
-    onSend: (id: number) => void;
+    onView: (id: string) => void;
+    onUpdate: (id: string) => void;
+    onCopy: (id: string) => void;
+    onPostpone: (id: string) => void;
+    onCancel: (id: string) => void;
+    onSend: (id: string) => void;
 }): ColumnDef<Meeting>[] => [
     {
         key: "title",
@@ -42,12 +49,12 @@ export const createMeetingColumns = (handlers: {
 ];
 
 export const createMeetingRowActions = (handlers: {
-    onView: (id: number) => void;
-    onUpdate: (id: number) => void;
-    onCopy: (id: number) => void;
-    onPostpone: (id: number) => void;
-    onCancel: (id: number) => void;
-    onSend: (id: number) => void;
+    onView: (id: string) => void;
+    onUpdate: (id: string) => void;
+    onCopy: (id: string) => void;
+    onPostpone: (id: string) => void;
+    onCancel: (id: string) => void;
+    onSend: (id: string) => void;
 }) => [
     {
         key: 'view',
@@ -60,7 +67,7 @@ export const createMeetingRowActions = (handlers: {
         label: 'Cập nhật',
         variant: 'warning' as const,
         onClick: (row: Meeting) => handlers.onUpdate(row.id),
-        show: (row: Meeting) => row.status === "Nháp" || row.status === "Sắp diễn ra"
+        show: (row: Meeting) => !!row.canEdit
     },
     {
         key: 'copy',
