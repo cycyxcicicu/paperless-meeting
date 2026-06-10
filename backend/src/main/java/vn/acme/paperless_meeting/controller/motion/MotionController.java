@@ -37,6 +37,14 @@ public class MotionController {
                 .data(motionService.getMotions(agendaItemId)).build());
     }
 
+    @Operation(summary = "Danh sách vấn đề biểu quyết của cuộc họp",
+               description = "Trả về tất cả motions thuộc cuộc họp.")
+    @GetMapping("/meetings/{meetingId}/motions")
+    public ResponseEntity<ApiResponse<List<MotionResponse>>> getMeetingMotions(@PathVariable UUID meetingId) {
+        return ResponseEntity.ok(ApiResponse.<List<MotionResponse>>builder()
+                .data(motionService.getMeetingMotions(meetingId)).build());
+    }
+
     @Operation(summary = "Tạo vấn đề biểu quyết mới",
                description = "Thêm một nội dung cần bỏ phiếu vào đầu mục nghị sự. Cần điền tiêu đề và danh sách lựa chọn.")
     @PostMapping("/agenda-items/{agendaItemId}/motions")

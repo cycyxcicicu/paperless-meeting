@@ -26,6 +26,15 @@ export const MeetingCard: React.FC<MeetingCardProps> = ({
     onSend,
     onUploadDocs
 }) => {
+    const [isTruncated, setIsTruncated] = React.useState(false);
+    const titleRef = React.useRef<HTMLHeadingElement>(null);
+
+    const handleMouseEnter = () => {
+        if (titleRef.current) {
+            setIsTruncated(titleRef.current.scrollWidth > titleRef.current.clientWidth);
+        }
+    };
+
     // Tách ngày tháng an toàn
     const day = meeting.date.includes('/') ? meeting.date.split('/')[0] : '01';
     const month = meeting.date.includes('/') ? meeting.date.split('/')[1] : '01';
@@ -47,10 +56,22 @@ export const MeetingCard: React.FC<MeetingCardProps> = ({
 
                         <div className="flex-1">
                             {/* Title */}
-                            <div className="flex flex-col mb-2">
-                                <h3 className="text-base btn-primary text-[#111827] mb-1">
+                            <div className="flex flex-col mb-2 relative group">
+                                <h3 
+                                    ref={titleRef}
+                                    onMouseEnter={handleMouseEnter}
+                                    className={`text-base btn-primary text-[#111827] mb-1 truncate max-w-[360px] md:max-w-[480px] lg:max-w-[600px] ${isTruncated ? 'cursor-pointer' : 'cursor-default'}`}
+                                >
                                     {meeting.title}
                                 </h3>
+                                {isTruncated && (
+                                    <div className="absolute bottom-full mb-1.5 left-0 hidden group-hover:block z-50 animate-in fade-in-0 duration-200">
+                                        <div className="bg-white text-gray-800 text-xs rounded-xl px-3.5 py-2.5 whitespace-normal max-w-sm shadow-xl border border-gray-200 break-words leading-relaxed">
+                                            {meeting.title}
+                                            <div className="absolute top-full left-4 -mt-1 border-4 border-transparent border-t-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.05)]"></div>
+                                        </div>
+                                    </div>
+                                )}
                                 <p className="text-sm text-[#6B7280]">
                                     Chủ trì: {meeting.host || 'Chưa xác định'}
                                 </p>
@@ -121,7 +142,7 @@ export const MeetingCard: React.FC<MeetingCardProps> = ({
                                 meeting.canUploadDocs || 
                                 meeting.canCopy;
                             
-                            if (!hasActions) return null;
+                            if (!hasActions) return <div className="w-10 flex-shrink-0" />;
 
                             return (
                                 <div className="w-10 flex justify-center flex-shrink-0">

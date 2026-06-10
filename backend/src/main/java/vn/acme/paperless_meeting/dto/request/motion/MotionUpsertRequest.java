@@ -10,6 +10,7 @@ import lombok.experimental.FieldDefaults;
 @Setter
 @FieldDefaults(level = AccessLevel.PRIVATE)
 public class MotionUpsertRequest {
+    UUID id;
     String title;
     String description;
     UUID agendaItemId;

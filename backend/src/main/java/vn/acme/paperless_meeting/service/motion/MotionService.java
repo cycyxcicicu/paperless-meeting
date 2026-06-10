@@ -227,6 +227,16 @@ public class MotionService {
     }
 
     /**
+     * Lấy danh sách vấn đề biểu quyết của toàn bộ cuộc họp
+     */
+    public List<MotionResponse> getMeetingMotions(UUID meetingId) {
+        List<Motion> list = motionRepository.findByMeetingId(meetingId);
+        return list.stream()
+                .map(motionMapper::toResponse)
+                .collect(Collectors.toList());
+    }
+
+    /**
      * (Trong phiên họp) Chủ trì phát lệnh bắt đầu biểu quyết cho vấn đề này
      */
     @Transactional

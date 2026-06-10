@@ -27,10 +27,12 @@ interface ChiTietHopStepProps {
   data: ChiTietHopData;
   onChange: (data: ChiTietHopData) => void;
   errors?: Record<string, string>;
+  isReadOnly?: boolean;
 }
 
-const ChiTietHopStep: React.FC<ChiTietHopStepProps> = ({ data, onChange, errors = {} }) => {
+const ChiTietHopStep: React.FC<ChiTietHopStepProps> = ({ data, onChange, errors = {}, isReadOnly = false }) => {
   const [phongHopOptions, setPhongHopOptions] = useState<{ value: string; label: string }[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
 
   useEffect(() => {
     locationApi.getLocations({ isActive: true, size: 100 })
@@ -83,7 +85,7 @@ const ChiTietHopStep: React.FC<ChiTietHopStepProps> = ({ data, onChange, errors 
       <form className="grid grid-cols-[58%_42%] gap-6">
         {/* LEFT COLUMN: Thông tin chính */}
         <div className="space-y-4">
-          <DynamicFormRenderer groups={createChiTietHopFormSchema(phongHopOptions)} mode="update" />
+          <DynamicFormRenderer groups={createChiTietHopFormSchema(phongHopOptions)} mode={isReadOnly ? "view" : "update"} />
         </div>
 
         {/* RIGHT COLUMN: Nội dung chương trình họp */}
@@ -96,8 +98,9 @@ const ChiTietHopStep: React.FC<ChiTietHopStepProps> = ({ data, onChange, errors 
                   type="radio"
                   value="upload"
                   checked={noiDungChuongTrinh === 'upload'}
-                  onChange={() => setValue('noiDungChuongTrinh', 'upload')}
+                  onChange={() => !isReadOnly && setValue('noiDungChuongTrinh', 'upload')}
                   className="w-4 h-4 text-[#C8102E] border-gray-300 focus:ring-[#C8102E]"
+                  disabled={isReadOnly}
                 />
                 <span className="text-sm text-gray-700 body">Tải tài liệu</span>
               </label>
@@ -106,8 +109,9 @@ const ChiTietHopStep: React.FC<ChiTietHopStepProps> = ({ data, onChange, errors 
                   type="radio"
                   value="text"
                   checked={noiDungChuongTrinh === 'text'}
-                  onChange={() => setValue('noiDungChuongTrinh', 'text')}
+                  onChange={() => !isReadOnly && setValue('noiDungChuongTrinh', 'text')}
                   className="w-4 h-4 text-[#C8102E] border-gray-300 focus:ring-[#C8102E]"
+                  disabled={isReadOnly}
                 />
                 <span className="text-sm text-gray-700 body">Nhập văn bản</span>
               </label>
@@ -120,41 +124,54 @@ const ChiTietHopStep: React.FC<ChiTietHopStepProps> = ({ data, onChange, errors 
                   onChange={(value) => setValue('noiDungChuongTrinhText', value)}
                   placeholder="Nhập nội dung chương trình họp..."
                   minHeight="340px"
+                  readOnly={isReadOnly}
                 />
               </div>
             ) : (
-              <div className="mt-2">
-                <FileUploader
-                  files={noiDungChuongTrinhFile ? [noiDungChuongTrinhFile] : []}
-                  onChange={async (selectedFiles) => {
-                    const file = selectedFiles[0];
-                    if (file) {
-                      try {
-                        toast.info("Đang tải tài liệu chương trình họp lên...");
-                        const res = await meetingApi.uploadDocument(file, file.name, 'AGENDA', 'Tài liệu chương trình họp');
-                        if (res.success && res.data) {
-                          setValue('noiDungChuongTrinhFile', {
-                            id: res.data.id,
-                            name: res.data.fileName || res.data.title,
-                            url: res.data.fileUrl
-                          });
-                          toast.success("Tải tài liệu lên thành công");
-                        } else {
-                          toast.error(res.message || "Tải tài liệu lên thất bại");
+              <div className="mt-2 relative">
+                {isUploading ? (
+                  <div className="flex flex-col items-center justify-center w-full h-32 border border-gray-200 rounded-2xl bg-gray-50/50">
+                    <div className="h-8 w-8 animate-spin rounded-full border-4 border-solid border-[#C8102E] border-r-transparent mb-2"></div>
+                    <span className="text-sm text-gray-500 font-medium">Đang tải tài liệu lên...</span>
+                  </div>
+                ) : (
+                  <FileUploader
+                    files={noiDungChuongTrinhFile ? [noiDungChuongTrinhFile] : []}
+                    onChange={async (selectedFiles) => {
+                      const file = selectedFiles[0];
+                      if (file) {
+                        setIsUploading(true);
+                        try {
+                          const res = await meetingApi.uploadDocument(file, file.name, 'AGENDA', 'Tài liệu chương trình họp');
+                          if (res.success && res.data) {
+                            const version = (res.data as any).currentVersion;
+                            setValue('noiDungChuongTrinhFile', {
+                              id: res.data.id,
+                              name: version?.fileName || res.data.title || file.name,
+                              url: version?.fileUrl || (res.data as any).fileUrl,
+                              size: version?.fileSize || file.size
+                            });
+                            toast.success("Tải tài liệu lên thành công");
+                          } else {
+                            toast.error(res.message || "Tải tài liệu lên thất bại");
+                          }
+                        } catch (err: any) {
+                          console.error(err);
+                          const msg = getErrorMessage(err, "Lỗi khi tải tài liệu lên hệ thống");
+                          toast.error(msg);
+                        } finally {
+                          setIsUploading(false);
                         }
-                      } catch (err: any) {
-                        console.error(err);
-                        const msg = getErrorMessage(err, "Lỗi khi tải tài liệu lên hệ thống");
-                        toast.error(msg);
+                      } else {
+                        setValue('noiDungChuongTrinhFile', null);
                       }
-                    } else {
-                      setValue('noiDungChuongTrinhFile', null);
-                    }
-                  }}
-                  multiple={false}
-                  accept=".pdf,.doc,.docx"
-                  allowedExtensionsText="PDF, DOC, DOCX"
-                />
+                    }}
+                    multiple={false}
+                    accept=".pdf,.doc,.docx"
+                    allowedExtensionsText="PDF, DOC, DOCX"
+                    disabled={isReadOnly}
+                  />
+                )}
               </div>
             )}
           </div>

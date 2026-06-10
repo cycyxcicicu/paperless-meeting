@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, X, Trash2, CalendarIcon, Send } from 'lucide-react';
+import { Plus, X, Trash2, CalendarIcon, Send, Check, AlertCircle } from 'lucide-react';
 import { FileUploader } from '@/common/components/ui/FileUploader';
 import { toast } from '@/lib/toast';
 import { Button } from '@/common/components/ui/button';
@@ -22,14 +22,23 @@ interface BieuQuyetIssue {
   moTa: string;
 }
 
+interface AgendaItemFeedback {
+  id: string;
+  authorName: string;
+  content: string;
+  type: 'INSTRUCTION' | 'REJECTION' | 'RESPONSE';
+  createdAt: string;
+}
+
 interface NoiDungItem {
   id: string;
   noiDungChiTiet: string;
   thoiGianBatDau: string;
   thoiGianKetThuc: string;
   nguoiChuanBi: string;
+  content?: string;
   nguoiDuyet: string;
-  taiLieu: File[];
+  taiLieu: any[];
   bieuQuyetIssues: BieuQuyetIssue[];
   thanhPhanThamDu: {
     donVi: Member[];
@@ -38,6 +47,8 @@ interface NoiDungItem {
   status?: string;
   rejectReason?: string;
   prepDeadline?: string;
+  feedbacks?: AgendaItemFeedback[];
+  prepInstructions?: string;
 }
 
 interface NoiDungHopData {
@@ -56,6 +67,7 @@ interface NoiDungHopStepProps {
   singleContentMode: boolean;
   errors?: Record<string, any>;
   inheritedParticipants?: ThanhPhanThamDuData;
+  isReadOnly?: boolean;
   isUpdateMode?: boolean;
   meetingId?: string;
 }
@@ -70,8 +82,108 @@ const NoiDungHopStep: React.FC<NoiDungHopStepProps> = ({
   inheritedParticipants,
   isUpdateMode,
   meetingId,
+  isReadOnly = false,
 }) => {
   const [activeContentId, setActiveContentId] = useState(data.contents[0]?.id || '');
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [chatInputs, setChatInputs] = useState<Record<string, string>>({});
+
+  const handleSendChat = async (agendaItemId: string) => {
+    const text = chatInputs[agendaItemId] || "";
+    if (!text.trim()) return;
+
+    try {
+      // Creator/host sends feedback as type 'INSTRUCTION'
+      const res = await meetingApi.addFeedback(agendaItemId, text.trim(), "INSTRUCTION");
+      if (res.success) {
+        setChatInputs(prev => ({ ...prev, [agendaItemId]: "" }));
+        toast.success("Đã gửi ý kiến thành công");
+        
+        // Update the feedback in local data so it displays immediately
+        if (res.data) {
+          const updatedContents = data.contents.map(c => {
+            if (c.id === agendaItemId) {
+              return {
+                ...c,
+                feedbacks: res.data.feedbacks || []
+              };
+            }
+            return c;
+          });
+          onChange({ contents: updatedContents });
+        }
+      } else {
+        toast.error("Lỗi", res.message || "Không thể gửi ý kiến.");
+      }
+    } catch (error: any) {
+      console.error("Error sending feedback:", error);
+      toast.error("Lỗi kết nối", error.message || "Đã xảy ra lỗi khi gửi ý kiến.");
+    }
+  };
+  const [rejectModal, setRejectModal] = useState<{
+    isOpen: boolean;
+    agendaId: string;
+    reason: string;
+  } | null>(null);
+
+  const handleApprove = async (agendaItemId: string) => {
+    try {
+      const res = await meetingApi.approveDocs(agendaItemId);
+      if (res.success) {
+        toast.success("Phê duyệt tài liệu thành công");
+        const updatedContents = data.contents.map(c => {
+          if (c.id === agendaItemId) {
+            return {
+              ...c,
+              status: 'APPROVED',
+              feedbacks: res.data?.feedbacks || []
+            };
+          }
+          return c;
+        });
+        onChange({ contents: updatedContents });
+      } else {
+        toast.error("Thất bại", res.message || "Không thể phê duyệt tài liệu");
+      }
+    } catch (error: any) {
+      console.error("Error approving docs:", error);
+      toast.error("Lỗi kết nối", error.message || "Đã xảy ra lỗi khi phê duyệt.");
+    }
+  };
+
+  const handleReject = async () => {
+    if (!rejectModal || !rejectModal.reason.trim()) {
+      toast.error("Yêu cầu nhập lý do từ chối");
+      return;
+    }
+
+    try {
+      const res = await meetingApi.rejectDocs(rejectModal.agendaId, rejectModal.reason.trim());
+      if (res.success) {
+        toast.success("Đã từ chối tài liệu và gửi lại yêu cầu chỉnh sửa");
+        const updatedContents = data.contents.map(c => {
+          if (c.id === rejectModal.agendaId) {
+            return {
+              ...c,
+              status: 'REJECTED',
+              feedbacks: res.data?.feedbacks || []
+            };
+          }
+          return c;
+        });
+        onChange({ contents: updatedContents });
+      } else {
+        toast.error("Thất bại", res.message || "Không thể từ chối tài liệu");
+      }
+    } catch (error: any) {
+      console.error("Error rejecting docs:", error);
+      toast.error("Lỗi kết nối", error.message || "Đã xảy ra lỗi.");
+    } finally {
+      setRejectModal(null);
+    }
+  };
+
   const [prepModal, setPrepModal] = useState<{
     isOpen: boolean;
     agendaId: string;
@@ -83,12 +195,14 @@ const NoiDungHopStep: React.FC<NoiDungHopStepProps> = ({
 
   const handleOpenPrepModal = (item: NoiDungItem) => {
     const person = participantOptions.find(opt => opt.value === item.nguoiChuanBi);
+    const latestInstruction = item.feedbacks?.filter(f => f.type === 'INSTRUCTION')?.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+
     setPrepModal({
       isOpen: true,
       agendaId: item.id,
       title: item.noiDungChiTiet || '',
-      instructions: item.noiDungChiTiet || '',
-      deadline: '',
+      instructions: item.prepInstructions || latestInstruction?.content || '',
+      deadline: item.prepDeadline || '',
       preparerName: person ? person.label : 'Người chuẩn bị'
     });
   };
@@ -109,8 +223,9 @@ const NoiDungHopStep: React.FC<NoiDungHopStepProps> = ({
         );
         handleUpdateContent(prepModal.agendaId, { 
           status: 'PENDING_PREPARATION',
-          noiDungChiTiet: prepModal.instructions,
-          prepDeadline: prepModal.deadline
+          prepDeadline: prepModal.deadline,
+          prepInstructions: prepModal.instructions,
+          feedbacks: res.data?.feedbacks || []
         });
       } else {
         toast.error("Thất bại", res.message || "Không thể gửi yêu cầu");
@@ -122,6 +237,48 @@ const NoiDungHopStep: React.FC<NoiDungHopStepProps> = ({
       setPrepModal(null);
     }
   };
+
+  const handleDragStart = (e: React.DragEvent<HTMLDivElement>, index: number) => {
+    if (isReadOnly) return;
+    setDraggedIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(index));
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>, index: number) => {
+    e.preventDefault();
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>, targetIndex: number) => {
+    e.preventDefault();
+    if (isReadOnly || draggedIndex === null || draggedIndex === targetIndex) return;
+
+    const newContents = [...data.contents];
+    const [draggedItem] = newContents.splice(draggedIndex, 1);
+    newContents.splice(targetIndex, 0, draggedItem);
+
+    onChange({
+      ...data,
+      contents: newContents,
+    });
+    setDraggedIndex(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedIndex(null);
+  };
+
+  // Sync activeContentId with contents
+  useEffect(() => {
+    if (data.contents.length > 0) {
+      const exists = data.contents.some(c => c.id === activeContentId);
+      if (!activeContentId || !exists) {
+        setActiveContentId(data.contents[0].id);
+      }
+    } else {
+      setActiveContentId('');
+    }
+  }, [data.contents, activeContentId]);
 
   // Sync inherited participants from step 2 to all content items
   useEffect(() => {
@@ -170,6 +327,7 @@ const NoiDungHopStep: React.FC<NoiDungHopStepProps> = ({
       thoiGianBatDau: '',
       thoiGianKetThuc: '',
       nguoiChuanBi: '',
+      content: '',
       nguoiDuyet: '',
       taiLieu: [],
       bieuQuyetIssues: [],
@@ -177,6 +335,7 @@ const NoiDungHopStep: React.FC<NoiDungHopStepProps> = ({
         donVi: [],
         khachMoi: [],
       },
+      feedbacks: [],
     };
 
     onChange({
@@ -266,7 +425,19 @@ const NoiDungHopStep: React.FC<NoiDungHopStepProps> = ({
         <div className="border-b border-gray-200 bg-gray-50/50">
           <div className="flex items-center gap-1 px-6">
             {data.contents.map((content, index) => (
-              <div key={content.id} className="relative group flex items-center">
+              <div
+                key={content.id}
+                className={cn(
+                  'relative group flex items-center select-none',
+                  !isReadOnly && 'cursor-move',
+                  draggedIndex === index && 'opacity-50 bg-gray-200 border-dashed border border-gray-400 rounded-lg'
+                )}
+                draggable={!isReadOnly}
+                onDragStart={(e) => handleDragStart(e, index)}
+                onDragOver={(e) => handleDragOver(e, index)}
+                onDrop={(e) => handleDrop(e, index)}
+                onDragEnd={handleDragEnd}
+              >
                 <button
                   onClick={() => setActiveContentId(content.id)}
                   className={cn(
@@ -279,7 +450,7 @@ const NoiDungHopStep: React.FC<NoiDungHopStepProps> = ({
                     <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-[#C8102E] to-[#A90F14]" />
                   )}
                 </button>
-                {!singleContentMode && data.contents.length > 1 && (
+                {!singleContentMode && data.contents.length > 1 && !isReadOnly && (
                   <button
                     onClick={() => handleRemoveContent(content.id)}
                     className="ml-1 p-0.5 text-gray-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
@@ -290,7 +461,7 @@ const NoiDungHopStep: React.FC<NoiDungHopStepProps> = ({
               </div>
             ))}
 
-            {!singleContentMode && (
+            {!singleContentMode && !isReadOnly && (
               <button
                 onClick={handleAddContent}
                 className="ml-2 p-2 text-gray-400 hover:text-[#C8102E] hover:bg-red-50 rounded-lg transition-colors"
@@ -304,30 +475,73 @@ const NoiDungHopStep: React.FC<NoiDungHopStepProps> = ({
         {/* Content Form */}
         {activeContent && (
           <div className="p-6 space-y-6 bg-white">
-            {/* Nội dung chi tiết */}
+            {/* Header Form: Trạng thái */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-gray-100 gap-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                  Trạng thái chuẩn bị tài liệu:
+                </span>
+                <span className={cn(
+                  "px-2.5 py-0.5 rounded-full text-xs font-semibold border",
+                  activeContent.status === 'PENDING_APPROVAL' && "bg-amber-50 text-amber-700 border-amber-200",
+                  activeContent.status === 'APPROVED' && "bg-emerald-50 text-emerald-700 border-emerald-200",
+                  activeContent.status === 'REJECTED' && "bg-red-50 text-red-700 border-red-200",
+                  activeContent.status === 'PENDING_PREPARATION' && "bg-blue-50 text-blue-700 border-blue-200",
+                  (!activeContent.status || activeContent.status === 'DRAFT') && "bg-gray-50 text-gray-700 border-gray-200"
+                )}>
+                  {activeContent.status === 'PENDING_APPROVAL' && 'Chờ phê duyệt'}
+                  {activeContent.status === 'APPROVED' && 'Đã phê duyệt'}
+                  {activeContent.status === 'REJECTED' && 'Bị từ chối'}
+                  {activeContent.status === 'PENDING_PREPARATION' && 'Đang chuẩn bị'}
+                  {(!activeContent.status || activeContent.status === 'DRAFT') && 'Bản nháp'}
+                </span>
+              </div>
+            </div>
+
+            {/* Tiêu đề nội dung */}
             <div className="space-y-2">
               <Label htmlFor="noiDungChiTiet" className="text-sm">
-                Nội dung chi tiết <span className="text-[#C8102E]">*</span>
+                Tiêu đề <span className="text-[#C8102E]">*</span>
               </Label>
-              <Textarea
+              <Input
                 id="noiDungChiTiet"
                 value={activeContent.noiDungChiTiet}
                 onChange={(e) =>
                   handleUpdateContent(activeContentId, { noiDungChiTiet: e.target.value })
                 }
-                placeholder="Nhập nội dung chi tiết của phiên họp..."
-                rows={3}
+                placeholder="Nhập tiêu đề nội dung..."
                 className={cn(
-                  'resize-none rounded-xl border-gray-400 hover:border-gray-500',
+                  'rounded-xl border-gray-400 hover:border-gray-500',
                   errors[activeContentId]?.noiDungChiTiet &&
                     'border-red-500 focus-visible:ring-red-500'
                 )}
+                disabled={isReadOnly}
               />
               {errors[activeContentId]?.noiDungChiTiet && (
                 <p className="text-xs text-red-600 body">
                   {errors[activeContentId].noiDungChiTiet}
                 </p>
               )}
+            </div>
+
+            {/* Nội dung chi tiết */}
+            <div className="space-y-2">
+              <Label htmlFor="content" className="text-sm">
+                Nội dung chi tiết
+              </Label>
+              <Textarea
+                id="content"
+                value={activeContent.content || ''}
+                onChange={(e) =>
+                  handleUpdateContent(activeContentId, { content: e.target.value })
+                }
+                placeholder="Nhập nội dung chi tiết của phiên họp..."
+                rows={3}
+                className={cn(
+                  'resize-none rounded-xl border-gray-400 hover:border-gray-500'
+                )}
+                disabled={isReadOnly}
+              />
             </div>
 
             {/* Thời gian */}
@@ -343,6 +557,7 @@ const NoiDungHopStep: React.FC<NoiDungHopStepProps> = ({
                         !activeContent.thoiGianBatDau && 'text-gray-500',
                         errors[activeContentId]?.thoiGianBatDau && 'border-red-500 focus-visible:ring-red-500'
                       )}
+                      disabled={isReadOnly}
                     >
                       <CalendarIcon className="mr-2 h-4 w-4" />
                       {activeContent.thoiGianBatDau ? (
@@ -380,6 +595,7 @@ const NoiDungHopStep: React.FC<NoiDungHopStepProps> = ({
                         !activeContent.thoiGianKetThuc && 'text-gray-500',
                         errors[activeContentId]?.thoiGianKetThuc && 'border-red-500 focus-visible:ring-red-500'
                       )}
+                      disabled={isReadOnly}
                     >
                       <CalendarIcon className="mr-2 h-4 w-4" />
                       {activeContent.thoiGianKetThuc ? (
@@ -421,46 +637,210 @@ const NoiDungHopStep: React.FC<NoiDungHopStepProps> = ({
                     ? 'Vui lòng chọn thành phần tham dự ở bước 2'
                     : 'Chọn người chuẩn bị'
                 }
-                disabled={participantOptions.length === 0}
+                disabled={participantOptions.length === 0 || isReadOnly}
               />
-              {isUpdateMode && activeContent.id && !activeContent.id.startsWith('content-') && activeContent.nguoiChuanBi && (
-                <div className="flex justify-end mt-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="flex items-center gap-1.5 bg-red-50 text-[#C8102E] border-[#C8102E]/30 hover:bg-red-100 hover:text-[#C8102E] rounded-xl"
-                    onClick={() => handleOpenPrepModal(activeContent)}
-                  >
-                    <Send className="h-4 w-4" />
-                    Gửi yêu cầu chuẩn bị
-                  </Button>
+              {activeContent.nguoiChuanBi && (
+                <div className="space-y-1.5 mt-3">
+                  <Label htmlFor="prepInstructions" className="text-sm">
+                    Nội dung ghi chú / Hướng dẫn chuẩn bị tài liệu
+                  </Label>
+                  <Textarea
+                    id="prepInstructions"
+                    value={activeContent.prepInstructions || ''}
+                    onChange={(e) =>
+                      handleUpdateContent(activeContentId, { prepInstructions: e.target.value })
+                    }
+                    placeholder="Nhập ghi chú yêu cầu chuẩn bị tài liệu gì..."
+                    rows={3}
+                    disabled={isReadOnly}
+                    className="resize-none rounded-xl border-gray-400 hover:border-gray-500"
+                  />
+                </div>
+              )}
+              {!isReadOnly && activeContent.nguoiChuanBi && (
+                <div className="mt-3 space-y-2">
+                  <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider block">
+                    Lịch sử trao đổi / Giao việc
+                  </span>
+                  <div className="border border-gray-100 rounded-xl p-3 bg-gray-50/50 space-y-3">
+                    {activeContent.feedbacks && activeContent.feedbacks.length > 0 ? (
+                      <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
+                        {activeContent.feedbacks.map((fb) => {
+                          const isInstruction = fb.type === 'INSTRUCTION';
+                          const isResponse = fb.type === 'RESPONSE';
+                          return (
+                            <div
+                              key={fb.id}
+                              className={`p-2.5 rounded-xl border text-sm transition-all duration-200 ${
+                                isInstruction
+                                  ? 'bg-blue-50/70 border-blue-100 text-blue-900'
+                                  : isResponse
+                                  ? 'bg-emerald-50/70 border-emerald-100 text-emerald-900'
+                                  : 'bg-red-50/70 border-red-100 text-red-900'
+                              }`}
+                            >
+                              <div className="flex justify-between items-center mb-1 text-xs font-medium opacity-80">
+                                <span>{fb.authorName || (isInstruction ? 'Người duyệt' : isResponse ? 'Người chuẩn bị' : 'Người duyệt')}</span>
+                                <span>
+                                  {new Date(fb.createdAt).toLocaleDateString('vi-VN', {
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                    day: '2-digit',
+                                    month: '2-digit',
+                                    year: 'numeric',
+                                  })}
+                                </span>
+                              </div>
+                              <p className="whitespace-pre-wrap leading-relaxed text-[13px]">
+                                <span className="font-semibold block mb-0.5 text-xs opacity-75">
+                                  {isInstruction 
+                                    ? '📌 Hướng dẫn chuẩn bị:' 
+                                    : isResponse 
+                                    ? '📤 Phản hồi từ người chuẩn bị:' 
+                                    : '⚠️ Lý do từ chối:'}
+                                </span>
+                                {fb.content}
+                              </p>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-gray-500 italic">Chưa có lịch sử trao đổi.</p>
+                    )}
+
+                    {/* Chat Input for sending feedback/questions (Only if persisted) */}
+                    {activeContent.id && !activeContent.id.startsWith('content-') ? (
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={chatInputs[activeContent.id] || ''}
+                          onChange={(e) => setChatInputs(prev => ({ ...prev, [activeContent.id]: e.target.value }))}
+                          placeholder="Trả lời / Nhập ý kiến phản hồi hướng dẫn..."
+                          className="flex-1 bg-white border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#C8102E] focus:border-[#C8102E]"
+                        />
+                        {(chatInputs[activeContent.id] || '').trim().length > 0 && (
+                          <Button
+                            type="button"
+                            onClick={() => handleSendChat(activeContent.id)}
+                            className="bg-[#C8102E] hover:bg-[#A90F14] text-white rounded-xl text-xs font-semibold px-4 animate-in fade-in slide-in-from-right-1 duration-200"
+                          >
+                            Gửi
+                          </Button>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-amber-600 font-medium bg-amber-50 border border-amber-100 p-2 rounded-xl">
+                        Vui lòng lưu phiên họp trước khi thực hiện trao đổi/phản hồi.
+                      </p>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
 
             {/* Upload tài liệu */}
-            <FileUploader
-              files={activeContent.taiLieu || []}
-              onChange={(files) => handleUpdateContent(activeContentId, { taiLieu: files })}
-              multiple={true}
-              accept=".pdf,.doc,.docx,.xls,.xlsx"
-              allowedExtensionsText="PDF, DOC, DOCX, XLS, XLSX"
-              label="Tài liệu đính kèm"
-            />
+            <div className="relative">
+              {isUploading ? (
+                <div className="flex flex-col items-center justify-center w-full h-32 border border-gray-200 rounded-2xl bg-gray-50/50">
+                  <div className="h-8 w-8 animate-spin rounded-full border-4 border-solid border-[#C8102E] border-r-transparent mb-2"></div>
+                  <span className="text-sm text-gray-500 font-medium">Đang tải tài liệu lên...</span>
+                </div>
+              ) : (
+                <FileUploader
+                  files={activeContent.taiLieu || []}
+                  onChange={async (files) => {
+                    const newFiles = files.filter(f => f instanceof File);
+                    const existingFiles = files.filter(f => !(f instanceof File));
+
+                    if (newFiles.length > 0) {
+                      setIsUploading(true);
+                      try {
+                        const uploadedList = [];
+                        for (const file of newFiles) {
+                          const res = await meetingApi.uploadDocument(file, file.name, 'OTHER');
+                          if (res.success && res.data) {
+                            const version = (res.data as any).currentVersion;
+                            uploadedList.push({
+                              id: res.data.id,
+                              name: version?.fileName || res.data.title || file.name,
+                              url: version?.fileUrl || (res.data as any).fileUrl,
+                              size: version?.fileSize || file.size
+                            });
+                          } else {
+                            toast.error(`Tải file ${file.name} thất bại: ${res.message || ''}`);
+                          }
+                        }
+                        handleUpdateContent(activeContentId, {
+                          taiLieu: [...existingFiles, ...uploadedList]
+                        });
+                        toast.success("Tải tài liệu lên thành công");
+                      } catch (error: any) {
+                        console.error("Upload failed", error);
+                        toast.error(error?.response?.data?.message || error?.message || "Lỗi khi tải file lên");
+                      } finally {
+                        setIsUploading(false);
+                      }
+                    } else {
+                      handleUpdateContent(activeContentId, { taiLieu: files });
+                    }
+                  }}
+                  multiple={true}
+                  accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg,.txt,.zip"
+                  allowedExtensionsText="PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX, PNG, JPG, JPEG, TXT, ZIP"
+                  label="Tài liệu đính kèm"
+                  disabled={isReadOnly}
+                />
+              )}
+            </div>
+
+            {/* Tác vụ duyệt tài liệu trực tiếp dưới phần file */}
+            {activeContent.status === 'PENDING_APPROVAL' && !isReadOnly && (
+              <div className="flex items-center justify-between gap-4 bg-amber-50/50 border border-amber-200 rounded-xl p-4 animate-in fade-in duration-200">
+                <div className="space-y-0.5">
+                  <span className="text-xs font-semibold text-amber-800 flex items-center gap-1.5">
+                    <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                    Đang chờ phê duyệt tài liệu đã nộp
+                  </span>
+                  <p className="text-[11px] text-amber-700/80">
+                    Vui lòng kiểm tra kỹ các file tài liệu đính kèm bên trên trước khi thực hiện phê duyệt.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <Button
+                    type="button"
+                    onClick={() => setRejectModal({ isOpen: true, agendaId: activeContent.id, reason: '' })}
+                    className="bg-white hover:bg-red-50 text-red-600 border border-red-200 hover:border-red-300 rounded-xl text-xs font-semibold py-1.5 px-3.5 flex items-center gap-1.5 transition-colors shadow-sm"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                    Từ chối
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={() => handleApprove(activeContent.id)}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold py-1.5 px-4 flex items-center gap-1.5 transition-colors shadow-sm"
+                  >
+                    <Check className="h-3.5 w-3.5" />
+                    Phê duyệt
+                  </Button>
+                </div>
+              </div>
+            )}
 
             {/* Danh sách vấn đề cần biểu quyết */}
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <Label>Danh sách vấn đề cần biểu quyết</Label>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => handleAddBieuQuyetIssue(activeContentId)}
-                >
-                  <Plus className="h-4 w-4" />
-                  Thêm vấn đề mới
-                </Button>
+                {!isReadOnly && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => handleAddBieuQuyetIssue(activeContentId)}
+                  >
+                    <Plus className="h-4 w-4" />
+                    Thêm vấn đề mới
+                  </Button>
+                )}
               </div>
 
               {activeContent.bieuQuyetIssues.length === 0 ? (
@@ -489,6 +869,7 @@ const NoiDungHopStep: React.FC<NoiDungHopStepProps> = ({
                                 )
                               }
                               className="flex-1 border-gray-400 hover:border-gray-500"
+                              disabled={isReadOnly}
                             />
                           </div>
                           <Textarea
@@ -504,14 +885,17 @@ const NoiDungHopStep: React.FC<NoiDungHopStepProps> = ({
                             }
                             rows={2}
                             className="resize-none rounded-xl border-gray-400 hover:border-gray-500"
+                            disabled={isReadOnly}
                           />
                         </div>
-                        <button
-                          onClick={() => handleRemoveBieuQuyetIssue(activeContentId, issue.id)}
-                          className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors shrink-0"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+                        {!isReadOnly && (
+                          <button
+                            onClick={() => handleRemoveBieuQuyetIssue(activeContentId, issue.id)}
+                            className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors shrink-0"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -519,80 +903,6 @@ const NoiDungHopStep: React.FC<NoiDungHopStepProps> = ({
               )}
             </div>
 
-            {/* Thành phần tham dự */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <Label>Thành phần tham dự</Label>
-                <p className="text-xs text-gray-500">
-                  (Kế thừa từ bước 2)
-                </p>
-              </div>
-
-              <div className="border border-gray-400 rounded-xl p-4 bg-gray-50/50 space-y-3">
-                {/* Đơn vị */}
-                {activeContent.thanhPhanThamDu.donVi.length > 0 && (
-                  <div>
-                    <label className="text-xs btn-primary text-gray-600 uppercase mb-2 block">
-                      Đơn vị ({activeContent.thanhPhanThamDu.donVi.length})
-                    </label>
-                    <div className="flex flex-wrap gap-2">
-                      {activeContent.thanhPhanThamDu.donVi.map((member) => (
-                        <div
-                          key={member.id}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-400 rounded-lg text-sm"
-                        >
-                          <span className="body text-gray-900">{member.name}</span>
-                          <span className="text-gray-500">•</span>
-                          <span className="text-gray-600 text-xs">{member.position}</span>
-                          <button
-                            onClick={() => handleRemoveParticipant('donVi', member.id)}
-                            className="ml-1 p-0.5 hover:bg-red-50 rounded transition-colors"
-                          >
-                            <X className="h-3.5 w-3.5 text-gray-400 hover:text-red-600" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-
-                {/* Khách mời */}
-                {activeContent.thanhPhanThamDu.khachMoi.length > 0 && (
-                  <div>
-                    <label className="text-xs btn-primary text-gray-600 uppercase mb-2 block">
-                      Khách mời ({activeContent.thanhPhanThamDu.khachMoi.length})
-                    </label>
-                    <div className="flex flex-wrap gap-2">
-                      {activeContent.thanhPhanThamDu.khachMoi.map((guest) => (
-                        <div
-                          key={guest.id}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-400 rounded-lg text-sm"
-                        >
-                          <span className="body text-gray-900">{guest.name}</span>
-                          <button
-                            onClick={() => handleRemoveParticipant('khachMoi', guest.id)}
-                            className="ml-1 p-0.5 hover:bg-red-50 rounded transition-colors"
-                          >
-                            <X className="h-3.5 w-3.5 text-gray-400 hover:text-red-600" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Empty state */}
-                {activeContent.thanhPhanThamDu.donVi.length === 0 &&
-                  activeContent.thanhPhanThamDu.khachMoi.length === 0 && (
-                    <div className="text-center py-6">
-                      <p className="text-sm text-gray-500">
-                        Chưa có thành phần tham dự. Vui lòng chọn ở bước 2.
-                      </p>
-                    </div>
-                  )}
-              </div>
-            </div>
           </div>
         )}
       </div>
@@ -664,6 +974,43 @@ const NoiDungHopStep: React.FC<NoiDungHopStepProps> = ({
                 onClick={handleConfirmSendPrepRequest}
               >
                 Gửi yêu cầu
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {rejectModal && (
+        <Modal
+          isOpen={rejectModal.isOpen}
+          onClose={() => setRejectModal(null)}
+          title="Từ chối tài liệu & Yêu cầu chỉnh sửa"
+          className="max-w-lg"
+        >
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Lý do từ chối / Hướng dẫn chỉnh sửa <span className="text-[#C8102E]">*</span></Label>
+              <Textarea
+                value={rejectModal.reason}
+                onChange={(e) =>
+                  setRejectModal(prev => prev ? { ...prev, reason: e.target.value } : null)
+                }
+                placeholder="Nhập lý do từ chối tài liệu và yêu cầu người chuẩn bị bổ sung chỉnh sửa gì..."
+                rows={4}
+                className="resize-none rounded-xl border-gray-400 hover:border-gray-500"
+              />
+            </div>
+
+            <div className="flex justify-end gap-3 pt-4">
+              <Button variant="outline" className="rounded-xl border-gray-400 hover:border-gray-500" onClick={() => setRejectModal(null)}>
+                Hủy
+              </Button>
+              <Button
+                className="bg-red-600 hover:bg-red-700 text-white rounded-xl"
+                disabled={!rejectModal.reason.trim()}
+                onClick={handleReject}
+              >
+                Gửi từ chối
               </Button>
             </div>
           </div>

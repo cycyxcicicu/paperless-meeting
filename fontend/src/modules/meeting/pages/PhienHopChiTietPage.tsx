@@ -15,9 +15,35 @@ import { DataTable } from '@/common/components/table-engine/DataTable';
 import { TableEngineConfig } from '@/common/components/table-engine/table.types';
 import { getMeetingStatus, MOCK_VOTING_ISSUES, MOCK_PARTICIPANTS, VotingIssue, Speaker, Participant, Opinion } from '../meeting.mock';
 import { cn } from '@/common/utils/cn';
+import { meetingApi, MeetingResponse } from '../services/meeting.api';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/common/components/ui/dialog';
+
+const mapMeetingStatusVi = (statusStr: string): string => {
+    switch (statusStr) {
+        case 'DRAFT': return 'Nháp';
+        case 'PENDING_APPROVAL': return 'Chờ phê duyệt';
+        case 'APPROVED': return 'Đã phê duyệt';
+        case 'UPCOMING': return 'Sắp diễn ra';
+        case 'IN_PROGRESS': return 'Đang diễn ra';
+        case 'CLOSED': return 'Đã kết thúc';
+        case 'CANCELLED': return 'Đã hủy';
+        case 'REJECTED': return 'Bị từ chối';
+        case 'EXPIRED': return 'Đã hết hạn';
+        default: return statusStr;
+    }
+};
+
 export default function PhienHopChiTietPage() {
     const navigate = useNavigate();
     const { id } = useParams();
+
+    const [meetingDetail, setMeetingDetail] = useState<MeetingResponse | null>(null);
+    const [documents, setDocuments] = useState<any[]>([]);
+    const [opinions, setOpinions] = useState<any[]>([]);
+    const [motions, setMotions] = useState<any[]>([]);
+    const [waitingSpeakers, setWaitingSpeakers] = useState<any[]>([]);
+    const [rejectedSpeakers, setRejectedSpeakers] = useState<any[]>([]);
+
 
 
 
@@ -37,53 +63,44 @@ export default function PhienHopChiTietPage() {
     });
 
     // Table configs
-    const votingTableConfig: TableEngineConfig<VotingIssue> = {
+    const votingTableConfig: TableEngineConfig<any> = {
         columns: [
-            { key: 'issue', header: 'Vấn đề' },
+            { key: 'title', header: 'Vấn đề' },
             { 
                 key: 'status', 
                 header: 'Trạng thái', 
                 width: '160px',
-                render: (row) => (
-                    <Badge className={cn(
-                        "px-3 py-1 text-xs rounded-full border-none",
-                        row.status === 'pending' ? "bg-amber-100 text-amber-700" : "bg-green-100 text-green-700"
-                    )}>
-                        {row.status === 'pending' ? 'Chưa biểu quyết' : 'Đã hoàn thành'}
-                    </Badge>
-                )
-            },
-            { 
-                key: 'id', 
-                header: 'Hành động', 
-                width: '128px', 
-                align: 'center',
-                render: () => (
-                    <div className="flex justify-center">
-                        <Button variant="ghost" size="icon" className="text-gray-500 hover:text-[#C8102E]">
-                            <Download className="w-4 h-4" />
-                        </Button>
-                    </div>
-                )
+                render: (row: any) => {
+                    const isPending = row.status === 'DRAFT';
+                    return (
+                        <Badge className={cn(
+                            "px-3 py-1 text-xs rounded-full border-none",
+                            isPending ? "bg-amber-100 text-amber-700" : "bg-green-100 text-green-700"
+                        )}>
+                            {isPending ? 'Chưa biểu quyết' : 'Đã hoàn thành'}
+                        </Badge>
+                    );
+                }
             }
         ]
     };
 
-    const speakerTableConfig: TableEngineConfig<Speaker> = {
+    const speakerTableConfig: TableEngineConfig<any> = {
         columns: [
-            { key: 'name', header: 'Tên đại biểu' },
-            { key: 'position', header: 'Chức vụ' },
-            { key: 'note', header: 'Ghi chú', render: (row) => row.note || '-' },
-            { key: 'startTime', header: 'Thời gian bắt đầu', render: (row) => row.startTime || '-' },
+            { key: 'userName', header: 'Tên đại biểu' },
+            { key: 'position', header: 'Chức vụ', render: () => '-' },
+            { key: 'priority', header: 'Độ ưu tiên', render: (row: any) => row.priority || '-' },
+            { key: 'requestedAt', header: 'Thời gian yêu cầu', render: (row: any) => row.requestedAt ? new Date(row.requestedAt).toLocaleTimeString("vi-VN") : '-' },
             { 
-                key: 'status', 
+                key: 'queueStatus', 
                 header: 'Trạng thái',
-                render: (row) => (
+                render: (row: any) => (
                     <Badge className={cn(
                         "px-3 py-1 text-xs rounded-full border-none",
-                        row.status === 'speaking' ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-700"
+                        row.queueStatus === 'QUEUED' ? "bg-amber-100 text-amber-700" :
+                        row.queueStatus === 'REJECTED' ? "bg-red-100 text-red-700" : "bg-gray-100 text-gray-700"
                     )}>
-                        {row.status === 'speaking' ? 'Đang phát biểu' : row.status === 'finished' ? 'Đã kết thúc' : 'Chờ phát biểu'}
+                        {row.queueStatus === 'QUEUED' ? 'Chờ phát biểu' : row.queueStatus === 'REJECTED' ? 'Bác bỏ' : row.queueStatus}
                     </Badge>
                 )
             }
@@ -93,9 +110,43 @@ export default function PhienHopChiTietPage() {
     // Cập nhật dữ liệu khi ID thay đổi
     useEffect(() => {
         if (id) {
-            const newStatus = getMeetingStatus(id);
-            setStatus(newStatus);
-            console.log(`Meeting status for ID ${id}: ${newStatus}`);
+            // 1. Fetch meeting info
+            meetingApi.getMeetingById(id).then(res => {
+                if (res.success && res.data) {
+                    setMeetingDetail(res.data);
+                    setStatus(mapMeetingStatusVi(res.data.status));
+                }
+            });
+            // 2. Fetch documents
+            meetingApi.getMeetingDocuments(id).then(res => {
+                if (res.success && res.data) {
+                    setDocuments(res.data);
+                }
+            });
+            // 3. Fetch opinions
+            meetingApi.getOpinions(id).then(res => {
+                if (res.success && res.data) {
+                    setOpinions(res.data);
+                }
+            });
+            // 4. Fetch motions
+            meetingApi.getMeetingMotions(id).then(res => {
+                if (res.success && res.data) {
+                    setMotions(res.data);
+                }
+            });
+            // 5. Fetch waiting speakers
+            meetingApi.getSpeakersQueue(id, 'QUEUED').then(res => {
+                if (res.success && res.data) {
+                    setWaitingSpeakers(res.data);
+                }
+            });
+            // 6. Fetch rejected speakers
+            meetingApi.getSpeakersQueue(id, 'REJECTED').then(res => {
+                if (res.success && res.data) {
+                    setRejectedSpeakers(res.data);
+                }
+            });
 
             // Giả lập dữ liệu thành viên dựa trên ID
             setParticipantsData({
@@ -175,18 +226,16 @@ export default function PhienHopChiTietPage() {
             <div className="p-8">
                 <PageHeader
                     title={
-                        <div className="flex items-center gap-3">
-                            <Button
-                                variant="ghost"
-                                onClick={() => navigate("/phien-hop")}
-                                className="text-gray-600 hover:text-[#C8102E] hover:bg-red-50 px-2 py-2 h-auto"
-                            >
-                                <ArrowLeft className="h-5 w-5" />
-                            </Button>
-                            <span>Thông tin phiên họp</span>
-                        </div>
+                        <button
+                            onClick={() => navigate("/phien-hop")}
+                            className="inline-flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors"
+                        >
+                            <ArrowLeft className="h-4 w-4" />
+                            <span className="text-sm body">
+                                Quay lại
+                            </span>
+                        </button>
                     }
-                    description="Chi tiết thông tin và quản lý phiên họp"
                     breadcrumbs={[
                         { name: "Trang chủ", path: "/" },
                         { name: "Phiên họp", path: "/phien-hop" },
@@ -204,7 +253,7 @@ export default function PhienHopChiTietPage() {
                                     Xác nhận tham gia
                                 </Button>
                             )}
-                            {status !== "Đã kết thúc" && (
+                            {status !== "Đã kết thúc" && status !== "Đang diễn ra" && (
                                 <Button
                                     variant="outline"
                                     className="border-[#C8102E] text-[#C8102E] hover:bg-red-50"
@@ -237,18 +286,18 @@ export default function PhienHopChiTietPage() {
                             title={
                                 <div className="w-full text-center py-2">
                                     <h2 className="text-xl md:text-2xl heading text-gray-900 mb-2 uppercase">
-                                        HỌP TRIỂN KHAI KẾ HOẠCH QUÝ II/2026
+                                        {meetingDetail?.title || "CHI TIẾT PHIÊN HỌP"}
                                     </h2>
                                     <div className="flex items-center justify-center gap-6 text-gray-600 text-[14px]">
                                         <div className="flex items-center gap-1.5">
                                             <Clock className="w-4 h-4 text-gray-400" />
                                             <span>
-                                                17/04/2026 22:31 - 23:20
+                                                {meetingDetail ? `${new Date(meetingDetail.startTime).toLocaleString("vi-VN")} - ${new Date(meetingDetail.endTime).toLocaleString("vi-VN")}` : ""}
                                             </span>
                                         </div>
                                         <div className="flex items-center gap-1.5">
                                             <MapPin className="w-4 h-4 text-gray-400" />
-                                            <span>Phòng họp 1 demo</span>
+                                            <span>{meetingDetail?.locationName || "-"}</span>
                                         </div>
                                     </div>
                                 </div>
@@ -265,7 +314,7 @@ export default function PhienHopChiTietPage() {
                                                 Chủ trì:
                                             </span>
                                             <span className="text-gray-900 body w-1/2">
-                                                Ông Trần Văn A - Bí thư
+                                                {meetingDetail?.chairName || "-"}
                                             </span>
                                         </div>
                                         <div className="flex items-start justify-between">
@@ -273,7 +322,7 @@ export default function PhienHopChiTietPage() {
                                                 Địa điểm họp:
                                             </span>
                                             <span className="text-gray-900 body w-1/2">
-                                                Phòng họp 1 demo
+                                                {meetingDetail?.locationName || "-"}
                                             </span>
                                         </div>
                                         <div className="flex items-start justify-between">
@@ -281,7 +330,11 @@ export default function PhienHopChiTietPage() {
                                                 Giấy mời họp:
                                             </span>
                                             <span className="text-gray-900 w-1/2">
-                                                -
+                                                {meetingDetail?.agendaFile ? (
+                                                    <a href={meetingDetail.agendaFile.url} className="text-blue-600 hover:underline" target="_blank" rel="noopener noreferrer">
+                                                        {meetingDetail.agendaFile.name}
+                                                    </a>
+                                                ) : "-"}
                                             </span>
                                         </div>
                                         <div className="flex items-start justify-between">
@@ -297,7 +350,7 @@ export default function PhienHopChiTietPage() {
                                                 Người chuẩn bị tài liệu:
                                             </span>
                                             <span className="text-gray-900 body w-1/2">
-                                                Nguyễn Văn B
+                                                {meetingDetail?.createdByName || "-"}
                                             </span>
                                         </div>
                                     </div>
@@ -361,10 +414,10 @@ export default function PhienHopChiTietPage() {
                                         </div>
                                         <div className="flex items-start justify-between">
                                             <span className="text-gray-500 text-[14px] body w-1/2">
-                                                Người duyệt tài liệu:
+                                                Đơn vị tổ chức:
                                             </span>
                                             <span className="text-gray-900 body w-1/2">
-                                                Trần Văn C
+                                                {meetingDetail?.departmentName || "-"}
                                             </span>
                                         </div>
                                     </div>
@@ -373,72 +426,78 @@ export default function PhienHopChiTietPage() {
                         </CollapsibleSection>
 
                         {/* 3. Danh sách tài liệu */}
-                        <CollapsibleSection title="Danh sách tài liệu" defaultExpanded={false}>
+                        <CollapsibleSection title={`Danh sách tài liệu (${documents.length})`} defaultExpanded={false}>
                             <div className="space-y-3 px-2">
-                                <div className="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:bg-gray-50 transition-colors">
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-10 h-10 rounded-lg bg-red-50 flex items-center justify-center text-[#C8102E]">
-                                            <FileText className="w-5 h-5" />
-                                        </div>
-                                        <div>
-                                            <p className="body text-gray-900 text-sm">
-                                                Báo cáo tình hình kinh tế - xã
-                                                hội Quý 1.pdf
-                                            </p>
-                                            <p className="text-xs text-gray-500">
-                                                2.4 MB • Tải lên lúc 08:30 17/04
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="text-gray-500 hover:text-[#C8102E]"
-                                    >
-                                        <Download className="w-4 h-4" />
-                                    </Button>
-                                </div>
-                                <div className="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:bg-gray-50 transition-colors">
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600">
-                                            <FileText className="w-5 h-5" />
-                                        </div>
-                                        <div>
-                                            <p className="body text-gray-900 text-sm">
-                                                Kế hoạch triển khai Quý 2 chi
-                                                tiết.docx
-                                            </p>
-                                            <p className="text-xs text-gray-500">
-                                                1.1 MB • Tải lên lúc 08:45 17/04
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="text-gray-500 hover:text-[#C8102E]"
-                                    >
-                                        <Download className="w-4 h-4" />
-                                    </Button>
-                                </div>
+                                {documents.length === 0 ? (
+                                    <p className="text-sm text-gray-500 text-center py-4">Chưa có tài liệu nào.</p>
+                                ) : (
+                                    documents.map((doc: any) => {
+                                        const isPdf = doc.fileName?.toLowerCase().endsWith(".pdf") || doc.title?.toLowerCase().endsWith(".pdf") || doc.fileUrl?.toLowerCase().endsWith(".pdf");
+                                        return (
+                                            <div key={doc.id || doc.documentId} className="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:bg-gray-50 transition-colors">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-10 h-10 rounded-lg bg-red-50 flex items-center justify-center text-[#C8102E]">
+                                                        <FileText className="w-5 h-5" />
+                                                    </div>
+                                                    <div>
+                                                        <p className="body text-gray-900 text-sm">
+                                                            {doc.title || doc.fileName || "Tài liệu"}
+                                                        </p>
+                                                        <p className="text-xs text-gray-500">
+                                                            {doc.fileSize ? `${(doc.fileSize / 1024 / 1024).toFixed(2)} MB` : "Chưa rõ kích thước"}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    {isPdf && (
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="text-gray-500 hover:text-[#C8102E]"
+                                                            onClick={() => {
+                                                                if (doc.fileUrl) {
+                                                                    window.open(doc.fileUrl, "_blank");
+                                                                }
+                                                            }}
+                                                        >
+                                                            <Eye className="w-4 h-4" />
+                                                        </Button>
+                                                    )}
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="text-gray-500 hover:text-[#C8102E]"
+                                                        onClick={() => {
+                                                            if (doc.fileUrl) {
+                                                                window.open(doc.fileUrl, "_blank");
+                                                            }
+                                                        }}
+                                                    >
+                                                        <Download className="w-4 h-4" />
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        );
+                                    })
+                                )}
                             </div>
                         </CollapsibleSection>
 
-                        {/* 4. Danh sách vấn đề cần biểu quyết (0) */}
-                        <CollapsibleSection title="Danh sách vấn đề cần biểu quyết (0)" defaultExpanded={false}>
+                        {/* 4. Danh sách vấn đề cần biểu quyết */}
+                        <CollapsibleSection title={`Danh sách vấn đề cần biểu quyết (${motions.length})`} defaultExpanded={false}>
                             <div className="min-h-[200px]">
                                 <DataTable 
-                                    data={[]} 
+                                    data={motions} 
                                     config={votingTableConfig}
                                     pageSize={5}
-                                    totalItems={0}
+                                    totalItems={motions.length}
                                     onPageChange={() => {}}
                                 />
                             </div>
                         </CollapsibleSection>
 
-                        {/* 5. Danh sách đăng ký phát biểu (0) */}
-                        <CollapsibleSection title="Danh sách đăng ký phát biểu (0)" defaultExpanded={false}>
+                        {/* 5. Danh sách đăng ký phát biểu */}
+                        <CollapsibleSection title={`Danh sách đăng ký phát biểu (${waitingSpeakers.length + rejectedSpeakers.length})`} defaultExpanded={false}>
                             <div className="p-0">
                                 {/* Tabs */}
                                 <div className="flex items-center gap-6 border-b border-gray-200 mb-4 px-6 pt-4">
@@ -450,7 +509,7 @@ export default function PhienHopChiTietPage() {
                                                 : "border-transparent text-gray-500 hover:text-gray-700"
                                         }`}
                                     >
-                                        Chờ phát biểu
+                                        Chờ phát biểu ({waitingSpeakers.length})
                                     </button>
                                     <button
                                         onClick={() => setActiveTab("bac-bo")}
@@ -460,64 +519,72 @@ export default function PhienHopChiTietPage() {
                                                 : "border-transparent text-gray-500 hover:text-gray-700"
                                         }`}
                                     >
-                                        Bác bỏ
+                                        Bác bỏ ({rejectedSpeakers.length})
                                     </button>
                                 </div>
 
                                 <div className="min-h-[200px]">
                                     <DataTable 
-                                        data={[]} 
+                                        data={activeTab === "cho" ? waitingSpeakers : rejectedSpeakers} 
                                         config={speakerTableConfig}
                                         pageSize={5}
-                                        totalItems={0}
+                                        totalItems={activeTab === "cho" ? waitingSpeakers.length : rejectedSpeakers.length}
                                         onPageChange={() => {}}
                                     />
                                 </div>
                             </div>
                         </CollapsibleSection>
 
-                        {/* 6. Danh sách tham gia góp ý (0) */}
+                        {/* 6. Danh sách tham gia góp ý */}
                         <CollapsibleSection
-                            title="Danh sách tham gia góp ý (0) (Người góp ý: 0/2)"
+                            title={`Danh sách tham gia góp ý (${opinions.length})`}
                             defaultExpanded={false}
-                            action={
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="h-8 gap-1.5 border-gray-200 text-gray-600"
-                                >
-                                    <Download className="w-3.5 h-3.5" />
-                                    <span className="text-xs body">
-                                        Tải xuống
-                                    </span>
-                                </Button>
-                            }
                         >
                             <div className="min-h-[200px]">
                                 <DataTable 
-                                    data={[]} 
+                                    data={opinions} 
                                     config={{
                                         columns: [
-                                            { key: 'userName', header: 'Tên đại biểu' },
-                                            { key: 'userPosition', header: 'Chức vụ' },
+                                            { key: 'delegateName', header: 'Tên đại biểu' },
+                                            { key: 'positionName', header: 'Chức vụ', render: (row: any) => row.positionName || '-' },
                                             { key: 'opinionDetail', header: 'Chi tiết góp ý' },
+                                            {
+                                                key: 'documentName',
+                                                header: 'Tài liệu góp ý',
+                                                render: (row: any) => row.documentName || '-'
+                                            },
                                             { 
                                                 key: 'id', 
                                                 header: 'Hành động', 
                                                 width: '128px', 
                                                 align: 'center',
-                                                render: () => (
-                                                    <div className="flex justify-center">
-                                                        <Button variant="ghost" size="icon" className="text-gray-500 hover:text-[#C8102E]">
-                                                            <Eye className="w-4 h-4" />
-                                                        </Button>
-                                                    </div>
-                                                )
+                                                render: (row: any) => {
+                                                    const hasAttachments = row.attachments && row.attachments.length > 0;
+                                                    return (
+                                                        <div className="flex justify-center gap-2">
+                                                            {hasAttachments && (
+                                                                <Button 
+                                                                    variant="ghost" 
+                                                                    size="icon" 
+                                                                    className="text-gray-500 hover:text-[#C8102E]"
+                                                                    onClick={() => {
+                                                                        const attachment = row.attachments[0];
+                                                                        if (attachment.fileUrl) {
+                                                                            window.open(attachment.fileUrl, "_blank");
+                                                                        }
+                                                                    }}
+                                                                >
+                                                                    <Eye className="w-4 h-4" />
+                                                                </Button>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                }
                                             }
                                         ]
                                     }}
                                     pageSize={5}
-                                    totalItems={0}
+                                    totalItems={opinions.length}
                                     onPageChange={() => {}}
                                 />
                             </div>
@@ -586,6 +653,8 @@ export default function PhienHopChiTietPage() {
                 onClose={() => setIsAttendanceModalOpen(false)}
                 onConfirm={handleConfirmAttendance}
             />
+
+
         </>
     );
 }

@@ -25,10 +25,12 @@ interface SelectUnitModalProps {
   onConfirm: (selectedMembers: Member[]) => void;
   mode: 'unit' | 'individual';
   title?: string;
+  initialSelectedMembers?: Member[];
 }
 
 import { departmentApi } from '@/modules/organization/services/department.api';
 import { userApi } from '@/modules/user/services/user.api';
+import { useAuth } from '@/app/context/AuthContext';
 
 // Map tree nodes from backend structure
 const mapDepartmentTree = (nodes: any[]): UnitNode[] => {
@@ -51,32 +53,37 @@ const UnitTreeNode: React.FC<{
 
   return (
     <div>
-      <button
+      <div
         onClick={() => {
-          if (hasChildren) {
-            setIsExpanded(!isExpanded);
-          }
           onSelect(node.id, node.name);
         }}
         className={cn(
-          'w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg transition-colors text-left',
+          'w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg transition-colors text-left cursor-pointer select-none',
           selectedUnitId === node.id
-            ? 'bg-red-50 text-[#C8102E] btn-primary'
+            ? 'bg-red-50 text-[#C8102E] btn-primary font-medium'
             : 'hover:bg-gray-50 text-gray-700'
         )}
         style={{ paddingLeft: `${level * 16 + 12}px` }}
       >
         {hasChildren ? (
-          isExpanded ? (
-            <ChevronDown className="h-4 w-4 shrink-0" />
-          ) : (
-            <ChevronRight className="h-4 w-4 shrink-0" />
-          )
+          <span
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsExpanded(!isExpanded);
+            }}
+            className="p-1 hover:bg-gray-200/50 rounded transition-colors shrink-0 cursor-pointer flex items-center justify-center"
+          >
+            {isExpanded ? (
+              <ChevronDown className="h-4 w-4 shrink-0" />
+            ) : (
+              <ChevronRight className="h-4 w-4 shrink-0" />
+            )}
+          </span>
         ) : (
-          <div className="w-4" />
+          <div className="w-6 shrink-0" />
         )}
-        <span className="flex-1">{node.name}</span>
-      </button>
+        <span className="flex-1 truncate">{node.name}</span>
+      </div>
 
       {hasChildren && isExpanded && (
         <div>
@@ -101,12 +108,38 @@ const SelectUnitModal: React.FC<SelectUnitModalProps> = ({
   onConfirm,
   mode,
   title = 'Chọn từ cây đơn vị',
+  initialSelectedMembers = [],
 }) => {
+  const { user } = useAuth();
+  const creatorId = user ? String(user.id) : null;
+
+  const creatorMember = useMemo<Member | null>(() => {
+    if (!user) return null;
+    let posName = '';
+    if (user.position) {
+      posName = typeof user.position === 'object' ? (user.position.positionName || user.position.name || '') : user.position;
+    }
+    let deptName = '';
+    let deptId = '';
+    if (user.department) {
+      deptName = typeof user.department === 'object' ? (user.department.deptName || user.department.name || '') : user.department;
+      deptId = typeof user.department === 'object' ? (user.department.id || '') : user.department;
+    }
+    return {
+      id: String(user.id),
+      name: user.fullName || user.username,
+      position: posName,
+      unit: deptName,
+      unitId: deptId,
+      email: user.email || '',
+    };
+  }, [user]);
+
   const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null);
   const [selectedUnitName, setSelectedUnitName] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
   const [memberSearchQuery, setMemberSearchQuery] = useState('');
-  const [selectedMembers, setSelectedMembers] = useState<Set<string>>(new Set());
+  const [selectedMembersMap, setSelectedMembersMap] = useState<Record<string, Member>>({});
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [isLoading, setIsLoading] = useState(false);
@@ -114,14 +147,40 @@ const SelectUnitModal: React.FC<SelectUnitModalProps> = ({
   const [unitTree, setUnitTree] = useState<UnitNode[]>([]);
   const [membersDatabase, setMembersDatabase] = useState<Member[]>([]);
 
-  // Fetch Tree on open
+  const selectedCount = Object.keys(selectedMembersMap).length;
+
+  useEffect(() => {
+    if (isOpen) {
+      const initialMap: Record<string, Member> = {};
+      if (initialSelectedMembers) {
+        initialSelectedMembers.forEach(m => {
+          const strId = String(m.id);
+          initialMap[strId] = {
+            ...m,
+            id: strId
+          };
+        });
+      }
+      if (creatorMember) {
+        initialMap[creatorMember.id] = creatorMember;
+      }
+      setSelectedMembersMap(initialMap);
+    }
+  }, [isOpen, initialSelectedMembers, creatorMember]);
+
+  // Fetch Tree on open and auto-select first node
   useEffect(() => {
     if (isOpen) {
       setIsTreeLoading(true);
       departmentApi.getTree()
         .then(res => {
           if (res.success && res.data) {
-            setUnitTree(mapDepartmentTree(res.data));
+            const mapped = mapDepartmentTree(res.data);
+            setUnitTree(mapped);
+            if (mapped.length > 0) {
+              setSelectedUnitId(mapped[0].id);
+              setSelectedUnitName(mapped[0].name);
+            }
           }
         })
         .catch(err => {
@@ -130,6 +189,15 @@ const SelectUnitModal: React.FC<SelectUnitModalProps> = ({
         .finally(() => {
           setIsTreeLoading(false);
         });
+    }
+  }, [isOpen]);
+
+  // Clean up when modal closes
+  useEffect(() => {
+    if (!isOpen) {
+      setSelectedUnitId(null);
+      setSelectedUnitName('');
+      setMemberSearchQuery('');
     }
   }, [isOpen]);
 
@@ -216,48 +284,80 @@ const SelectUnitModal: React.FC<SelectUnitModalProps> = ({
   const totalPages = Math.ceil(searchFilteredMembers.length / pageSize);
 
   const handleToggleMember = (memberId: string) => {
-    const newSelected = new Set(selectedMembers);
-    if (newSelected.has(memberId)) {
-      newSelected.delete(memberId);
-    } else {
-      newSelected.add(memberId);
-    }
-    setSelectedMembers(newSelected);
+    const strId = String(memberId);
+    if (creatorId && strId === creatorId) return; // Prevent toggling the creator!
+    setSelectedMembersMap(prev => {
+      const next = { ...prev };
+      if (next[strId]) {
+        delete next[strId];
+      } else {
+        const found = membersDatabase.find(m => String(m.id) === strId);
+        if (found) {
+          next[strId] = {
+            ...found,
+            id: strId
+          };
+        }
+      }
+      return next;
+    });
   };
 
   const handleToggleAll = () => {
-    if (paginatedMembers.every((m) => selectedMembers.has(m.id))) {
-      // Deselect all on current page
-      const newSelected = new Set(selectedMembers);
-      paginatedMembers.forEach((m) => newSelected.delete(m.id));
-      setSelectedMembers(newSelected);
-    } else {
-      // Select all on current page
-      const newSelected = new Set(selectedMembers);
-      paginatedMembers.forEach((m) => newSelected.add(m.id));
-      setSelectedMembers(newSelected);
-    }
+    const allSelectedOnPage = paginatedMembers.every((m) => !!selectedMembersMap[String(m.id)] || (creatorId && String(m.id) === creatorId));
+    setSelectedMembersMap(prev => {
+      const next = { ...prev };
+      if (allSelectedOnPage) {
+        paginatedMembers.forEach((m) => {
+          const strId = String(m.id);
+          if (!creatorId || strId !== creatorId) {
+            delete next[strId];
+          }
+        });
+      } else {
+        paginatedMembers.forEach((m) => {
+          const strId = String(m.id);
+          next[strId] = {
+            ...m,
+            id: strId
+          };
+        });
+      }
+      return next;
+    });
   };
 
   const handleClearSelection = () => {
-    setSelectedMembers(new Set());
+    setSelectedMembersMap(prev => {
+      const next: Record<string, Member> = {};
+      if (creatorId && prev[creatorId]) {
+        next[creatorId] = prev[creatorId];
+      } else if (creatorMember) {
+        next[creatorMember.id] = creatorMember;
+      }
+      return next;
+    });
   };
 
   const handleConfirm = () => {
-    const selected = membersDatabase.filter((m) => selectedMembers.has(m.id));
+    const selectedMap = { ...selectedMembersMap };
+    if (creatorMember) {
+      selectedMap[creatorMember.id] = creatorMember;
+    }
+    const selected = Object.values(selectedMap);
     onConfirm(selected);
-    setSelectedMembers(new Set());
+    setSelectedMembersMap({});
     setSelectedUnitId(null);
     setMemberSearchQuery('');
     onClose();
   };
 
   const allCurrentPageSelected =
-    paginatedMembers.length > 0 && paginatedMembers.every((m) => selectedMembers.has(m.id));
+    paginatedMembers.length > 0 && paginatedMembers.every((m) => !!selectedMembersMap[String(m.id)] || (creatorId && String(m.id) === creatorId));
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl max-h-[85vh] flex flex-col">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl h-[800px] max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
           <h2 className="text-lg btn-primary text-gray-900">
@@ -331,17 +431,17 @@ const SelectUnitModal: React.FC<SelectUnitModalProps> = ({
                   </h3>
                   <p className="text-xs text-gray-500 mt-0.5">
                     {searchFilteredMembers.length} thành viên
-                    {selectedMembers.size > 0 && (
+                    {selectedCount > 0 && (
                       <>
                         {' • '}
                         <span className="text-[#C8102E] btn-primary">
-                          {selectedMembers.size} đã chọn
+                          {selectedCount} đã chọn
                         </span>
                       </>
                     )}
                   </p>
                 </div>
-                {selectedMembers.size > 0 && (
+                {selectedCount > 0 && (
                   <button
                     onClick={handleClearSelection}
                     className="text-xs text-gray-600 hover:text-[#C8102E] body transition-colors"
@@ -396,30 +496,44 @@ const SelectUnitModal: React.FC<SelectUnitModalProps> = ({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {paginatedMembers.map((member) => (
-                      <tr
-                        key={member.id}
-                        onClick={() => handleToggleMember(member.id)}
-                        className={cn(
-                          'hover:bg-gray-50 transition-colors cursor-pointer',
-                          selectedMembers.has(member.id) && 'bg-red-50'
-                        )}
-                      >
-                        <td className="px-4 py-3">
-                          <input
-                            type="checkbox"
-                            checked={selectedMembers.has(member.id)}
-                            onChange={() => handleToggleMember(member.id)}
-                            className="w-4 h-4 rounded border-gray-300 text-[#C8102E] focus:ring-[#C8102E]"
-                          />
-                        </td>
-                        <td className="px-4 py-3 text-sm body text-gray-900">
-                          {member.name}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-gray-600">{member.position}</td>
-                        <td className="px-4 py-3 text-sm text-gray-600">{member.unit}</td>
-                      </tr>
-                    ))}
+                    {paginatedMembers.map((member) => {
+                      const isCreator = creatorId && String(member.id) === creatorId;
+                      const isSelected = !!selectedMembersMap[String(member.id)] || isCreator;
+                      return (
+                        <tr
+                          key={member.id}
+                          onClick={() => {
+                            if (!isCreator) {
+                              handleToggleMember(String(member.id));
+                            }
+                          }}
+                          className={cn(
+                            'hover:bg-gray-50 transition-colors cursor-pointer',
+                            isSelected && 'bg-red-50',
+                            isCreator && 'cursor-not-allowed opacity-80'
+                          )}
+                        >
+                          <td className="px-4 py-3">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => {
+                                if (!isCreator) {
+                                  handleToggleMember(String(member.id));
+                                }
+                              }}
+                              disabled={!!isCreator}
+                              className="w-4 h-4 rounded border-gray-300 text-[#C8102E] focus:ring-[#C8102E] disabled:opacity-50 disabled:cursor-not-allowed"
+                            />
+                          </td>
+                          <td className="px-4 py-3 text-sm body text-gray-900 font-medium">
+                            {member.name} {isCreator && <span className="text-xs text-gray-400 font-normal ml-1">(Người tạo)</span>}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-gray-600">{member.position}</td>
+                          <td className="px-4 py-3 text-sm text-gray-600">{member.unit}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               )}
@@ -513,9 +627,9 @@ const SelectUnitModal: React.FC<SelectUnitModalProps> = ({
           <Button
             variant="primary"
             onClick={handleConfirm}
-            disabled={selectedMembers.size === 0}
+            disabled={selectedCount === 0}
           >
-            Xác nhận ({selectedMembers.size})
+            Xác nhận ({selectedCount})
           </Button>
         </div>
       </div>

@@ -7,6 +7,7 @@ import { useAuth } from '@/app/context/AuthContext';
 import { meetingApi, MeetingResponse, AgendaItemResponse } from '../services/meeting.api';
 import { FileUploader } from '@/common/components/ui/FileUploader';
 import { Button } from '@/common/components/ui/button';
+import { Textarea } from '@/common/components/ui/textarea';
 import { toast } from '@/lib/toast';
 
 const STATUS_BADGES: Record<string, { label: string; className: string }> = {
@@ -29,6 +30,7 @@ export default function PrepareDocumentsPage() {
   
   // Track files for each agenda item: agendaItemId -> array of File objects
   const [agendaFiles, setAgendaFiles] = useState<Record<string, File[]>>({});
+  const [chatInputs, setChatInputs] = useState<Record<string, string>>({});
 
   const loadData = async () => {
     if (!meetingId) return;
@@ -130,6 +132,25 @@ export default function PrepareDocumentsPage() {
     }
   };
 
+  const handleSendChat = async (agendaItemId: string) => {
+    const text = chatInputs[agendaItemId] || "";
+    if (!text.trim()) return;
+
+    try {
+      const res = await meetingApi.addFeedback(agendaItemId, text.trim(), "RESPONSE");
+      if (res.success) {
+        setChatInputs(prev => ({ ...prev, [agendaItemId]: "" }));
+        toast.success("Đã gửi ý kiến thành công");
+        await loadData();
+      } else {
+        toast.error("Lỗi", res.message || "Không thể gửi ý kiến.");
+      }
+    } catch (error: any) {
+      console.error("Error sending feedback:", error);
+      toast.error("Lỗi kết nối", error.message || "Đã xảy ra lỗi khi gửi ý kiến.");
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] py-12">
@@ -225,8 +246,8 @@ export default function PrepareDocumentsPage() {
               const files = agendaFiles[item.id] || [];
               const isSubmitting = submitting[item.id] || false;
               
-              // Only allow upload if meeting is draft/rejected or if item status is pending_prep/rejected
-              const canUpload = item.status === 'PENDING_PREPARATION' || item.status === 'REJECTED';
+              // Only allow upload if status is draft, pending preparation, or rejected
+              const canUpload = item.status === 'DRAFT' || item.status === 'PENDING_PREPARATION' || item.status === 'REJECTED';
 
               return (
                 <div key={item.id} className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm hover:shadow-md transition-all">
@@ -257,11 +278,11 @@ export default function PrepareDocumentsPage() {
 
                   {/* Item Content Body */}
                   <div className="p-6 space-y-5">
-                    {/* Guidance / Instructions */}
+                    {/* Detailed Content */}
                     {item.content && (
-                      <div className="bg-red-50/30 border border-[#C8102E]/10 rounded-xl p-4 space-y-1">
-                        <div className="text-xs font-bold text-[#C8102E] uppercase tracking-wider">
-                          Yêu cầu từ Người tạo cuộc họp:
+                      <div className="space-y-1 bg-gray-50 border border-gray-200 rounded-xl p-4">
+                        <div className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+                          Nội dung chi tiết mục họp:
                         </div>
                         <p className="text-sm text-gray-700 whitespace-pre-wrap">
                           {item.content}
@@ -269,20 +290,78 @@ export default function PrepareDocumentsPage() {
                       </div>
                     )}
 
-                    {/* Reject Reason if rejected */}
-                    {item.status === 'REJECTED' && item.rejectReason && (
-                      <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex gap-3">
-                        <AlertCircle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
-                        <div className="space-y-1">
-                          <div className="text-sm font-bold text-red-800">
-                            Lý do tài liệu bị từ chối phê duyệt:
+                    {/* Lịch sử trao đổi / Giao việc */}
+                    <div className="space-y-2">
+                      <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider block">
+                        Lịch sử trao đổi / Ý kiến phản hồi
+                      </span>
+                      <div className="border border-gray-100 rounded-xl bg-gray-50/50 p-3 space-y-3">
+                        {item.feedbacks && item.feedbacks.length > 0 ? (
+                          <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
+                            {item.feedbacks.map((fb) => {
+                              const isInstruction = fb.type === 'INSTRUCTION';
+                              const isResponse = fb.type === 'RESPONSE';
+                              return (
+                                <div
+                                  key={fb.id}
+                                  className={`p-2.5 rounded-xl border text-sm transition-all duration-200 ${
+                                    isInstruction
+                                      ? 'bg-blue-50/70 border-blue-100 text-blue-900'
+                                      : isResponse
+                                      ? 'bg-emerald-50/70 border-emerald-100 text-emerald-900'
+                                      : 'bg-red-50/70 border-red-100 text-red-900'
+                                  }`}
+                                >
+                                  <div className="flex justify-between items-center mb-1 text-xs font-medium opacity-80">
+                                    <span>{fb.authorName || (isInstruction ? 'Người duyệt' : isResponse ? 'Người chuẩn bị' : 'Người duyệt')}</span>
+                                    <span>
+                                      {new Date(fb.createdAt).toLocaleDateString('vi-VN', {
+                                        hour: '2-digit',
+                                        minute: '2-digit',
+                                        day: '2-digit',
+                                        month: '2-digit',
+                                        year: 'numeric',
+                                      })}
+                                    </span>
+                                  </div>
+                                  <p className="whitespace-pre-wrap leading-relaxed text-[13px]">
+                                    <span className="font-semibold block mb-0.5 text-xs opacity-75">
+                                      {isInstruction 
+                                        ? '📌 Hướng dẫn chuẩn bị:' 
+                                        : isResponse 
+                                        ? '📤 Phản hồi từ người chuẩn bị:' 
+                                        : '⚠️ Lý do từ chối:'}
+                                    </span>
+                                    {fb.content}
+                                  </p>
+                                </div>
+                              );
+                            })}
                           </div>
-                          <p className="text-sm text-red-700 whitespace-pre-wrap">
-                            {item.rejectReason}
-                          </p>
+                        ) : (
+                          <p className="text-xs text-gray-500 italic">Chưa có lịch sử trao đổi.</p>
+                        )}
+
+                        {/* Chat Input for sending feedback/questions */}
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={chatInputs[item.id] || ''}
+                            onChange={(e) => setChatInputs(prev => ({ ...prev, [item.id]: e.target.value }))}
+                            placeholder="Nhập ý kiến phản hồi hoặc câu hỏi của bạn..."
+                            className="flex-1 bg-white border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#C8102E] focus:border-[#C8102E]"
+                          />
+                          {(chatInputs[item.id] || '').trim().length > 0 && (
+                            <Button
+                              onClick={() => handleSendChat(item.id)}
+                              className="bg-[#C8102E] hover:bg-[#A90F14] text-white rounded-xl text-xs font-semibold px-4 animate-in fade-in slide-in-from-right-1 duration-200"
+                            >
+                              Gửi
+                            </Button>
+                          )}
                         </div>
                       </div>
-                    )}
+                    </div>
 
                     {/* File Uploader */}
                     <div className="space-y-2">
@@ -290,52 +369,69 @@ export default function PrepareDocumentsPage() {
                         files={files}
                         onChange={(updatedFiles) => handleFileChange(item.id, updatedFiles)}
                         multiple={true}
-                        accept=".pdf,.doc,.docx,.xls,.xlsx"
-                        allowedExtensionsText="PDF, DOC, DOCX, XLS, XLSX"
+                        accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg,.txt,.zip"
+                        allowedExtensionsText="PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX, PNG, JPG, JPEG, TXT, ZIP"
                         label="Tài liệu đính kèm chuẩn bị"
                         placeholder="Kéo thả tài liệu nộp"
+                        disabled={!canUpload}
                       />
                     </div>
+
                   </div>
 
                   {/* Item Action Footer */}
-                  {canUpload && (
-                    <div className="bg-gray-50/30 px-6 py-4 border-t border-gray-100 flex justify-end gap-3">
-                      <Button
-                        onClick={() => handleSubmitDocs(item.id)}
-                        disabled={isSubmitting || files.length === 0}
-                        className="bg-[#C8102E] hover:bg-[#A90F14] text-white rounded-xl flex items-center gap-2 shadow-sm"
-                      >
-                        {isSubmitting ? (
-                          <>
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            Đang nộp tài liệu...
-                          </>
-                        ) : (
-                          <>
-                            <CheckCircle2 className="h-4 w-4" />
-                            Gửi tài liệu nộp
-                          </>
+                  <div className="bg-gray-50/30 px-6 py-4 border-t border-gray-100 flex items-center justify-between gap-3">
+                    {canUpload ? (
+                      <>
+                        <p className="text-xs text-gray-500 italic">
+                          * Vui lòng tải tài liệu lên và nhấn "Nộp tài liệu" để gửi phê duyệt.
+                        </p>
+                        <Button
+                          onClick={() => handleSubmitDocs(item.id)}
+                          disabled={isSubmitting || files.length === 0}
+                          className="bg-[#C8102E] hover:bg-[#A90F14] text-white rounded-xl flex items-center gap-2 shadow-sm font-semibold px-5"
+                        >
+                          {isSubmitting ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              Đang nộp...
+                            </>
+                          ) : (
+                            <>
+                              <CheckCircle2 className="h-4 w-4" />
+                              Nộp tài liệu
+                            </>
+                          )}
+                        </Button>
+                      </>
+                    ) : (
+                      <div className="w-full flex items-center justify-between text-xs font-medium">
+                        {item.status === 'PENDING_APPROVAL' && (
+                          <span className="text-amber-600 flex items-center gap-1.5">
+                            <Clock className="h-4 w-4 animate-pulse" />
+                            Tài liệu đã nộp, đang chờ phê duyệt. Bạn không thể chỉnh sửa lúc này.
+                          </span>
                         )}
-                      </Button>
-                    </div>
-                  )}
+                        {item.status === 'APPROVED' && (
+                          <span className="text-emerald-600 flex items-center gap-1.5">
+                            <CheckCircle2 className="h-4 w-4" />
+                            Tài liệu đã được phê duyệt và khóa chỉnh sửa.
+                          </span>
+                        )}
+                        {item.status === 'DRAFT' && (
+                          <span className="text-gray-500 flex items-center gap-1.5">
+                            <AlertCircle className="h-4 w-4" />
+                            Mục họp đang ở trạng thái bản nháp. Chưa yêu cầu chuẩn bị tài liệu.
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               );
             })}
           </div>
         )}
-      </div>
-
-      {/* General Exit Button */}
-      <div className="flex justify-center pt-4">
-        <Button
-          variant="outline"
-          onClick={() => navigate('/phien-hop')}
-          className="border-gray-300 rounded-xl px-8 py-2.5 bg-white text-gray-700 hover:bg-gray-50"
-        >
-          Thoát trang nộp tài liệu
-        </Button>
       </div>
     </div>
   );

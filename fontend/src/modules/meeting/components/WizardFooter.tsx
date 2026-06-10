@@ -10,12 +10,14 @@ interface WizardFooterProps {
   totalSteps: number;
   onBack: () => void;
   onNext: () => void;
+  onSaveDraftAgenda?: () => void;
   onSubmitForApproval?: () => void;
   onSubmitMeeting?: () => void;
   onCancel?: () => void;
   isLastStep?: boolean;
   approvalStatus?: ApprovalStatus;
   isUpdateMode?: boolean;
+  isReadOnly?: boolean;
 }
 
 const WizardFooter: React.FC<WizardFooterProps> = ({
@@ -23,12 +25,14 @@ const WizardFooter: React.FC<WizardFooterProps> = ({
   totalSteps,
   onBack,
   onNext,
+  onSaveDraftAgenda,
   onSubmitForApproval,
   onSubmitMeeting,
   onCancel,
   isLastStep = false,
   approvalStatus = 'draft',
   isUpdateMode = false,
+  isReadOnly = false,
 }) => {
   const isApproved = approvalStatus === 'approved';
   const isPending = approvalStatus === 'pending';
@@ -78,14 +82,31 @@ const WizardFooter: React.FC<WizardFooterProps> = ({
             {/* Last step: Submit for Approval + Submit Meeting */}
             {isLastStep ? (
               <>
-                {/* Chỉ hiển thị nút phê duyệt khi không ở update mode */}
-                {!isUpdateMode && onSubmitForApproval && !isApproved && (
+                {/* Nút lưu tạm/lưu */}
+                {onSaveDraftAgenda && !isReadOnly && (
                   <button
-                    onClick={onSubmitForApproval}
+                    onClick={onSaveDraftAgenda}
                     disabled={isPending}
                     className={cn(
                       'inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-gray-300 text-gray-700 btn-primary text-sm hover:bg-gray-50 transition-all',
                       isPending && 'opacity-50 cursor-not-allowed'
+                    )}
+                  >
+                    <Save className="h-4 w-4" />
+                    {isUpdateMode ? 'Lưu' : 'Lưu tạm'}
+                  </button>
+                )}
+
+                {/* Gửi phê duyệt */}
+                {onSubmitForApproval && !isApproved && (
+                  <button
+                    onClick={onSubmitForApproval}
+                    disabled={isPending || isReadOnly}
+                    className={cn(
+                      'inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-gray-300 text-gray-700 btn-primary text-sm transition-all',
+                      (isPending || isReadOnly)
+                        ? 'opacity-50 cursor-not-allowed bg-gray-100 text-gray-400'
+                        : 'hover:bg-gray-50'
                     )}
                   >
                     <Send className="h-4 w-4" />
@@ -96,16 +117,16 @@ const WizardFooter: React.FC<WizardFooterProps> = ({
                   <div className="relative group">
                     <button
                       onClick={onSubmitMeeting}
-                      disabled={!canSubmitMeeting}
+                      disabled={!canSubmitMeeting || isPending}
                       className={cn(
                         'inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#C8102E] to-[#A90F14] text-white btn-primary text-sm transition-all',
-                        canSubmitMeeting
+                        (canSubmitMeeting && !isPending)
                           ? 'hover:shadow-lg hover:shadow-red-500/25'
                           : 'opacity-50 cursor-not-allowed'
                       )}
                     >
                       <CheckCircle className="h-4 w-4" />
-                      {isUpdateMode ? 'Cập nhật phiên họp' : 'Gửi phiên họp'}
+                      {isUpdateMode ? 'Công bố' : 'Gửi phiên họp'}
                     </button>
                     {!canSubmitMeeting && !isUpdateMode && (
                       <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 hidden group-hover:block">
@@ -124,7 +145,7 @@ const WizardFooter: React.FC<WizardFooterProps> = ({
                 onClick={onNext}
                 className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#C8102E] to-[#A90F14] text-white btn-primary text-sm hover:shadow-lg hover:shadow-red-500/25 transition-all"
               >
-                Lưu và tiếp tục
+                {isReadOnly ? 'Tiếp tục' : 'Lưu và tiếp tục'}
               </button>
             )}
           </div>

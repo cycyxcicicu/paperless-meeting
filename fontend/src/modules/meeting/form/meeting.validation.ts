@@ -45,7 +45,7 @@ export const thongBaoGiayMoiSchema = z.object({
 // Validate từng item trong mảng nội dung
 const noiDungItemSchema = z.object({
   id: z.string(),
-  noiDungChiTiet: z.string().min(1, 'Vui lòng nhập nội dung chi tiết'),
+  noiDungChiTiet: z.string().min(1, 'Vui lòng nhập tiêu đề nội dung'),
   thoiGianBatDau: z.string().min(1, 'Vui lòng chọn thời gian bắt đầu'),
   thoiGianKetThuc: z.string().min(1, 'Vui lòng chọn thời gian kết thúc'),
 }).superRefine((data, ctx) => {

@@ -8,11 +8,13 @@ import lombok.Getter;
 import lombok.Setter;
 import vn.acme.paperless_meeting.entity.enums.MeetingStatus;
 import vn.acme.paperless_meeting.entity.enums.InviteStatus;
+import vn.acme.paperless_meeting.entity.MeetingFile;
 
 @Getter
 @Setter
 @Builder
 public class MeetingResponse {
+    private MeetingFile agendaFile;
     private UUID id;
     private String title;
     private MeetingStatus status;

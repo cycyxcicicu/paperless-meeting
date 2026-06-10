@@ -96,7 +96,7 @@ class MinioFileStorageServiceTest {
     void store_FileSizeExceeded_ThrowsException() {
         MultipartFile file = mock(MultipartFile.class);
         when(file.getContentType()).thenReturn("application/pdf");
-        when(file.getSize()).thenReturn(51L * 1024 * 1024); // 51MB > 50MB limit
+        when(file.getSize()).thenReturn(21L * 1024 * 1024); // 21MB > 20MB limit
 
         AppException ex = assertThrows(AppException.class, () -> storageService.store(file));
         assertEquals(ErrorCode.FILE_SIZE_EXCEEDED, ex.getErrorCode());
@@ -105,10 +105,10 @@ class MinioFileStorageServiceTest {
 
     @Test
     void store_FileSizeExactlyAtLimit_DoesNotThrowSizeError() {
-        // 50MB exactly — should pass size validation
+        // 20MB exactly — should pass size validation
         MultipartFile file = mock(MultipartFile.class);
         when(file.getContentType()).thenReturn("application/pdf");
-        when(file.getSize()).thenReturn(50L * 1024 * 1024); // exactly 50MB
+        when(file.getSize()).thenReturn(20L * 1024 * 1024); // exactly 20MB
 
         // Sẽ fail ở bước MinIO (NoClassDefFoundError) nhưng KHÔNG phải FILE_SIZE_EXCEEDED
         try {

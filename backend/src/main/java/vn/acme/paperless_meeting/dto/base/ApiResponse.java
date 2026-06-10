@@ -33,7 +33,8 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @Builder
 public class ApiResponse<T> {
-    private boolean success;
+    @Builder.Default
+    private boolean success = true;
     private int code;     
     private String message;  
     private T data;          
@@ -45,7 +46,7 @@ public class ApiResponse<T> {
      * @return Đối tượng ApiResponse chứa dữ liệu và trạng thái thành công
      */
     public static <T> ApiResponse<T> success(T data) {
-        return new ApiResponse<>(true, 67, null, data);
+        return new ApiResponse<>(true, 200, null, data);
     }
 
     /**

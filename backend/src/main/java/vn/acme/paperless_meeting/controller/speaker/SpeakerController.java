@@ -55,9 +55,11 @@ public class SpeakerController {
 
     @GetMapping("/queue")
     @PreAuthorize("hasAnyRole('ADMIN', 'USER')")
-    public ApiResponse<List<SpeakerQueueResponse>> getQueue(@PathVariable UUID meetingId) {
+    public ApiResponse<List<SpeakerQueueResponse>> getQueue(
+            @PathVariable UUID meetingId,
+            @RequestParam(required = false) vn.acme.paperless_meeting.entity.enums.SpeakerQueueStatus status) {
         return ApiResponse.<List<SpeakerQueueResponse>>builder()
-                .data(speakerService.getQueue(meetingId))
+                .data(speakerService.getQueue(meetingId, status))
                 .build();
     }
 

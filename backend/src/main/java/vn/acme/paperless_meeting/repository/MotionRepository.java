@@ -11,6 +11,8 @@ import java.util.UUID;
 public interface MotionRepository extends JpaRepository<Motion, UUID> {
     List<Motion> findByAgendaItemId(UUID agendaItemId);
 
+    List<Motion> findByMeetingId(UUID meetingId);
+
     @Query("SELECT m FROM Motion m LEFT JOIN FETCH m.createdBy WHERE m.agendaItem.id = :agendaItemId")
     List<Motion> findByAgendaItemIdWithCreator(@Param("agendaItemId") UUID agendaItemId);
 }

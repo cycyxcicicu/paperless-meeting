@@ -174,11 +174,12 @@ public class SpeakerService {
     }
 
     // 3. Lấy danh sách hàng chờ (tất cả mọi người trong cuộc họp có thể xem)
-    public List<SpeakerQueueResponse> getQueue(UUID meetingId) {
+    public List<SpeakerQueueResponse> getQueue(UUID meetingId, SpeakerQueueStatus status) {
         User caller = currentUserService.getCurrentActiveUser();
         checkIsParticipant(meetingId, caller.getId());
         
-        List<SpeakerQueue> list = speakerQueueRepository.findByMeetingIdAndQueueStatusOrderBySortOrderAscRequestedAtAsc(meetingId, SpeakerQueueStatus.QUEUED);
+        SpeakerQueueStatus targetStatus = (status != null) ? status : SpeakerQueueStatus.QUEUED;
+        List<SpeakerQueue> list = speakerQueueRepository.findByMeetingIdAndQueueStatusOrderBySortOrderAscRequestedAtAsc(meetingId, targetStatus);
         return list.stream().map(this::mapToQueueResponse).collect(Collectors.toList());
     }
 

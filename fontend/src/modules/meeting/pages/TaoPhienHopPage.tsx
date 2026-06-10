@@ -2,6 +2,7 @@ import { ArrowLeft } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams, useLocation } from "react-router";
 import { toast } from '@/lib/toast';
+import { getErrorMessage } from "@/lib/api/error";
 import { Sidebar } from '@/common/components/layout/Sidebar';
 import {
     ChiTietHopData,
@@ -81,12 +82,15 @@ const TaoPhienHopPage = () => {
     const [activeMeetingId, setActiveMeetingId] = useState<string | null>(id || null);
     const [isSavingStep, setIsSavingStep] = useState(false);
 
+    const isReadOnly = approvalStatus === "pending" || approvalStatus === "approved";
+    const [isDirty, setIsDirty] = useState(false);
+    const [initialLoadDone, setInitialLoadDone] = useState(false);
+
     useEffect(() => {
         if (currentStep > highestStepReached) {
             setHighestStepReached(currentStep);
         }
     }, [currentStep, highestStepReached]);
-
     // Step 1 data
     const [chiTietData, setChiTietData] = useState<ChiTietHopData>({
         tenPhienHop: "",
@@ -143,6 +147,33 @@ const TaoPhienHopPage = () => {
 
     const [noiDungErrors, setNoiDungErrors] = useState<Record<string, any>>({});
 
+    useEffect(() => {
+        if (!isLoadingData && (activeMeetingId || isCopyMode || (!isUpdateMode && !isCopyMode))) {
+            const timer = setTimeout(() => {
+                setInitialLoadDone(true);
+            }, 800);
+            return () => clearTimeout(timer);
+        }
+    }, [isLoadingData, activeMeetingId]);
+
+    useEffect(() => {
+        if (initialLoadDone && !isReadOnly) {
+            setIsDirty(true);
+        }
+    }, [chiTietData, thanhPhanData, thongBaoData, noiDungData, initialLoadDone, isReadOnly]);
+
+    useEffect(() => {
+        const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+            if (isDirty && !isReadOnly) {
+                e.preventDefault();
+                e.returnValue = "Bạn có thay đổi chưa lưu. Bạn có chắc chắn muốn rời đi?";
+                return e.returnValue;
+            }
+        };
+        window.addEventListener("beforeunload", handleBeforeUnload);
+        return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+    }, [isDirty, isReadOnly]);
+
     // Map meeting detail to form state from Real APIs
     const loadMeetingData = async (meetingId: string, isCopy = false) => {
         console.log("🔄 Start loading meeting data for ID:", meetingId, "isCopy:", isCopy);
@@ -169,22 +200,12 @@ const TaoPhienHopPage = () => {
             let noiDungChuongTrinh: 'text' | 'upload' = 'text';
             let noiDungChuongTrinhText = "";
 
-            if (meeting.content) {
-                if (meeting.content.trim().startsWith('{')) {
-                    try {
-                        const parsed = JSON.parse(meeting.content);
-                        if (parsed && (parsed.url || parsed.fileUrl)) {
-                            parsedFile = parsed;
-                            noiDungChuongTrinh = 'upload';
-                        } else {
-                            noiDungChuongTrinhText = meeting.content;
-                        }
-                    } catch (e) {
-                        noiDungChuongTrinhText = meeting.content;
-                    }
-                } else {
-                    noiDungChuongTrinhText = meeting.content;
-                }
+            if (meeting.agendaFile && (meeting.agendaFile.url || meeting.agendaFile.name || meeting.agendaFile.id)) {
+                parsedFile = meeting.agendaFile;
+                noiDungChuongTrinh = 'upload';
+            } else if (meeting.content) {
+                noiDungChuongTrinhText = meeting.content;
+                noiDungChuongTrinh = 'text';
             }
 
             // Map to Step 1 data
@@ -212,6 +233,7 @@ const TaoPhienHopPage = () => {
                     unit: p.deptName || "",
                     unitId: "",
                     email: "",
+                    isChair: p.participantRole === "CHAIR",
                 })),
                 caNhan: [],
                 nhomThanhVien: [],
@@ -228,6 +250,19 @@ const TaoPhienHopPage = () => {
             };
             console.log("👥 Setting Step 2 data:", step2Data);
             setThanhPhanData(step2Data);
+
+            // Map approvalStatus
+            if (!isCopy) {
+                if (meeting.status === 'PENDING_APPROVAL') {
+                    setApprovalStatus('pending');
+                } else if (['APPROVED', 'UPCOMING', 'IN_PROGRESS', 'CLOSED'].includes(meeting.status)) {
+                    setApprovalStatus('approved');
+                } else {
+                    setApprovalStatus('draft');
+                }
+            } else {
+                setApprovalStatus('draft');
+            }
 
             // Map to Step 3 data (Thong bao)
             const step3Data: ThongBaoGiayMoiData = {
@@ -257,6 +292,7 @@ const TaoPhienHopPage = () => {
                                 donVi: [],
                                 khachMoi: [],
                             },
+                            feedbacks: [],
                         },
                     ],
                 };
@@ -265,6 +301,7 @@ const TaoPhienHopPage = () => {
                     contents: agendaItems.length > 0 ? agendaItems.map((c: any) => ({
                         id: c.id,
                         noiDungChiTiet: c.title || "",
+                        content: c.content || "",
                         thoiGianBatDau: c.startTime ? c.startTime.substring(0, 16) : "",
                         thoiGianKetThuc: c.endTime ? c.endTime.substring(0, 16) : "",
                         nguoiChuanBi: c.preparedByUserId || "",
@@ -275,11 +312,19 @@ const TaoPhienHopPage = () => {
                             size: d.fileSize || 0,
                             url: d.fileUrl || "#"
                         })) : [],
-                        bieuQuyetIssues: [],
+                        bieuQuyetIssues: c.motions ? c.motions.map((m: any) => ({
+                            id: m.id,
+                            ten: m.title,
+                            moTa: m.description || ""
+                        })) : [],
                         thanhPhanThamDu: {
                             donVi: [],
                             khachMoi: [],
-                        }
+                        },
+                        feedbacks: c.feedbacks || [],
+                        prepInstructions: c.prepInstructions || "",
+                        prepDeadline: c.prepDeadline || "",
+                        status: c.status || "DRAFT"
                     })) : [
                         {
                             id: "content-1",
@@ -294,6 +339,7 @@ const TaoPhienHopPage = () => {
                                 donVi: [],
                                 khachMoi: [],
                             },
+                            feedbacks: [],
                         }
                     ]
                 };
@@ -436,8 +482,7 @@ const TaoPhienHopPage = () => {
 
     // Step click handler
     const handleStepClick = (stepId: number) => {
-        // Allow navigating freely up to highest step reached
-        if (stepId <= highestStepReached) {
+        if (isReadOnly || stepId <= highestStepReached) {
             setCurrentStep(stepId);
             window.scrollTo({ top: 0, behavior: "smooth" });
         }
@@ -454,6 +499,14 @@ const TaoPhienHopPage = () => {
 
     // Navigation handlers with Auto-Save
     const handleNext = async () => {
+        if (isReadOnly) {
+            if (currentStep < STEPS.length) {
+                setCurrentStep(currentStep + 1);
+                window.scrollTo({ top: 0, behavior: "smooth" });
+            }
+            return;
+        }
+
         if (currentStep === 1) {
             if (!validateStep1()) {
                 return;
@@ -461,40 +514,14 @@ const TaoPhienHopPage = () => {
 
             setIsSavingStep(true);
             try {
-                let meetingContent = "";
-                if (chiTietData.noiDungChuongTrinh === 'text') {
-                    meetingContent = chiTietData.noiDungChuongTrinhText || "";
-                } else if (chiTietData.noiDungChuongTrinh === 'upload') {
-                    if (chiTietData.noiDungChuongTrinhFile instanceof File) {
-                        toast.info("Đang tải tài liệu chương trình họp lên...");
-                        const uploadRes = await meetingApi.uploadDocument(
-                            chiTietData.noiDungChuongTrinhFile,
-                            chiTietData.noiDungChuongTrinhFile.name,
-                            'AGENDA',
-                            'Tài liệu chương trình họp'
-                        );
-                        if (!uploadRes.success || !uploadRes.data) {
-                            throw new Error(uploadRes.message || "Tải tài liệu chương trình họp thất bại");
-                        }
-                        const uploadedFile = uploadRes.data;
-                        meetingContent = JSON.stringify({
-                            id: uploadedFile.id,
-                            name: uploadedFile.fileName || uploadedFile.title,
-                            url: uploadedFile.fileUrl
-                        });
-                    } else if (chiTietData.noiDungChuongTrinhFile) {
-                        // Giữ nguyên file cũ dưới dạng JSON
-                        meetingContent = JSON.stringify(chiTietData.noiDungChuongTrinhFile);
-                    }
-                }
-
                 const payload = {
                     title: chiTietData.tenPhienHop,
                     startTime: toLocalISOString(chiTietData.thoiGianBatDau),
                     endTime: toLocalISOString(chiTietData.thoiGianKetThuc),
                     locationId: chiTietData.diaDiem,
                     departmentId: departmentId || undefined,
-                    content: meetingContent || undefined,
+                    content: chiTietData.noiDungChuongTrinh === 'text' ? (chiTietData.noiDungChuongTrinhText || "") : null,
+                    agendaFile: chiTietData.noiDungChuongTrinh === 'upload' ? chiTietData.noiDungChuongTrinhFile : null,
                     onlineLink: chiTietData.linkHopTrucTuyen || undefined,
                     rsvpDeadline: undefined,
                     lateAfterMinutes: Number(chiTietData.soPhutDenMuon) || 0,
@@ -518,9 +545,10 @@ const TaoPhienHopPage = () => {
                 if (!completedSteps.includes(1)) {
                     setCompletedSteps([...completedSteps, 1]);
                 }
+                setIsDirty(false);
             } catch (err: any) {
                 console.error("Error saving step 1:", err);
-                toast.error("Lưu thông tin thất bại", err.message || "Vui lòng kiểm tra lại kết nối.");
+                toast.error("Lưu thông tin thất bại", getErrorMessage(err, "Vui lòng kiểm tra lại kết nối."));
                 return;
             } finally {
                 setIsSavingStep(false);
@@ -533,12 +561,18 @@ const TaoPhienHopPage = () => {
                 return;
             }
 
+            const hasChair = thanhPhanData.donVi.some(u => u.isChair);
+            if (!hasChair) {
+                toast.error("Vui lòng chọn ít nhất một người chủ trì cuộc họp");
+                return;
+            }
+
             setIsSavingStep(true);
             try {
                 const payload = {
                     participants: thanhPhanData.donVi.map(u => ({
                         userId: u.id,
-                        participantRole: u.id === thanhPhanData.chuTriId ? 'CHAIR' : 'PARTICIPANT'
+                        participantRole: u.isChair ? 'CHAIR' : 'PARTICIPANT'
                     })),
                     guests: thanhPhanData.khachMoi.map(g => ({
                         fullName: g.name,
@@ -557,9 +591,10 @@ const TaoPhienHopPage = () => {
                 if (!completedSteps.includes(2)) {
                     setCompletedSteps([...completedSteps, 2]);
                 }
+                setIsDirty(false);
             } catch (err: any) {
                 console.error("Error saving step 2:", err);
-                toast.error("Lưu thành viên thất bại", err.message);
+                toast.error("Lưu thành viên thất bại", getErrorMessage(err));
                 return;
             } finally {
                 setIsSavingStep(false);
@@ -574,6 +609,7 @@ const TaoPhienHopPage = () => {
             if (!completedSteps.includes(3)) {
                 setCompletedSteps([...completedSteps, 3]);
             }
+            setIsDirty(false);
         }
 
         if (currentStep === 4) {
@@ -583,6 +619,7 @@ const TaoPhienHopPage = () => {
             if (!completedSteps.includes(4)) {
                 setCompletedSteps([...completedSteps, 4]);
             }
+            setIsDirty(false);
         }
 
         if (currentStep < STEPS.length) {
@@ -595,73 +632,78 @@ const TaoPhienHopPage = () => {
     const saveAgendaItemsPipeline = async () => {
         if (!activeMeetingId) throw new Error("Thiếu ID cuộc họp");
 
-        // Load existing agenda items to handle removed items
-        let existingItems: any[] = [];
-        try {
-            const res = await meetingApi.getAgendaItems(activeMeetingId);
-            if (res.success && res.data) existingItems = res.data;
-        } catch (e) {
-            console.error("Failed to load existing agenda items", e);
-        }
-
-        // Delete items that were removed
-        const currentItemIds = noiDungData.contents.map(c => c.id).filter(id => !id.startsWith("content-"));
-        for (const item of existingItems) {
-            if (!currentItemIds.includes(item.id)) {
-                try {
-                    await meetingApi.deleteAgendaItem(activeMeetingId, item.id);
-                } catch (e) {
-                    console.error("Failed to delete removed agenda item", item.id, e);
-                }
-            }
-        }
-
-        // Save current items
-        for (const [index, c] of noiDungData.contents.entries()) {
+        const batchItems = noiDungData.contents.map((c, index) => {
             const duration = Math.max(1, Math.round((new Date(c.thoiGianKetThuc).getTime() - new Date(c.thoiGianBatDau).getTime()) / 60000));
-            const itemPayload = {
+            return {
+                id: c.id.startsWith("content-") ? undefined : c.id,
                 title: c.noiDungChiTiet,
-                content: undefined,
+                content: c.content || undefined,
                 durationEst: duration,
                 preparedByUserId: c.nguoiChuanBi || undefined,
                 startTime: toLocalISOString(c.thoiGianBatDau),
                 endTime: toLocalISOString(c.thoiGianKetThuc),
                 orderNo: index + 1,
+                documentIds: c.taiLieu?.map((d: any) => d.id) || [],
+                motions: c.bieuQuyetIssues?.map((b: any) => ({
+                    id: b.id.startsWith("issue-") ? undefined : b.id,
+                    title: b.ten,
+                    description: b.moTa || ""
+                })) || [],
+                prepInstructions: c.prepInstructions || undefined
             };
+        });
 
-            let savedItem: any;
-            if (c.id.startsWith("content-")) {
-                const res = await meetingApi.createAgendaItem(activeMeetingId, itemPayload);
-                if (!res.success) throw new Error(`Tạo đầu mục "${c.noiDungChiTiet}" thất bại`);
-                savedItem = res.data;
-            } else {
-                const res = await meetingApi.updateAgendaItem(activeMeetingId, c.id, itemPayload);
-                if (!res.success) throw new Error(`Cập nhật đầu mục "${c.noiDungChiTiet}" thất bại`);
-                savedItem = res.data;
-            }
+        const res = await meetingApi.createAgendaItem(activeMeetingId, batchItems);
+        if (!res.success) {
+            throw new Error(res.message || "Lưu danh sách nội dung họp thất bại");
+        }
 
-            // Upload and attach new files
-            if (c.taiLieu && c.taiLieu.length > 0) {
-                for (const file of c.taiLieu) {
-                    if (file instanceof File) {
-                        try {
-                            const uploadRes = await meetingApi.uploadDocument(file, file.name, 'OTHER');
-                            if (uploadRes.success && uploadRes.data) {
-                                const docId = uploadRes.data.id;
-                                await meetingApi.attachDocument(activeMeetingId, {
-                                    documentId: docId,
-                                    agendaItemId: savedItem.id,
-                                    usageType: 'AGENDA_ITEM',
-                                    requiredBeforeMeeting: false,
-                                    isConfidential: false
-                                });
-                            }
-                        } catch (e) {
-                            console.error("Failed to upload/attach file for agenda item", file.name, e);
-                        }
-                    }
-                }
-            }
+        if (res.data) {
+            const savedItems = res.data;
+            const updatedContents = noiDungData.contents.map((original, index) => {
+                const c = savedItems[index];
+                if (!c) return original;
+                return {
+                    ...original,
+                    id: c.id,
+                    feedbacks: c.feedbacks || [],
+                    taiLieu: c.documents ? c.documents.map((d: any) => ({
+                        id: d.documentId,
+                        name: d.title || d.fileName || "Tài liệu",
+                        size: d.fileSize || 0,
+                        url: d.fileUrl || "#"
+                    })) : [],
+                    bieuQuyetIssues: c.motions ? c.motions.map((m: any) => ({
+                        id: m.id,
+                        ten: m.title,
+                        moTa: m.description || ""
+                    })) : [],
+                    prepInstructions: c.prepInstructions || ""
+                };
+            });
+
+            setNoiDungData({
+                ...noiDungData,
+                contents: updatedContents
+            });
+        }
+    };
+
+    const handleSaveDraftAgenda = async () => {
+        if (!validateStep4()) {
+            return;
+        }
+
+        setIsSavingStep(true);
+        try {
+            await saveAgendaItemsPipeline();
+            toast.success("Lưu nội dung họp thành công");
+            setIsDirty(false);
+        } catch (err: any) {
+            console.error("Failed to save draft agenda:", err);
+            toast.error("Lưu thất bại", getErrorMessage(err));
+        } finally {
+            setIsSavingStep(false);
         }
     };
 
@@ -680,10 +722,11 @@ const TaoPhienHopPage = () => {
                 "Gửi phê duyệt thành công",
                 "Phiên họp đã được gửi đi. Vui lòng chờ phê duyệt để tiếp tục.",
             );
+            setIsDirty(false);
             navigate("/phien-hop");
         } catch (err: any) {
             console.error("Failed to submit for approval:", err);
-            toast.error("Gửi phê duyệt thất bại", err.message);
+            toast.error("Gửi phê duyệt thất bại", getErrorMessage(err));
         } finally {
             setIsSavingStep(false);
         }
@@ -703,6 +746,7 @@ const TaoPhienHopPage = () => {
                     "Cập nhật phiên họp thành công",
                     `Thông tin phiên họp "${chiTietData.tenPhienHop}" đã được cập nhật`,
                 );
+                setIsDirty(false);
                 navigate(`/phien-hop/${activeMeetingId}`);
             } else {
                 const res = await meetingApi.publishMeeting(activeMeetingId!);
@@ -712,14 +756,20 @@ const TaoPhienHopPage = () => {
                     "Tạo phiên họp thành công",
                     `Đã tạo và công bố phiên họp "${chiTietData.tenPhienHop}" thành công`,
                 );
+                setIsDirty(false);
                 navigate("/phien-hop");
             }
         } catch (err: any) {
             console.error("Failed to complete meeting creation:", err);
-            toast.error("Thao tác thất bại", err.message);
+            toast.error("Thao tác thất bại", getErrorMessage(err));
         } finally {
             setIsSavingStep(false);
         }
+    };
+
+    const handleCancelWithConfirm = () => {
+        setIsDirty(false);
+        navigate("/phien-hop");
     };
 
     return (
@@ -729,20 +779,12 @@ const TaoPhienHopPage = () => {
                 {/* Header */}
                 <div className="px-8 mb-6">
                     <button
-                        onClick={() =>
-                            navigate(
-                                isUpdateMode
-                                    ? `/phien-hop/${id}`
-                                    : "/phien-hop",
-                            )
-                        }
+                        onClick={handleCancelWithConfirm}
                         className="inline-flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors mb-3"
                     >
                         <ArrowLeft className="h-4 w-4" />
                         <span className="text-sm body">
-                            {isUpdateMode
-                                ? "Quay lại chi tiết phiên họp"
-                                : "Quay lại danh sách"}
+                            Quay lại
                         </span>
                     </button>
                     <h1 className="text-2xl heading text-gray-900">
@@ -796,6 +838,7 @@ const TaoPhienHopPage = () => {
                                             data={chiTietData}
                                             onChange={setChiTietData}
                                             errors={chiTietErrors}
+                                            isReadOnly={isReadOnly}
                                         />
                                     )}
 
@@ -803,6 +846,7 @@ const TaoPhienHopPage = () => {
                                         <ThanhPhanThamDuStep
                                             data={thanhPhanData}
                                             onChange={setThanhPhanData}
+                                            readOnly={isReadOnly}
                                         />
                                     )}
 
@@ -812,6 +856,7 @@ const TaoPhienHopPage = () => {
                                             onChange={setThongBaoData}
                                             thanhPhanData={thanhPhanData}
                                             errors={thongBaoErrors}
+                                            isReadOnly={isReadOnly}
                                         />
                                     )}
 
@@ -824,6 +869,9 @@ const TaoPhienHopPage = () => {
                                             inheritedParticipants={
                                                 thanhPhanData
                                             }
+                                            isReadOnly={isReadOnly}
+                                            isUpdateMode={isUpdateMode}
+                                            meetingId={activeMeetingId || undefined}
                                         />
                                     )}
                                 </>
@@ -839,16 +887,12 @@ const TaoPhienHopPage = () => {
                                 onNext={handleNext}
                                 onSubmitForApproval={handleSubmitForApproval}
                                 onSubmitMeeting={handleSubmitMeeting}
-                                onCancel={() =>
-                                    navigate(
-                                        isUpdateMode
-                                            ? `/phien-hop/${id}`
-                                            : "/phien-hop",
-                                    )
-                                }
+                                onSaveDraftAgenda={handleSaveDraftAgenda}
+                                onCancel={handleCancelWithConfirm}
                                 isLastStep={currentStep === STEPS.length}
                                 approvalStatus={approvalStatus}
                                 isUpdateMode={isUpdateMode}
+                                isReadOnly={isReadOnly}
                             />
                         </div>
                     </div>

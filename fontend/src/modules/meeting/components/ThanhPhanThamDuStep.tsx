@@ -38,13 +38,16 @@ const ThanhPhanThamDuStep: React.FC<ThanhPhanThamDuStepProps> = ({ data, onChang
   ];
 
   const handleConfirmUnitSelection = (selectedMembers: Member[]) => {
-    const existingIds = new Set((data.donVi || []).map((m: Member) => m.id));
-    const newMembers = selectedMembers.filter(m => !existingIds.has(m.id));
+    const chairMap = new Map((data.donVi || []).map(m => [m.id, m.isChair]));
+    const updatedMembers = selectedMembers.map(m => ({
+      ...m,
+      isChair: chairMap.get(m.id) || false
+    }));
 
     if (onChange) {
       onChange({
         ...data,
-        donVi: [...(data.donVi || []), ...newMembers],
+        donVi: updatedMembers,
       });
     }
   };
@@ -333,6 +336,7 @@ const ThanhPhanThamDuStep: React.FC<ThanhPhanThamDuStepProps> = ({ data, onChang
         onConfirm={handleConfirmUnitSelection}
         mode="unit"
         title="Chọn từ đơn vị"
+        initialSelectedMembers={data.donVi}
       />
 
       <AddGuestModal

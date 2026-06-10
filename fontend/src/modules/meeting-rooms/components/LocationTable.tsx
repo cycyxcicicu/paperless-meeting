@@ -48,6 +48,14 @@ const facilityIcons: Record<string, React.ElementType> = {
   coffee: Coffee,
 };
 
+export const LocationTable: React.FC<LocationTableProps> = ({
+  locations,
+  onEdit,
+  onDelete,
+  onView,
+  currentPage,
+  pageSize
+}) => {
   const { user } = useAuth();
   const isSuperAdmin = user?.role?.roleCode === 'SUPER_ADMIN';
 

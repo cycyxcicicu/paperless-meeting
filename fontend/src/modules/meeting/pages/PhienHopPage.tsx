@@ -99,6 +99,8 @@ const PhienHopPage = () => {
 
     const [customFromDate, setCustomFromDate] = useState<Date | null>(null);
     const [customToDate, setCustomToDate] = useState<Date | null>(null);
+    const [tempFromDate, setTempFromDate] = useState<Date | null>(null);
+    const [tempToDate, setTempToDate] = useState<Date | null>(null);
 
     const [meetings, setMeetings] = useState<Meeting[]>([]);
     const [rawMeetings, setRawMeetings] = useState<MeetingResponse[]>([]);
@@ -182,6 +184,9 @@ const PhienHopPage = () => {
     };
 
     useEffect(() => {
+        if (selectedTime === "custom" && (!customFromDate || !customToDate)) {
+            return;
+        }
         fetchMeetings();
     }, [currentPage, pageSize, searchQuery, selectedStatus, selectedTime, customFromDate, customToDate]);
 
@@ -428,6 +433,13 @@ const PhienHopPage = () => {
                                     value={selectedTime}
                                     onChange={(val) => {
                                         setSelectedTime(val);
+                                        if (val !== "custom") {
+                                            setCustomFromDate(null);
+                                            setCustomToDate(null);
+                                            setTempFromDate(null);
+                                            setTempToDate(null);
+                                            setCurrentPage(1);
+                                        }
                                     }}
                                 />
 
@@ -436,38 +448,41 @@ const PhienHopPage = () => {
                                     <div className="flex items-center gap-2 animate-in fade-in-0 duration-200">
                                         <Popover>
                                             <PopoverTrigger asChild>
-                                                <Button variant="outline" className="border-gray-300 rounded-xl px-4 py-2 text-sm bg-white text-gray-700 hover:border-[#C8102E]/30 flex items-center gap-2">
+                                                <Button variant="outline" className="border-gray-300 rounded-xl px-4 py-2 text-sm bg-white text-gray-700 hover:border-[#C8102E]/30 flex items-center gap-2 h-10">
                                                     <CalendarIcon className="h-4 w-4 text-gray-400" />
-                                                    Từ: {customFromDate ? format(customFromDate, 'dd/MM/yyyy') : 'Chọn ngày bắt đầu'}
+                                                    Từ: {tempFromDate ? format(tempFromDate, 'dd/MM/yyyy') : 'Chọn ngày bắt đầu'}
                                                 </Button>
                                             </PopoverTrigger>
                                             <PopoverContent className="w-auto p-0 z-50">
-                                                <ScrollDatePicker value={customFromDate || undefined} onChange={(date) => { setCustomFromDate(date); setCurrentPage(1); }} showTime={false} />
+                                                <ScrollDatePicker value={tempFromDate || undefined} onChange={(date) => { setTempFromDate(date); }} showTime={false} />
                                             </PopoverContent>
                                         </Popover>
                                         <span className="text-gray-400">-</span>
                                         <Popover>
                                             <PopoverTrigger asChild>
-                                                <Button variant="outline" className="border-gray-300 rounded-xl px-4 py-2 text-sm bg-white text-gray-700 hover:border-[#C8102E]/30 flex items-center gap-2">
+                                                <Button variant="outline" className="border-gray-300 rounded-xl px-4 py-2 text-sm bg-white text-gray-700 hover:border-[#C8102E]/30 flex items-center gap-2 h-10">
                                                     <CalendarIcon className="h-4 w-4 text-gray-400" />
-                                                    Đến: {customToDate ? format(customToDate, 'dd/MM/yyyy') : 'Chọn ngày kết thúc'}
+                                                    Đến: {tempToDate ? format(tempToDate, 'dd/MM/yyyy') : 'Chọn ngày kết thúc'}
                                                 </Button>
                                             </PopoverTrigger>
                                             <PopoverContent className="w-auto p-0 z-50">
-                                                <ScrollDatePicker value={customToDate || undefined} onChange={(date) => { setCustomToDate(date); setCurrentPage(1); }} showTime={false} />
+                                                <ScrollDatePicker value={tempToDate || undefined} onChange={(date) => { setTempToDate(date); }} showTime={false} />
                                             </PopoverContent>
                                         </Popover>
+                                        <Button
+                                            variant="primary"
+                                            disabled={!tempFromDate || !tempToDate}
+                                            onClick={() => {
+                                                setCustomFromDate(tempFromDate);
+                                                setCustomToDate(tempToDate);
+                                                setCurrentPage(1);
+                                            }}
+                                            className="rounded-xl px-4 py-2 text-sm h-10 bg-[#C8102E] hover:bg-[#C8102E]/90 text-white disabled:bg-gray-200 disabled:text-gray-400"
+                                        >
+                                            Lọc
+                                        </Button>
                                     </div>
                                 )}
-                            </div>
-                            <div className="flex items-center gap-2 text-sm text-[#6B7280]">
-                                <span>
-                                    Tìm thấy{" "}
-                                    <strong className="text-[#111827]">
-                                        {totalItems}
-                                    </strong>{" "}
-                                    phiên họp
-                                </span>
                             </div>
                         </FilterBar>
 

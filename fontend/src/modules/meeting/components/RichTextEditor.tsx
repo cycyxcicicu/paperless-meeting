@@ -17,6 +17,7 @@ interface RichTextEditorProps {
   onChange: (value: string) => void;
   placeholder?: string;
   minHeight?: string;
+  readOnly?: boolean;
 }
 
 export interface RichTextEditorRef {
@@ -49,6 +50,7 @@ const RichTextEditor = React.forwardRef((
     onChange,
     placeholder = 'Nhập nội dung chương trình họp...',
     minHeight = '350px',
+    readOnly = false,
   }: RichTextEditorProps,
   ref: React.ForwardedRef<RichTextEditorRef>
 ) => {
@@ -78,7 +80,7 @@ const RichTextEditor = React.forwardRef((
   // Full-featured toolbar configuration
   const modules = useMemo(
     () => ({
-      toolbar: [
+      toolbar: readOnly ? false : [
         // Font and size
         [{ font: Font.whitelist }, { size: Size.whitelist }],
 
@@ -113,14 +115,14 @@ const RichTextEditor = React.forwardRef((
         matchVisual: false, // Better paste from Word
       },
     }),
-    []
+    [readOnly]
   );
 
   return (
     <div className="rich-text-editor-wrapper">
       <ReactQuill
         ref={quillRef}
-        theme="snow"
+        theme={readOnly ? 'bubble' : 'snow'}
         value={value}
         onChange={onChange}
         onChangeSelection={(range) => {
@@ -131,6 +133,7 @@ const RichTextEditor = React.forwardRef((
         modules={modules}
         formats={formats}
         placeholder={placeholder}
+        readOnly={readOnly}
       />
       <style>{`
         /* Container */

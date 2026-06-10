@@ -8,6 +8,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.Setter;
+import vn.acme.paperless_meeting.entity.MeetingFile;
 
 @Getter
 @Setter
@@ -26,4 +27,6 @@ public class MeetingUpsertRequest {
 
     @NotNull(message = "DEPARTMENT_ID_REQUIRED")
     private UUID departmentId;
+
+    private MeetingFile agendaFile;
 }

@@ -186,13 +186,27 @@ public class UserService {
     public PageResponse<UserResponse> findAll(String keyword, String statusStr, UUID departmentId, String roleCodeStr,
             Pageable pageable) {
 
-        if (currentUserService.hasRole(RoleName.USER)) {
-            throw new AppException(ErrorCode.UNAUTHOZIZED);
-        }
-
         User caller = currentUserService.getCurrentActiveUser();
         List<UUID> searchDeptIds = null;
         RoleName roleFilter = null;
+
+        if (currentUserService.hasRole(RoleName.USER)) {
+            if (!currentUserService.hasAuthority("MEETING_CREATE")) {
+                throw new AppException(ErrorCode.UNAUTHOZIZED);
+            }
+            UUID callerDeptId = caller.getDepartment() != null ? caller.getDepartment().getId() : null;
+            if (callerDeptId == null) {
+                throw new AppException(ErrorCode.UNAUTHOZIZED);
+            }
+            if (departmentId != null) {
+                if (!callerDeptId.equals(departmentId)) {
+                    throw new AppException(ErrorCode.UNAUTHOZIZED);
+                }
+                searchDeptIds = List.of(departmentId);
+            } else {
+                searchDeptIds = List.of(callerDeptId);
+            }
+        }
         if (roleCodeStr != null && !roleCodeStr.isBlank()) {
             try {
                 roleFilter = RoleName.valueOf(roleCodeStr.trim().toUpperCase());

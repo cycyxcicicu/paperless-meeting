@@ -22,11 +22,12 @@ interface ThongBaoGiayMoiStepProps {
   onChange: (data: ThongBaoGiayMoiData) => void;
   thanhPhanData?: ThanhPhanThamDuData;
   errors?: Record<string, string>;
+  isReadOnly?: boolean;
 }
 
 
 
-const ThongBaoGiayMoiStep: React.FC<ThongBaoGiayMoiStepProps> = ({ data, onChange, thanhPhanData, errors }) => {
+const ThongBaoGiayMoiStep: React.FC<ThongBaoGiayMoiStepProps> = ({ data, onChange, thanhPhanData, errors, isReadOnly = false }) => {
   const [showPreview, setShowPreview] = useState(false);
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
 
@@ -67,7 +68,7 @@ const ThongBaoGiayMoiStep: React.FC<ThongBaoGiayMoiStepProps> = ({ data, onChang
       <div className="w-full p-6 bg-white rounded-2xl border border-gray-200">
         <FormProvider {...methods}>
           <form className="space-y-6">
-            <DynamicFormRenderer groups={createThongBaoGiayMoiFormSchema()} mode="create" />
+            <DynamicFormRenderer groups={createThongBaoGiayMoiFormSchema()} mode={isReadOnly ? 'view' : 'create'} />
           </form>
         </FormProvider>
 

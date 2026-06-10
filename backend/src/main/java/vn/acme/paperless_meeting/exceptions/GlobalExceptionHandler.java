@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 
 import vn.acme.paperless_meeting.dto.base.ApiResponse;
 import vn.acme.paperless_meeting.service.util.ErrorLogger;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 @ControllerAdvice
 @Slf4j
@@ -100,6 +101,14 @@ public class GlobalExceptionHandler {
 
         return ResponseEntity.status(baseError.getStatusCode())
                 .body(ApiResponse.error(baseError.getCode(), baseError.getMessage()));
+    }
+
+    @ExceptionHandler(value = MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiResponse<?>> handleMaxUploadSizeExceededException(MaxUploadSizeExceededException ex) {
+        BaseErrorCode baseErrorCode = ErrorCode.FILE_SIZE_EXCEEDED;
+
+        return ResponseEntity.status(baseErrorCode.getStatusCode())
+                .body(ApiResponse.error(baseErrorCode.getCode(), baseErrorCode.getMessage()));
     }
 
     @ExceptionHandler(value = Exception.class)

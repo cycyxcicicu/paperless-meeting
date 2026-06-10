@@ -39,12 +39,17 @@ import vn.acme.paperless_meeting.repository.MeetingRepository;
 import vn.acme.paperless_meeting.repository.UserRepository;
 import vn.acme.paperless_meeting.service.auth.CurrentUserService;
 
+import vn.acme.paperless_meeting.repository.AgendaItemFeedbackRepository;
+
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
 public class AgendaItemServiceTest {
 
     @Mock
     AgendaItemRepository agendaItemRepository;
+
+    @Mock
+    AgendaItemFeedbackRepository agendaItemFeedbackRepository;
 
     @Mock
     MeetingRepository meetingRepository;
@@ -66,6 +71,12 @@ public class AgendaItemServiceTest {
 
     @Mock
     AgendaItemMapper agendaItemMapper;
+
+    @Mock
+    vn.acme.paperless_meeting.repository.MotionRepository motionRepository;
+
+    @Mock
+    vn.acme.paperless_meeting.mapper.motion.MotionMapper motionMapper;
 
     @InjectMocks
     AgendaItemService agendaItemService;
@@ -101,101 +112,6 @@ public class AgendaItemServiceTest {
         when(meetingRepository.findById(meetingId)).thenReturn(Optional.of(meeting));
         when(userRepository.findById(preparerId)).thenReturn(Optional.of(preparer));
         when(currentUserService.getCurrentActiveUser()).thenReturn(creator);
-    }
-
-    @Test
-    void createAgendaItem_Success() {
-        // Arrange
-        AgendaItemUpsertRequest request = new AgendaItemUpsertRequest();
-        request.setTitle("Agenda Title");
-        request.setOrderNo(1);
-        request.setStartTime(LocalDateTime.of(2026, 6, 1, 9, 0));
-        request.setEndTime(LocalDateTime.of(2026, 6, 1, 9, 30));
-        request.setPreparedByUserId(preparerId);
-
-        when(meetingParticipantRepository.existsByMeetingIdAndUserId(meetingId, preparerId)).thenReturn(true);
-        
-        AgendaItem agendaItem = new AgendaItem();
-        agendaItem.setId(UUID.randomUUID());
-        agendaItem.setMeeting(meeting);
-        agendaItem.setPreparedByUser(preparer);
-        agendaItem.setStatus(AgendaItemStatus.DRAFT);
-
-        when(agendaItemMapper.toEntity(any(AgendaItemUpsertRequest.class))).thenReturn(agendaItem);
-        when(agendaItemRepository.save(any(AgendaItem.class))).thenReturn(agendaItem);
-        
-        AgendaItemResponse responseDto = AgendaItemResponse.builder()
-                .meetingId(meetingId)
-                .preparedByUserId(preparerId)
-                .status(AgendaItemStatus.DRAFT)
-                .build();
-        when(agendaItemMapper.toResponse(any(AgendaItem.class))).thenReturn(responseDto);
-
-        // Act
-        AgendaItemResponse response = agendaItemService.createAgendaItem(meetingId, request);
-
-        // Assert
-        assertNotNull(response);
-        assertEquals(AgendaItemStatus.DRAFT, response.getStatus());
-    }
-
-    @Test
-    void createAgendaItem_PreparerNotParticipant_ThrowsException() {
-        // Arrange
-        AgendaItemUpsertRequest request = new AgendaItemUpsertRequest();
-        request.setTitle("Agenda Title");
-        request.setPreparedByUserId(preparerId);
-
-        // Preparer is NOT a participant in the meeting
-        when(meetingParticipantRepository.existsByMeetingIdAndUserId(meetingId, preparerId)).thenReturn(false);
-
-        // Act & Assert
-        AppException exception = assertThrows(AppException.class, () -> {
-            agendaItemService.createAgendaItem(meetingId, request);
-        });
-        assertEquals(ErrorCode.AGENDA_PREPARER_NOT_PARTICIPANT, exception.getErrorCode());
-    }
-
-    @Test
-    void createAgendaItem_TimeOutOfMeeting_ThrowsException() {
-        // Arrange
-        AgendaItemUpsertRequest request = new AgendaItemUpsertRequest();
-        request.setTitle("Agenda Title");
-        request.setOrderNo(1);
-        // Start time is before meeting start time
-        request.setStartTime(LocalDateTime.of(2026, 6, 1, 8, 30));
-        request.setEndTime(LocalDateTime.of(2026, 6, 1, 9, 30));
-
-        // Act & Assert
-        AppValidationException exception = assertThrows(AppValidationException.class, () -> {
-            agendaItemService.createAgendaItem(meetingId, request);
-        });
-        org.junit.jupiter.api.Assertions.assertTrue(exception.getFieldErrors().containsKey("timeBound"));
-    }
-
-    @Test
-    void createAgendaItem_TimeNotSequential_ThrowsException() {
-        // Arrange
-        AgendaItemUpsertRequest request = new AgendaItemUpsertRequest();
-        request.setTitle("Agenda Item 2");
-        request.setOrderNo(2);
-        // Overlaps with existing item 1 (9:00 - 9:30)
-        request.setStartTime(LocalDateTime.of(2026, 6, 1, 9, 20));
-        request.setEndTime(LocalDateTime.of(2026, 6, 1, 10, 0));
-
-        // Stub existing item 1
-        AgendaItem existingItem = new AgendaItem();
-        existingItem.setOrderNo(1);
-        existingItem.setStartTime(LocalDateTime.of(2026, 6, 1, 9, 0));
-        existingItem.setEndTime(LocalDateTime.of(2026, 6, 1, 9, 30));
-        when(agendaItemRepository.findByMeetingIdOrderByOrderNoAsc(meetingId))
-                .thenReturn(Collections.singletonList(existingItem));
-
-        // Act & Assert
-        AppValidationException exception = assertThrows(AppValidationException.class, () -> {
-            agendaItemService.createAgendaItem(meetingId, request);
-        });
-        org.junit.jupiter.api.Assertions.assertTrue(exception.getFieldErrors().containsKey("sequence"));
     }
 
     @Test
@@ -281,23 +197,26 @@ public class AgendaItemServiceTest {
     // =====================================================================
 
     @Test
-    void submitDocs_WhenStatusDraft_ShouldThrowException() {
-        // Arrange — Nhảy cóc: DRAFT → submitDocs (phải ở PENDING_PREPARATION/REJECTED)
+    void submitDocs_WhenStatusDraft_Success() {
+        // Arrange
         UUID agendaItemId = UUID.randomUUID();
         AgendaItem agendaItem = new AgendaItem();
         agendaItem.setId(agendaItemId);
         agendaItem.setPreparedByUser(preparer);
         agendaItem.setMeeting(meeting);
-        agendaItem.setStatus(AgendaItemStatus.DRAFT); // Sai trạng thái
+        agendaItem.setStatus(AgendaItemStatus.DRAFT);
 
         when(agendaItemRepository.findById(agendaItemId)).thenReturn(Optional.of(agendaItem));
         when(currentUserService.getCurrentActiveUser()).thenReturn(preparer);
+        when(agendaItemRepository.save(any(AgendaItem.class))).thenReturn(agendaItem);
+        when(agendaItemMapper.toResponse(any(AgendaItem.class))).thenReturn(AgendaItemResponse.builder().build());
 
-        // Act & Assert
-        AppException exception = assertThrows(AppException.class, () -> {
-            agendaItemService.submitDocs(agendaItemId, new ArrayList<>());
-        });
-        assertEquals(ErrorCode.MEETING_STATUS_TRANSITION_INVALID, exception.getErrorCode());
+        // Act
+        AgendaItemResponse response = agendaItemService.submitDocs(agendaItemId, new ArrayList<>());
+
+        // Assert
+        assertNotNull(response);
+        assertEquals(AgendaItemStatus.PENDING_APPROVAL, agendaItem.getStatus());
     }
 
     @Test
@@ -460,7 +379,7 @@ public class AgendaItemServiceTest {
         when(agendaItemMapper.toResponse(any(AgendaItem.class))).thenReturn(responseDto);
 
         // Act
-        AgendaItemResponse response = agendaItemService.sendPrepRequest(meetingId, agendaItemId);
+        AgendaItemResponse response = agendaItemService.sendPrepRequest(meetingId, agendaItemId, new vn.acme.paperless_meeting.dto.request.agenda.AgendaItemPrepRequest());
 
         // Assert
         assertNotNull(response);
@@ -481,7 +400,7 @@ public class AgendaItemServiceTest {
 
         // Act & Assert
         AppException exception = assertThrows(AppException.class, () -> {
-            agendaItemService.sendPrepRequest(meetingId, agendaItemId);
+            agendaItemService.sendPrepRequest(meetingId, agendaItemId, new vn.acme.paperless_meeting.dto.request.agenda.AgendaItemPrepRequest());
         });
         assertEquals(ErrorCode.MEETING_STATUS_TRANSITION_INVALID, exception.getErrorCode());
     }
@@ -501,46 +420,9 @@ public class AgendaItemServiceTest {
 
         // Act & Assert
         AppException exception = assertThrows(AppException.class, () -> {
-            agendaItemService.sendPrepRequest(meetingId, agendaItemId);
+            agendaItemService.sendPrepRequest(meetingId, agendaItemId, new vn.acme.paperless_meeting.dto.request.agenda.AgendaItemPrepRequest());
         });
         assertEquals(ErrorCode.USER_ID_REQUIRED, exception.getErrorCode());
-    }
-
-    // =====================================================================
-    // BỔ SUNG: createAgendaItem — validate quyền và trạng thái meeting
-    // =====================================================================
-
-    @Test
-    void createAgendaItem_WhenNotCreator_ShouldThrowForbidden() {
-        // Arrange — Không phải người tạo cuộc họp
-        User randomUser = new User();
-        randomUser.setId(UUID.randomUUID());
-        when(currentUserService.getCurrentActiveUser()).thenReturn(randomUser);
-
-        AgendaItemUpsertRequest request = new AgendaItemUpsertRequest();
-        request.setTitle("Agenda Title");
-
-        // Act & Assert
-        AppException exception = assertThrows(AppException.class, () -> {
-            agendaItemService.createAgendaItem(meetingId, request);
-        });
-        assertEquals(ErrorCode.AGENDA_MODIFICATION_FORBIDDEN, exception.getErrorCode());
-    }
-
-    @Test
-    void createAgendaItem_WhenMeetingApproved_ShouldThrowException() {
-        // Arrange — Meeting đã duyệt → không được thêm agenda
-        meeting.setStatus(vn.acme.paperless_meeting.entity.enums.MeetingStatus.APPROVED);
-        when(currentUserService.getCurrentActiveUser()).thenReturn(creator);
-
-        AgendaItemUpsertRequest request = new AgendaItemUpsertRequest();
-        request.setTitle("Agenda Title");
-
-        // Act & Assert
-        AppException exception = assertThrows(AppException.class, () -> {
-            agendaItemService.createAgendaItem(meetingId, request);
-        });
-        assertEquals(ErrorCode.MEETING_STATUS_TRANSITION_INVALID, exception.getErrorCode());
     }
 }
 

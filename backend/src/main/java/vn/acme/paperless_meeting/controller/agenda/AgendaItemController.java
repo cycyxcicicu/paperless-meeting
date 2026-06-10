@@ -16,6 +16,7 @@ import lombok.experimental.FieldDefaults;
 import vn.acme.paperless_meeting.dto.base.ApiResponse;
 import vn.acme.paperless_meeting.dto.request.agenda.AgendaItemUpsertRequest;
 import vn.acme.paperless_meeting.dto.request.agenda.AgendaItemPrepRequest;
+import vn.acme.paperless_meeting.dto.request.agenda.BatchOrderRequest;
 import vn.acme.paperless_meeting.dto.response.agenda.AgendaItemResponse;
 import vn.acme.paperless_meeting.dto.response.meeting.MeetingResponse;
 import vn.acme.paperless_meeting.service.agenda.AgendaItemService;
@@ -37,23 +38,24 @@ public class AgendaItemController {
                 .data(agendaItemService.getAgendaItems(meetingId)).build());
     }
 
-    @Operation(summary = "Tạo nội dung nghị sự mới",
-               description = "Thêm một đầu mục vào cuộc họp. Cần chỉ định thứ tự, tiêu đề, thời gian và người chuẩn bị tài liệu. Thời gian phải nằm trong khung cuộc họp và không chồng chéo với đầu mục khác.")
+    @Operation(summary = "Lưu danh sách nội dung nghị sự",
+               description = "Đồng bộ toàn bộ danh sách agenda items của cuộc họp trong một transaction duy nhất.")
     @PostMapping("/meetings/{meetingId}/agenda-items")
-    public ResponseEntity<ApiResponse<AgendaItemResponse>> createAgendaItem(
-            @PathVariable UUID meetingId, @RequestBody @Valid AgendaItemUpsertRequest request) {
-        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.<AgendaItemResponse>builder()
-                .data(agendaItemService.createAgendaItem(meetingId, request)).build());
+    public ResponseEntity<ApiResponse<List<AgendaItemResponse>>> saveAgendaItems(
+            @PathVariable UUID meetingId, @RequestBody @Valid List<AgendaItemUpsertRequest> requests) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.<List<AgendaItemResponse>>builder()
+                .data(agendaItemService.batchUpdateAgendaItems(meetingId, requests))
+                .message("Cập nhật danh sách nội dung họp thành công").build());
     }
 
-    @Operation(summary = "Cập nhật nội dung nghị sự",
-               description = "Chỉnh sửa thông tin đầu mục. Chỉ cho phép khi agenda item chưa được phê duyệt.")
-    @PutMapping("/meetings/{meetingId}/agenda-items/{id}")
-    public ResponseEntity<ApiResponse<AgendaItemResponse>> updateAgendaItem(
-            @PathVariable UUID meetingId, @PathVariable UUID id,
-            @RequestBody @Valid AgendaItemUpsertRequest request) {
-        return ResponseEntity.ok(ApiResponse.<AgendaItemResponse>builder()
-                .data(agendaItemService.updateAgendaItem(meetingId, id, request)).build());
+
+    @Operation(summary = "Cập nhật thứ tự các nội dung nghị sự hàng loạt",
+               description = "Sắp xếp lại thứ tự các đầu mục agenda của cuộc họp.")
+    @PutMapping("/meetings/{meetingId}/agenda-items/orders")
+    public ResponseEntity<ApiResponse<Void>> updateAgendaOrders(
+            @PathVariable UUID meetingId, @RequestBody @Valid BatchOrderRequest request) {
+        agendaItemService.updateAgendaOrders(meetingId, request);
+        return ResponseEntity.ok(ApiResponse.<Void>builder().message("Cập nhật thứ tự thành công").build());
     }
 
     @Operation(summary = "Xóa nội dung nghị sự",
@@ -80,10 +82,24 @@ public class AgendaItemController {
                description = "Người được phân công nộp danh sách ID tài liệu đã upload. Chuyển trạng thái sang PENDING_APPROVAL để chủ tọa xét duyệt.")
     @PostMapping("/agenda-items/{id}/submit-docs")
     public ResponseEntity<ApiResponse<AgendaItemResponse>> submitDocs(
-            @PathVariable UUID id, @RequestBody List<UUID> documentIds) {
+            @PathVariable UUID id, 
+            @RequestBody List<UUID> documentIds,
+            @RequestParam(required = false) String note) {
         return ResponseEntity.ok(ApiResponse.<AgendaItemResponse>builder()
-                .data(agendaItemService.submitDocs(id, documentIds))
+                .data(agendaItemService.submitDocs(id, documentIds, note))
                 .message("Đã nộp tài liệu đính kèm thành công").build());
+    }
+
+    @Operation(summary = "Thêm ý kiến phản hồi / câu hỏi trực tiếp",
+               description = "Thêm ý kiến phản hồi / câu hỏi trực tiếp vào mục họp.")
+    @PostMapping("/agenda-items/{id}/feedbacks")
+    public ResponseEntity<ApiResponse<AgendaItemResponse>> addFeedback(
+            @PathVariable UUID id, 
+            @RequestParam String content,
+            @RequestParam String type) {
+        return ResponseEntity.ok(ApiResponse.<AgendaItemResponse>builder()
+                .data(agendaItemService.addFeedback(id, content, type))
+                .message("Đã thêm ý kiến phản hồi thành công").build());
     }
 
     @Operation(summary = "Phê duyệt tài liệu (chủ tọa)",

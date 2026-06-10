@@ -11,12 +11,14 @@ interface PageHeaderProps {
 }
 
 const PageHeader: React.FC<PageHeaderProps> = ({
+  title,
+  description,
   actions,
   breadcrumbs,
   className,
 }) => {
   return (
-    <div className={cn('mb-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-4', className)}>
+    <div className={cn('mb-6 flex flex-col gap-3.5', className)}>
       {breadcrumbs && breadcrumbs.length > 0 && (
         <div className="flex flex-wrap items-center gap-2">
           {breadcrumbs.map((crumb, index) => {
@@ -26,7 +28,7 @@ const PageHeader: React.FC<PageHeaderProps> = ({
                 className={cn(
                   'text-sm',
                   isLast
-                    ? 'text-gray-900 btn-primary'
+                    ? 'text-gray-900 btn-primary font-medium'
                     : 'text-gray-500 hover:text-gray-900 transition-colors'
                 )}
               >
@@ -50,9 +52,37 @@ const PageHeader: React.FC<PageHeaderProps> = ({
         </div>
       )}
 
-      {actions && (
-        <div className="flex items-center gap-2 shrink-0">
-          {actions}
+      {(title || description || actions) && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="space-y-1">
+            {title && (
+              typeof title === 'string' ? (
+                <h1 className="text-2xl font-bold text-gray-900 leading-tight heading">
+                  {title}
+                </h1>
+              ) : (
+                <div className="text-2xl font-bold text-gray-900 leading-tight heading">
+                  {title}
+                </div>
+              )
+            )}
+            {description && (
+              typeof description === 'string' ? (
+                <p className="text-sm text-gray-500 body">
+                  {description}
+                </p>
+              ) : (
+                <div className="text-sm text-gray-500 body">
+                  {description}
+                </div>
+              )
+            )}
+          </div>
+          {actions && (
+            <div className="flex items-center gap-2 shrink-0">
+              {actions}
+            </div>
+          )}
         </div>
       )}
     </div>

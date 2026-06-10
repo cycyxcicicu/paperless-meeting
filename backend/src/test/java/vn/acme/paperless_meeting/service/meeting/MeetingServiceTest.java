@@ -39,10 +39,14 @@ import vn.acme.paperless_meeting.service.department.DepartmentService;
 import vn.acme.paperless_meeting.service.speaker.SpeakerService;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import vn.acme.paperless_meeting.repository.AgendaItemRepository;
+
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
 class MeetingServiceTest {
 
+    @Mock
+    AgendaItemRepository agendaItemRepository;
     @Mock
     MeetingRepository meetingRepository;
     @Mock

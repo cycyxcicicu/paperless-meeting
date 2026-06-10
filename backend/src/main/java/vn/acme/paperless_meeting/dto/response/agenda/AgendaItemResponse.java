@@ -8,6 +8,8 @@ import lombok.Getter;
 import lombok.Setter;
 import vn.acme.paperless_meeting.entity.enums.AgendaItemStatus;
 
+import vn.acme.paperless_meeting.dto.response.motion.MotionResponse;
+
 @Getter
 @Setter
 @Builder
@@ -26,5 +28,7 @@ public class AgendaItemResponse {
     private LocalDateTime prepDeadline;
     private UUID meetingId;
     private List<AgendaDocumentResponse> documents;
-
+    private List<AgendaItemFeedbackResponse> feedbacks;
+    private List<MotionResponse> motions;
+    private String prepInstructions;
 }

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Upload, FileText, FileSpreadsheet, File as FileIcon, Trash2, Plus, Eye, X, Download } from 'lucide-react';
 import { Label } from './label';
+import { toast } from '@/lib/toast';
 
 export interface FileUploaderProps {
   files: any[];
@@ -11,6 +12,7 @@ export interface FileUploaderProps {
   label?: string;
   placeholder?: string;
   allowedExtensionsText?: string;
+  disabled?: boolean;
 }
 
 export const getFileIcon = (fileName: string) => {
@@ -39,11 +41,12 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
   files = [],
   onChange,
   multiple = false,
-  accept = '.pdf,.doc,.docx,.xls,.xlsx',
-  maxSizeMB = 50,
+  accept = '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg,.txt,.zip',
+  maxSizeMB = 20,
   label,
   placeholder,
-  allowedExtensionsText = 'PDF, DOC, DOCX, XLS, XLSX',
+  allowedExtensionsText = 'PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX, PNG, JPG, JPEG, TXT, ZIP',
+  disabled = false,
 }) => {
   const [previewFile, setPreviewFile] = React.useState<any | null>(null);
   const [previewUrl, setPreviewUrl] = React.useState<string>('');
@@ -84,23 +87,50 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
     if (!e.target.files) return;
     const selectedFiles = Array.from(e.target.files);
     
-    // Size check
+    // Parse allowed extensions
+    const allowedExtensions = accept
+      ? accept.split(',').map((ext) => ext.trim().toLowerCase())
+      : [];
+
+    // Size check & Extension check
     const maxSize = maxSizeMB * 1024 * 1024;
     const validFiles: File[] = [];
 
     for (const file of selectedFiles) {
+      // 1. Extension check
+      if (allowedExtensions.length > 0) {
+        const fileExt = '.' + file.name.split('.').pop()?.toLowerCase();
+        if (!allowedExtensions.includes(fileExt)) {
+          toast.error(
+            'Định dạng file không hợp lệ',
+            `Tệp "${file.name}" không đúng định dạng cho phép (${allowedExtensionsText})`
+          );
+          continue;
+        }
+      }
+
+      // 2. Size check
       if (file.size > maxSize) {
-        alert(`File ${file.name} vượt quá dung lượng ${maxSizeMB}MB`);
+        toast.error(
+          'Dung lượng file vượt quá giới hạn',
+          `Tệp "${file.name}" vượt quá dung lượng tối đa cho phép là ${maxSizeMB}MB`
+        );
         continue;
       }
+
       validFiles.push(file);
     }
 
-    if (multiple) {
-      onChange([...files, ...validFiles]);
-    } else {
-      onChange(validFiles.slice(0, 1));
+    if (validFiles.length > 0) {
+      if (multiple) {
+        onChange([...files, ...validFiles]);
+      } else {
+        onChange(validFiles.slice(0, 1));
+      }
     }
+
+    // Reset the input value so that the same file can be selected again
+    e.target.value = '';
   };
 
   const handleRemoveFile = (indexToRemove: number) => {
@@ -113,27 +143,33 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
       {label && <Label className="text-sm font-medium text-gray-700">{label}</Label>}
 
       {files.length === 0 ? (
-        <label className="flex flex-col items-center justify-center w-full h-32 px-4 border-2 border-dashed border-gray-300 rounded-2xl hover:border-[#C8102E]/60 hover:bg-red-50/30 transition-all cursor-pointer bg-gray-50/50 group">
-          <div className="text-center">
-            <Upload className="h-8 w-8 mx-auto text-gray-400 group-hover:text-[#C8102E]/80 transition-colors mb-2" />
-            <p className="text-sm text-gray-600">
-              <span className="font-semibold text-[#C8102E]">
-                {placeholder || 'Chọn file'}
-              </span>{' '}
-              hoặc kéo thả vào đây
-            </p>
-            <p className="text-xs text-gray-400 mt-1">
-              {allowedExtensionsText} (Tối đa {maxSizeMB}MB)
-            </p>
+        disabled ? (
+          <div className="flex flex-col items-center justify-center w-full h-32 px-4 border-2 border-dashed border-gray-300 rounded-2xl bg-gray-50/30 text-gray-500">
+            <p className="text-sm">Không có tài liệu đính kèm</p>
           </div>
-          <input
-            type="file"
-            className="hidden"
-            accept={accept}
-            multiple={multiple}
-            onChange={handleFileChange}
-          />
-        </label>
+        ) : (
+          <label className="flex flex-col items-center justify-center w-full h-32 px-4 border-2 border-dashed border-gray-300 rounded-2xl hover:border-[#C8102E]/60 hover:bg-red-50/30 transition-all cursor-pointer bg-gray-50/50 group">
+            <div className="text-center">
+              <Upload className="h-8 w-8 mx-auto text-gray-400 group-hover:text-[#C8102E]/80 transition-colors mb-2" />
+              <p className="text-sm text-gray-600">
+                <span className="font-semibold text-[#C8102E]">
+                  {placeholder || 'Chọn file'}
+                </span>{' '}
+                hoặc kéo thả vào đây
+              </p>
+              <p className="text-xs text-gray-400 mt-1">
+                {allowedExtensionsText} (Tối đa {maxSizeMB}MB)
+              </p>
+            </div>
+            <input
+              type="file"
+              className="hidden"
+              accept={accept}
+              multiple={multiple}
+              onChange={handleFileChange}
+            />
+          </label>
+        )
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {/* Map over uploaded files */}
@@ -156,26 +192,40 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
               <div className="flex items-center gap-1 flex-shrink-0">
                 <button
                   type="button"
-                  onClick={() => setPreviewFile(file)}
+                  onClick={() => {
+                    const ext = file.name?.split('.').pop()?.toLowerCase();
+                    if (ext === 'pdf') {
+                      const url = file instanceof File 
+                        ? URL.createObjectURL(file) 
+                        : (file.url || file.fileUrl || '');
+                      if (url) {
+                        window.open(url, '_blank');
+                      }
+                    } else {
+                      setPreviewFile(file);
+                    }
+                  }}
                   className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                   title="Xem trước tài liệu"
                 >
                   <Eye className="h-4 w-4" />
                 </button>
-                <button
-                  type="button"
-                  onClick={() => handleRemoveFile(idx)}
-                  className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                  title="Xóa tài liệu"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
+                {!disabled && (
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveFile(idx)}
+                    className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                    title="Xóa tài liệu"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                )}
               </div>
             </div>
           ))}
 
           {/* Elegant plus sign card to add more files if multiple is true */}
-          {multiple && (
+          {multiple && !disabled && (
             <label className="flex items-center justify-center p-3 border-2 border-dashed border-gray-300 rounded-xl bg-gray-50/50 hover:bg-red-50/30 hover:border-[#C8102E]/60 transition-all cursor-pointer group h-[62px]">
               <div className="flex items-center gap-2">
                 <Plus className="h-5 w-5 text-gray-400 group-hover:text-[#C8102E] transition-colors" />
