@@ -18,6 +18,9 @@ interface WizardFooterProps {
   approvalStatus?: ApprovalStatus;
   isUpdateMode?: boolean;
   isReadOnly?: boolean;
+  canApprove?: boolean;
+  onApprove?: () => void;
+  onReject?: () => void;
 }
 
 const WizardFooter: React.FC<WizardFooterProps> = ({
@@ -33,10 +36,13 @@ const WizardFooter: React.FC<WizardFooterProps> = ({
   approvalStatus = 'draft',
   isUpdateMode = false,
   isReadOnly = false,
+  canApprove = false,
+  onApprove,
+  onReject,
 }) => {
   const isApproved = approvalStatus === 'approved';
   const isPending = approvalStatus === 'pending';
-  const canSubmitMeeting = isUpdateMode || isApproved; // Trong update mode không cần approval
+  const canSubmitMeeting = isApproved; // Chỉ cho phép công bố khi cuộc họp đã được phê duyệt
   return (
     <div className="flex items-center justify-between">
           {/* Left: Cancel or Back button */}
@@ -82,61 +88,82 @@ const WizardFooter: React.FC<WizardFooterProps> = ({
             {/* Last step: Submit for Approval + Submit Meeting */}
             {isLastStep ? (
               <>
-                {/* Nút lưu tạm/lưu */}
-                {onSaveDraftAgenda && !isReadOnly && (
-                  <button
-                    onClick={onSaveDraftAgenda}
-                    disabled={isPending}
-                    className={cn(
-                      'inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-gray-300 text-gray-700 btn-primary text-sm hover:bg-gray-50 transition-all',
-                      isPending && 'opacity-50 cursor-not-allowed'
-                    )}
-                  >
-                    <Save className="h-4 w-4" />
-                    {isUpdateMode ? 'Lưu' : 'Lưu tạm'}
-                  </button>
-                )}
-
-                {/* Gửi phê duyệt */}
-                {onSubmitForApproval && !isApproved && (
-                  <button
-                    onClick={onSubmitForApproval}
-                    disabled={isPending || isReadOnly}
-                    className={cn(
-                      'inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-gray-300 text-gray-700 btn-primary text-sm transition-all',
-                      (isPending || isReadOnly)
-                        ? 'opacity-50 cursor-not-allowed bg-gray-100 text-gray-400'
-                        : 'hover:bg-gray-50'
-                    )}
-                  >
-                    <Send className="h-4 w-4" />
-                    Gửi phê duyệt
-                  </button>
-                )}
-                {onSubmitMeeting && (
-                  <div className="relative group">
+                {canApprove ? (
+                  <>
                     <button
-                      onClick={onSubmitMeeting}
-                      disabled={!canSubmitMeeting || isPending}
-                      className={cn(
-                        'inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#C8102E] to-[#A90F14] text-white btn-primary text-sm transition-all',
-                        (canSubmitMeeting && !isPending)
-                          ? 'hover:shadow-lg hover:shadow-red-500/25'
-                          : 'opacity-50 cursor-not-allowed'
-                      )}
+                      onClick={onReject}
+                      className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-red-300 text-red-700 bg-red-50 hover:bg-red-100 btn-primary text-sm transition-all"
+                    >
+                      <X className="h-4 w-4" />
+                      Từ chối
+                    </button>
+                    <button
+                      onClick={onApprove}
+                      className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-green-600 text-white hover:bg-green-700 btn-primary text-sm hover:shadow-lg transition-all"
                     >
                       <CheckCircle className="h-4 w-4" />
-                      {isUpdateMode ? 'Công bố' : 'Gửi phiên họp'}
+                      Phê duyệt
                     </button>
-                    {!canSubmitMeeting && !isUpdateMode && (
-                      <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 hidden group-hover:block">
-                        <div className="bg-gray-900 text-white text-xs rounded-lg px-3 py-2 whitespace-nowrap">
-                          Cần được phê duyệt trước khi gửi phiên họp
-                          <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 border-4 border-transparent border-t-gray-900"></div>
-                        </div>
+                  </>
+                ) : (
+                  <>
+                    {/* Nút lưu tạm/lưu */}
+                    {onSaveDraftAgenda && !isReadOnly && (
+                      <button
+                        onClick={onSaveDraftAgenda}
+                        disabled={isPending}
+                        className={cn(
+                          'inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-gray-300 text-gray-700 btn-primary text-sm hover:bg-gray-50 transition-all',
+                          isPending && 'opacity-50 cursor-not-allowed'
+                        )}
+                      >
+                        <Save className="h-4 w-4" />
+                        {isUpdateMode ? 'Lưu' : 'Lưu tạm'}
+                      </button>
+                    )}
+
+                    {/* Gửi phê duyệt */}
+                    {onSubmitForApproval && !isApproved && (
+                      <button
+                        onClick={onSubmitForApproval}
+                        disabled={isPending || isReadOnly}
+                        className={cn(
+                          'inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-gray-300 text-gray-700 btn-primary text-sm transition-all',
+                          (isPending || isReadOnly)
+                            ? 'opacity-50 cursor-not-allowed bg-gray-100 text-gray-400'
+                            : 'hover:bg-gray-50'
+                        )}
+                      >
+                        <Send className="h-4 w-4" />
+                        Gửi phê duyệt
+                      </button>
+                    )}
+                    {onSubmitMeeting && (
+                      <div className="relative group">
+                        <button
+                          onClick={onSubmitMeeting}
+                          disabled={!canSubmitMeeting || isPending}
+                          className={cn(
+                            'inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#C8102E] to-[#A90F14] text-white btn-primary text-sm transition-all',
+                            (canSubmitMeeting && !isPending)
+                              ? 'hover:shadow-lg hover:shadow-red-500/25'
+                              : 'opacity-50 cursor-not-allowed'
+                          )}
+                        >
+                          <CheckCircle className="h-4 w-4" />
+                          Công bố
+                        </button>
+                        {!canSubmitMeeting && (
+                          <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 hidden group-hover:block">
+                            <div className="bg-gray-900 text-white text-xs rounded-lg px-3 py-2 whitespace-nowrap">
+                              Cần được phê duyệt trước khi công bố phiên họp
+                              <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 border-4 border-transparent border-t-gray-900"></div>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
-                  </div>
+                  </>
                 )}
               </>
             ) : (

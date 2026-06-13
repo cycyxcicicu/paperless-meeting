@@ -22,6 +22,16 @@ import { WizardStepper } from '@/modules/meeting/components/WizardStepper';
 import { chiTietHopSchema, noiDungHopSchema, thongBaoGiayMoiSchema } from '../form/meeting.validation';
 import { meetingApi } from "@/modules/meeting/services/meeting.api";
 import { useAuth } from "@/app/context/AuthContext";
+import { useWebSocket } from "@/app/context/WebSocketContext";
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogFooter,
+} from "@/common/components/ui/dialog";
+import { Button } from "@/common/components/ui/button";
+import { AlertCircle } from "lucide-react";
 
 import { PHIEN_HOP_SIDEBAR_ITEMS } from '@/app/constants/sidebar';
 const STEPS = [
@@ -71,16 +81,25 @@ const TaoPhienHopPage = () => {
     const isCopyMode = !!copyFromId;
 
     const { user } = useAuth();
+    const { subscribe } = useWebSocket();
     const departmentId = typeof user?.department === 'object' && user?.department !== null ? (user.department as any).id : null;
 
     const [currentStep, setCurrentStep] = useState(1);
     const [completedSteps, setCompletedSteps] = useState<number[]>([]);
     const [approvalStatus, setApprovalStatus] =
         useState<ApprovalStatus>("draft");
+    const [rejectReason, setRejectReason] = useState("");
+    const [meetingStatus, setMeetingStatus] = useState<string | null>(null);
+    const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
+    const [rejectInput, setRejectInput] = useState("");
     const [isLoadingData, setIsLoadingData] = useState(isUpdateMode || isCopyMode);
     const [highestStepReached, setHighestStepReached] = useState(1);
     const [activeMeetingId, setActiveMeetingId] = useState<string | null>(id || null);
     const [isSavingStep, setIsSavingStep] = useState(false);
+    const [apiCanApprove, setApiCanApprove] = useState(false);
+
+    // Quyền phê duyệt từ Backend + cuộc họp đang chờ duyệt
+    const canApprove = apiCanApprove && approvalStatus === 'pending';
 
     const isReadOnly = approvalStatus === "pending" || approvalStatus === "approved";
     const [isDirty, setIsDirty] = useState(false);
@@ -174,10 +193,40 @@ const TaoPhienHopPage = () => {
         return () => window.removeEventListener("beforeunload", handleBeforeUnload);
     }, [isDirty, isReadOnly]);
 
+    useEffect(() => {
+        if (!activeMeetingId) return;
+
+        const unsubscribe = subscribe(`/topic/meeting/${activeMeetingId}`, (message: any) => {
+            if (message.action === "REFRESH_MEETING_DETAIL") {
+                if (message.status) {
+                    setMeetingStatus(message.status);
+                    if (message.status === 'PENDING_APPROVAL') {
+                        setApprovalStatus('pending');
+                    } else if (['APPROVED', 'UPCOMING', 'IN_PROGRESS', 'CLOSED'].includes(message.status)) {
+                        setApprovalStatus('approved');
+                    } else {
+                        setApprovalStatus('draft');
+                    }
+                }
+                if (message.rejectReason !== undefined) {
+                    setRejectReason(message.rejectReason || "");
+                }
+                
+                // Reload entire detail data to ensure consistency silently
+                loadMeetingData(activeMeetingId, false, true);
+            }
+        });
+
+        return () => {
+            unsubscribe();
+        };
+    }, [subscribe, activeMeetingId]);
+
     // Map meeting detail to form state from Real APIs
-    const loadMeetingData = async (meetingId: string, isCopy = false) => {
-        console.log("🔄 Start loading meeting data for ID:", meetingId, "isCopy:", isCopy);
-        setIsLoadingData(true);
+    const loadMeetingData = async (meetingId: string, isCopy = false, silent = false) => {
+        if (!silent) {
+            setIsLoadingData(true);
+        }
 
         try {
             const [meetingRes, attendeesRes, agendaRes] = await Promise.all([
@@ -193,8 +242,6 @@ const TaoPhienHopPage = () => {
             const meeting = meetingRes.data;
             const attendees = attendeesRes.success && attendeesRes.data ? attendeesRes.data : { participants: [], guests: [] };
             const agendaItems = agendaRes.success && agendaRes.data ? agendaRes.data : [];
-
-            console.log("✅ Real Meeting data loaded:", meeting);
 
             let parsedFile = null;
             let noiDungChuongTrinh: 'text' | 'upload' = 'text';
@@ -220,7 +267,6 @@ const TaoPhienHopPage = () => {
                 noiDungChuongTrinhText: noiDungChuongTrinhText,
                 noiDungChuongTrinhFile: parsedFile,
             };
-            console.log("📋 Setting Step 1 data:", step1Data);
             setChiTietData(step1Data);
 
             // Map to Step 2 data
@@ -234,6 +280,7 @@ const TaoPhienHopPage = () => {
                     unitId: "",
                     email: "",
                     isChair: p.participantRole === "CHAIR",
+                    isSecretary: p.participantRole === "SECRETARY",
                 })),
                 caNhan: [],
                 nhomThanhVien: [],
@@ -248,11 +295,12 @@ const TaoPhienHopPage = () => {
                 })),
                 chuTriId: chairParticipant ? chairParticipant.userId : null,
             };
-            console.log("👥 Setting Step 2 data:", step2Data);
             setThanhPhanData(step2Data);
 
             // Map approvalStatus
             if (!isCopy) {
+                setApiCanApprove(!!meeting.canApprove);
+                setMeetingStatus(meeting.status);
                 if (meeting.status === 'PENDING_APPROVAL') {
                     setApprovalStatus('pending');
                 } else if (['APPROVED', 'UPCOMING', 'IN_PROGRESS', 'CLOSED'].includes(meeting.status)) {
@@ -260,8 +308,12 @@ const TaoPhienHopPage = () => {
                 } else {
                     setApprovalStatus('draft');
                 }
+                setRejectReason(meeting.rejectReason || "");
             } else {
+                setApiCanApprove(false);
+                setMeetingStatus(null);
                 setApprovalStatus('draft');
+                setRejectReason("");
             }
 
             // Map to Step 3 data (Thong bao)
@@ -274,10 +326,8 @@ const TaoPhienHopPage = () => {
             setThongBaoData(step3Data);
 
             // Map to Step 4 data
-            let step4Data: NoiDungHopData;
-            
             if (isCopy) {
-                step4Data = {
+                const step4Data: NoiDungHopData = {
                     contents: [
                         {
                             id: "content-1",
@@ -296,9 +346,10 @@ const TaoPhienHopPage = () => {
                         },
                     ],
                 };
+                setNoiDungData(step4Data);
             } else {
-                step4Data = {
-                    contents: agendaItems.length > 0 ? agendaItems.map((c: any) => ({
+                setNoiDungData(prev => {
+                    const serverContents = agendaItems.length > 0 ? agendaItems.map((c: any) => ({
                         id: c.id,
                         noiDungChiTiet: c.title || "",
                         content: c.content || "",
@@ -340,12 +391,38 @@ const TaoPhienHopPage = () => {
                                 khachMoi: [],
                             },
                             feedbacks: [],
+                            prepInstructions: "",
+                            prepDeadline: "",
+                            status: "DRAFT"
                         }
-                    ]
-                };
+                    ];
+
+                    if (silent && prev?.contents) {
+                        const mergedContents = prev.contents.map(localItem => {
+                            const serverItem = serverContents.find(s => s.id === localItem.id);
+                            if (serverItem) {
+                                return {
+                                    ...localItem,
+                                    status: serverItem.status,
+                                    feedbacks: serverItem.feedbacks,
+                                    taiLieu: serverItem.taiLieu
+                                };
+                            }
+                            return localItem;
+                        });
+
+                        const newServerItems = serverContents.filter(s => 
+                            !prev.contents.some(localItem => localItem.id === s.id)
+                        );
+
+                        return {
+                            contents: [...mergedContents, ...newServerItems]
+                        };
+                    }
+
+                    return { contents: serverContents };
+                });
             }
-            console.log("📝 Setting Step 4 data:", step4Data);
-            setNoiDungData(step4Data);
 
             // Mark all steps as completed in update mode or copy mode
             setCompletedSteps([1, 2, 3]);
@@ -353,8 +430,6 @@ const TaoPhienHopPage = () => {
 
             // Cho phép click qua lại tất cả các bước đã có dữ liệu
             setHighestStepReached(4);
-
-            console.log("✨ Data loading complete!");
         } catch (error) {
             console.error("❌ Error loading meeting data:", error);
             toast.error(
@@ -362,20 +437,17 @@ const TaoPhienHopPage = () => {
                 "Đã xảy ra lỗi khi tải dữ liệu phiên họp. Vui lòng thử lại.",
             );
         } finally {
-            setIsLoadingData(false);
+            if (!silent) {
+                setIsLoadingData(false);
+            }
         }
     };
 
-    // Load data when in update mode or copy mode
     useEffect(() => {
         if (id) {
-            console.log("Loading meeting data for id:", id);
             loadMeetingData(id, false);
         } else if (copyFromId) {
-            console.log("Loading meeting data for copy from id:", copyFromId);
             loadMeetingData(copyFromId, true);
-        } else {
-            console.log("Create mode - not loading data");
         }
     }, [id, copyFromId]);
 
@@ -440,6 +512,12 @@ const TaoPhienHopPage = () => {
         noiDungData.contents.forEach((content, index) => {
             if (!errors[content.id]) errors[content.id] = {};
             
+            // Validate: if nguoiChuanBi is selected, prepInstructions cannot be empty
+            const isDraft = !content.status || content.status === 'DRAFT';
+            if (isDraft && content.nguoiChuanBi && (!content.prepInstructions || !content.prepInstructions.trim())) {
+                errors[content.id].prepInstructions = "Vui lòng nhập hướng dẫn chuẩn bị tài liệu khi chọn người chuẩn bị";
+            }
+
             let currentStart: number | null = null;
             let currentEnd: number | null = null;
 
@@ -572,7 +650,7 @@ const TaoPhienHopPage = () => {
                 const payload = {
                     participants: thanhPhanData.donVi.map(u => ({
                         userId: u.id,
-                        participantRole: u.isChair ? 'CHAIR' : 'PARTICIPANT'
+                        participantRole: u.isChair ? 'CHAIR' : (u.isSecretary ? 'SECRETARY' : 'PARTICIPANT')
                     })),
                     guests: thanhPhanData.khachMoi.map(g => ({
                         fullName: g.name,
@@ -737,28 +815,24 @@ const TaoPhienHopPage = () => {
             return;
         }
 
+        if (approvalStatus !== 'approved') {
+            toast.error("Thao tác thất bại", "Cuộc họp chưa được phê duyệt. Vui lòng gửi yêu cầu phê duyệt và chờ cấp có thẩm quyền phê duyệt trước khi công bố.");
+            return;
+        }
+
         setIsSavingStep(true);
         try {
             await saveAgendaItemsPipeline();
 
-            if (isUpdateMode) {
-                toast.success(
-                    "Cập nhật phiên họp thành công",
-                    `Thông tin phiên họp "${chiTietData.tenPhienHop}" đã được cập nhật`,
-                );
-                setIsDirty(false);
-                navigate(`/phien-hop/${activeMeetingId}`);
-            } else {
-                const res = await meetingApi.publishMeeting(activeMeetingId!);
-                if (!res.success) throw new Error(res.message || "Công bố thất bại");
+            const res = await meetingApi.publishMeeting(activeMeetingId!);
+            if (!res.success) throw new Error(res.message || "Công bố thất bại");
 
-                toast.success(
-                    "Tạo phiên họp thành công",
-                    `Đã tạo và công bố phiên họp "${chiTietData.tenPhienHop}" thành công`,
-                );
-                setIsDirty(false);
-                navigate("/phien-hop");
-            }
+            toast.success(
+                "Công bố phiên họp thành công",
+                `Đã công bố phiên họp "${chiTietData.tenPhienHop}" thành công`,
+            );
+            setIsDirty(false);
+            navigate("/phien-hop");
         } catch (err: any) {
             console.error("Failed to complete meeting creation:", err);
             toast.error("Thao tác thất bại", getErrorMessage(err));
@@ -770,6 +844,51 @@ const TaoPhienHopPage = () => {
     const handleCancelWithConfirm = () => {
         setIsDirty(false);
         navigate("/phien-hop");
+    };
+
+    const handleApprove = async () => {
+        if (!activeMeetingId) return;
+        setIsSavingStep(true);
+        try {
+            const res = await meetingApi.approveMeeting(activeMeetingId);
+            if (!res.success) throw new Error(res.message || "Phê duyệt cuộc họp thất bại");
+            toast.success("Phê duyệt cuộc họp thành công");
+            setIsDirty(false);
+            navigate("/phien-hop");
+        } catch (err: any) {
+            console.error("Failed to approve meeting:", err);
+            toast.error("Phê duyệt thất bại", getErrorMessage(err));
+        } finally {
+            setIsSavingStep(false);
+        }
+    };
+
+    const handleRejectClick = () => {
+        setRejectInput("");
+        setIsRejectModalOpen(true);
+    };
+
+    const handleConfirmReject = async () => {
+        if (!activeMeetingId) return;
+        if (!rejectInput.trim()) {
+            toast.error("Lỗi", "Vui lòng nhập lý do từ chối");
+            return;
+        }
+
+        setIsSavingStep(true);
+        setIsRejectModalOpen(false);
+        try {
+            const res = await meetingApi.rejectMeeting(activeMeetingId, rejectInput.trim());
+            if (!res.success) throw new Error(res.message || "Từ chối cuộc họp thất bại");
+            toast.success("Đã từ chối phê duyệt cuộc họp");
+            setIsDirty(false);
+            navigate("/phien-hop");
+        } catch (err: any) {
+            console.error("Failed to reject meeting:", err);
+            toast.error("Từ chối thất bại", getErrorMessage(err));
+        } finally {
+            setIsSavingStep(false);
+        }
     };
 
     return (
@@ -813,6 +932,16 @@ const TaoPhienHopPage = () => {
 
                         {/* Form Content - Inside Card */}
                         <div className="px-8 py-6 relative">
+                            {rejectReason && meetingStatus === 'REJECTED' && (
+                                <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3">
+                                    <AlertCircle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
+                                    <div>
+                                        <h4 className="text-sm font-semibold text-red-800">Phiên họp bị từ chối duyệt</h4>
+                                        <p className="text-sm text-red-700 mt-1"><span className="font-medium">Lý do:</span> {rejectReason}</p>
+                                    </div>
+                                </div>
+                            )}
+
                             {isSavingStep && (
                                 <div className="absolute inset-0 bg-white/70 backdrop-blur-[2px] flex items-center justify-center z-30 transition-all duration-300">
                                     <div className="text-center">
@@ -893,11 +1022,48 @@ const TaoPhienHopPage = () => {
                                 approvalStatus={approvalStatus}
                                 isUpdateMode={isUpdateMode}
                                 isReadOnly={isReadOnly}
+                                canApprove={canApprove}
+                                onApprove={handleApprove}
+                                onReject={handleRejectClick}
                             />
                         </div>
                     </div>
                 </div>
             </div>
+
+            <Dialog open={isRejectModalOpen} onOpenChange={setIsRejectModalOpen}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Từ chối phê duyệt phiên họp</DialogTitle>
+                    </DialogHeader>
+                    <div className="py-4">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Lý do từ chối <span className="text-red-500">*</span>
+                        </label>
+                        <textarea
+                            value={rejectInput}
+                            onChange={(e) => setRejectInput(e.target.value)}
+                            placeholder="Nhập lý do từ chối phê duyệt..."
+                            className="w-full min-h-[100px] p-3 border border-gray-300 rounded-lg text-sm focus:ring-1 focus:ring-red-500 focus:border-red-500 outline-none"
+                            required
+                        />
+                    </div>
+                    <DialogFooter className="flex gap-2 justify-end">
+                        <Button
+                            variant="outline"
+                            onClick={() => setIsRejectModalOpen(false)}
+                        >
+                            Hủy
+                        </Button>
+                        <Button
+                            className="bg-[#C8102E] text-white hover:bg-red-700"
+                            onClick={handleConfirmReject}
+                        >
+                            Xác nhận từ chối
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </>
     );
 };

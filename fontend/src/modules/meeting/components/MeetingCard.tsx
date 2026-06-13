@@ -140,7 +140,8 @@ export const MeetingCard: React.FC<MeetingCardProps> = ({
                                 meeting.canDelete || 
                                 meeting.canSubmitApproval || 
                                 meeting.canUploadDocs || 
-                                meeting.canCopy;
+                                meeting.canCopy ||
+                                meeting.canApprove;
                             
                             if (!hasActions) return <div className="w-10 flex-shrink-0" />;
 
@@ -156,6 +157,7 @@ export const MeetingCard: React.FC<MeetingCardProps> = ({
                                         canSubmitApproval={meeting.canSubmitApproval}
                                         canUploadDocs={meeting.canUploadDocs}
                                         canCopy={meeting.canCopy}
+                                        canApprove={meeting.canApprove}
                                         onViewDetail={onViewDetail}
                                         onUpdate={onUpdate}
                                         onCopy={onCopy}

@@ -54,6 +54,7 @@ public class SecurityConfig {
                         .accessDeniedHandler(securityExceptionHandlers.accessDeniedHandler()))
 
                 .authorizeHttpRequests(auth -> {
+                    auth.requestMatchers("/ws/**").permitAll();
                     for (PublicEndpoint endpoint : PublicEndpoint.all()) {
                         auth.requestMatchers(endpoint.getMethod(), endpoint.getPath()).permitAll();
                     }

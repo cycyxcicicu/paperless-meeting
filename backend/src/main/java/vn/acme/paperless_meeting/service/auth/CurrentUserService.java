@@ -8,6 +8,7 @@ import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import vn.acme.paperless_meeting.entity.User;
+import vn.acme.paperless_meeting.entity.enums.PositionCode;
 import vn.acme.paperless_meeting.entity.enums.RoleName;
 import vn.acme.paperless_meeting.entity.enums.UserStatus;
 import vn.acme.paperless_meeting.exceptions.AppException;
@@ -76,5 +77,24 @@ public class CurrentUserService {
             return false;
         return auth.getAuthorities().stream()
                 .anyMatch(a -> a.getAuthority().equals(authority));
+    }
+
+    /**
+     * Kiểm tra người dùng hiện tại có quyền tạo cuộc họp (Dựa trên Vai trò hoặc Chức vụ Thư ký/Văn phòng).
+     */
+    public boolean canCreateMeeting() {
+        try {
+            User caller = getCurrentActiveUser();
+            if (hasRole(RoleName.SUPER_ADMIN) || hasRole(RoleName.DEPARTMENT_ADMIN)) {
+                return true;
+            }
+            if (caller.getPosition() != null) {
+                String posCode = caller.getPosition().getPositionCode();
+                return posCode != null && posCode.equals(PositionCode.THU_KY.getCode());
+            }
+            return false;
+        } catch (Exception e) {
+            return false;
+        }
     }
 }

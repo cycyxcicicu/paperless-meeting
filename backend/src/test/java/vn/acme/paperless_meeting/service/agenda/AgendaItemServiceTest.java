@@ -78,6 +78,9 @@ public class AgendaItemServiceTest {
     @Mock
     vn.acme.paperless_meeting.mapper.motion.MotionMapper motionMapper;
 
+    @Mock
+    vn.acme.paperless_meeting.service.websocket.WebSocketNotificationService webSocketNotificationService;
+
     @InjectMocks
     AgendaItemService agendaItemService;
 

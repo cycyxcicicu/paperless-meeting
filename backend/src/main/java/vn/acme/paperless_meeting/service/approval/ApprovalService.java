@@ -40,9 +40,11 @@ import vn.acme.paperless_meeting.repository.RoleRepository;
 import vn.acme.paperless_meeting.repository.UserRepository;
 import vn.acme.paperless_meeting.service.auth.CurrentUserService;
 import vn.acme.paperless_meeting.service.department.DepartmentService;
+import vn.acme.paperless_meeting.entity.enums.PositionCode;
 
 import vn.acme.paperless_meeting.event.audit.AuditLogPublisher;
 import vn.acme.paperless_meeting.entity.enums.AuditAction;
+import vn.acme.paperless_meeting.service.websocket.WebSocketNotificationService;
 import java.util.Map;
 
 @Service
@@ -61,6 +63,7 @@ public class ApprovalService {
     DepartmentService departmentService;
     ApprovalMapper approvalMapper;
     AuditLogPublisher auditLogPublisher;
+    WebSocketNotificationService webSocketNotificationService;
 
     @Transactional
     public ApprovalRequestResponse submit(SubmitApprovalRequest request) {
@@ -99,6 +102,20 @@ public class ApprovalService {
         
         auditLogPublisher.publish(caller, AuditAction.SUBMIT_APPROVAL, request.getResourceType(), request.getResourceId(), Map.of("resourceType", request.getResourceType().name(), "approvalId", saved.getId()));
 
+        // Gửi thông báo WebSocket
+        if (firstStep.getApproverUser() != null) {
+            webSocketNotificationService.sendNotificationToUser(
+                firstStep.getApproverUser().getUsername(),
+                "MEETING_SUBMITTED",
+                "[" + caller.getFullName() + "] - [Phiên họp: " + getResourceTitle(request.getResourceType(), request.getResourceId()) + "]: Gửi yêu cầu phê duyệt phiên họp",
+                Map.of("meetingId", request.getResourceId().toString())
+            );
+        }
+        webSocketNotificationService.sendToTopic(
+            "/topic/meeting-updates",
+            Map.of("action", "REFRESH_MEETING_LIST", "meetingId", request.getResourceId().toString())
+        );
+
         return getById(saved.getId());
     }
 
@@ -121,6 +138,24 @@ public class ApprovalService {
         updateResourceStatusOnApprove(approvalRequest.getResourceType(), approvalRequest.getResourceId(), caller, null);
 
         auditLogPublisher.publish(caller, AuditAction.APPROVE_RESOURCE, approvalRequest.getResourceType(), approvalRequest.getResourceId(), Map.of("approvalId", approvalRequest.getId(), "comment", request != null && request.getComment() != null ? request.getComment() : ""));
+
+        // Gửi thông báo WebSocket
+        if (approvalRequest.getRequestedBy() != null) {
+            webSocketNotificationService.sendNotificationToUser(
+                approvalRequest.getRequestedBy().getUsername(),
+                "MEETING_APPROVED",
+                "[" + caller.getFullName() + "] - [Phiên họp: " + getResourceTitle(approvalRequest.getResourceType(), approvalRequest.getResourceId()) + "]: Đã phê duyệt phiên họp",
+                Map.of("meetingId", approvalRequest.getResourceId().toString())
+            );
+        }
+        webSocketNotificationService.sendToTopic(
+            "/topic/meeting-updates",
+            Map.of("action", "REFRESH_MEETING_LIST", "meetingId", approvalRequest.getResourceId().toString())
+        );
+        webSocketNotificationService.sendToTopic(
+            "/topic/meeting/" + approvalRequest.getResourceId(),
+            Map.of("action", "REFRESH_MEETING_DETAIL", "status", "APPROVED", "rejectReason", "")
+        );
 
         return getById(approvalRequest.getId());
     }
@@ -145,6 +180,24 @@ public class ApprovalService {
         updateResourceStatusOnReject(approvalRequest.getResourceType(), approvalRequest.getResourceId(), caller, reason);
 
         auditLogPublisher.publish(caller, AuditAction.REJECT_RESOURCE, approvalRequest.getResourceType(), approvalRequest.getResourceId(), Map.of("approvalId", approvalRequest.getId(), "reason", reason != null ? reason : ""));
+
+        // Gửi thông báo WebSocket
+        if (approvalRequest.getRequestedBy() != null) {
+            webSocketNotificationService.sendNotificationToUser(
+                approvalRequest.getRequestedBy().getUsername(),
+                "MEETING_REJECTED",
+                "[" + caller.getFullName() + "] - [Phiên họp: " + getResourceTitle(approvalRequest.getResourceType(), approvalRequest.getResourceId()) + "]: Từ chối phê duyệt phiên họp (Lý do: " + (reason != null ? reason : "") + ")",
+                Map.of("meetingId", approvalRequest.getResourceId().toString(), "rejectReason", reason != null ? reason : "")
+            );
+        }
+        webSocketNotificationService.sendToTopic(
+            "/topic/meeting-updates",
+            Map.of("action", "REFRESH_MEETING_LIST", "meetingId", approvalRequest.getResourceId().toString())
+        );
+        webSocketNotificationService.sendToTopic(
+            "/topic/meeting/" + approvalRequest.getResourceId(),
+            Map.of("action", "REFRESH_MEETING_DETAIL", "status", "REJECTED", "rejectReason", reason != null ? reason : "")
+        );
 
         return getById(approvalRequest.getId());
     }
@@ -305,6 +358,7 @@ public class ApprovalService {
             case MEETING -> {
                 Meeting meeting = getMeeting(resourceId);
                 meeting.setStatus(MeetingStatus.PENDING_APPROVAL);
+                meeting.setRejectReason(null);
                 meetingRepository.save(meeting);
             }
             case DOCUMENT -> {
@@ -431,6 +485,21 @@ public class ApprovalService {
             return true;
         }
 
+        // Nếu là phê duyệt cuộc họp (MEETING) và caller là lãnh đạo của đơn vị quản lý cuộc họp đó
+        if (approvalRequest.getResourceType() == ResourceType.MEETING) {
+            boolean isLeader = caller.getPosition() != null && 
+                    (PositionCode.CHU_TICH.getCode().equals(caller.getPosition().getPositionCode()) || PositionCode.GIAM_DOC.getCode().equals(caller.getPosition().getPositionCode()));
+            if (isLeader && caller.getDepartment() != null) {
+                UUID resourceDeptId = getResourceDepartmentId(approvalRequest.getResourceType(), approvalRequest.getResourceId());
+                if (resourceDeptId != null) {
+                    List<UUID> subDeptIds = departmentService.getAllSubDepartmentIds(caller.getDepartment().getId());
+                    if (subDeptIds.contains(resourceDeptId)) {
+                        return true;
+                    }
+                }
+            }
+        }
+
         try {
             ApprovalStep currentStep = getCurrentPendingStep(approvalRequest.getId());
 
@@ -520,5 +589,13 @@ public class ApprovalService {
         if (approvalRequest.getApprovalStepList() != null) {
             approvalRequest.getApprovalStepList().sort(Comparator.comparing(ApprovalStep::getStepNo));
         }
+    }
+
+    @Transactional(readOnly = true)
+    public boolean hasApprovePermission(ResourceType resourceType, UUID resourceId) {
+        return approvalRequestRepository
+                .findFirstByResourceTypeAndResourceIdAndStatus(resourceType, resourceId, ApprovalStatus.PENDING)
+                .map(this::hasApprovePermission)
+                .orElse(false);
     }
 }

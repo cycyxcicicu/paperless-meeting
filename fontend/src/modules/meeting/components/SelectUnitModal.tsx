@@ -17,6 +17,7 @@ interface Member {
   unitId: string;
   email: string;
   isChair?: boolean;
+  isSecretary?: boolean;
 }
 
 interface SelectUnitModalProps {
@@ -132,6 +133,7 @@ const SelectUnitModal: React.FC<SelectUnitModalProps> = ({
       unit: deptName,
       unitId: deptId,
       email: user.email || '',
+      isSecretary: true,
     };
   }, [user]);
 

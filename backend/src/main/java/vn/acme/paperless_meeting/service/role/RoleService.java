@@ -84,12 +84,6 @@ public class RoleService {
             errors.put("roleCode", ErrorCode.ROLE_EXISTED.getMessage());
         }
 
-        if (request.getPermCodes() != null) {
-            if (permissionRepository.countByPermCodeIn(request.getPermCodes()) != request.getPermCodes().size()) {
-                errors.put("permCodes", ErrorCode.PERMISSION_NOT_EXIST.getMessage());
-            }
-        }
-
         if (!errors.isEmpty()) {
             throw new AppValidationException(errors);
         }
@@ -97,19 +91,7 @@ public class RoleService {
         Role role = roleMapper.toEntity(request);
         role.setRoleCode(normalizedRoleCode);
         role.setRoleName(request.getRoleName().trim());
-        if (request.getPermCodes() != null) {
-            Set<Permission> perms = permissionRepository.findByPermCodeIn(request.getPermCodes());
-            // clear existing links (orphanRemoval will delete them)
-            role.getRolePermissionSet().clear();
-            for (Permission p : perms) {
-                RolePermission rp = new RolePermission();
-                rp.setRole(role);
-                rp.setPermission(p);
-                role.getRolePermissionSet().add(rp);
-
-                p.getRolePermissionList().add(rp);
-            }
-        }
+        role.getRolePermissionSet().clear(); // Không gán permission
         return roleMapper.toResponse(roleRepository.save(role));
     }
 
@@ -129,12 +111,6 @@ public class RoleService {
             errors.put("roleCode", ErrorCode.ROLE_EXISTED.getMessage());
         }
 
-        if (request.getPermCodes() != null) {
-            if (permissionRepository.countByPermCodeIn(request.getPermCodes()) != request.getPermCodes().size()) {
-                errors.put("permCodes", ErrorCode.PERMISSION_NOT_EXIST.getMessage());
-            }
-        }
-
         if (!errors.isEmpty()) {
             throw new AppValidationException(errors);
         }
@@ -142,28 +118,6 @@ public class RoleService {
         roleMapper.updateEntity(request, role);
         role.setRoleCode(normalizedRoleCode);
         role.setRoleName(request.getRoleName().trim());
-
-        if (request.getPermCodes() != null) {
-            Set<Permission> perms = permissionRepository.findByPermCodeIn(request.getPermCodes());
-            Set<UUID> newPermIds = perms.stream().map(Permission::getId).collect(Collectors.toSet());
-            
-            role.getRolePermissionSet().removeIf(rp -> !newPermIds.contains(rp.getPermission().getId()));
-            
-            Set<UUID> existingPermIds = role.getRolePermissionSet().stream()
-                    .map(rp -> rp.getPermission().getId())
-                    .collect(Collectors.toSet());
-
-            for (Permission p : perms) {
-                if (!existingPermIds.contains(p.getId())) {
-                    RolePermission rp = new RolePermission();
-                    rp.setRole(role);
-                    rp.setPermission(p);
-    
-                    role.getRolePermissionSet().add(rp);
-                    p.getRolePermissionList().add(rp);
-                }
-            }
-        }
         return roleMapper.toResponse(roleRepository.save(role));
     }
 

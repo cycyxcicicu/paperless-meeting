@@ -8,5 +8,5 @@ export const roleFormValidationSchema = z.object({
   roleCode: z.string()
     .min(1, 'Vui lòng nhập mã vai trò')
     .regex(/^[A-Za-z0-9_-]+$/, 'Mã vai trò chỉ được chứa chữ cái, số, dấu gạch ngang và dấu gạch dưới'),
-  permCodes: z.array(z.string()).min(1, 'Vui lòng chọn ít nhất một quyền hạn'),
+  permCodes: z.array(z.string()).optional(),
 });

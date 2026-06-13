@@ -191,7 +191,7 @@ public class UserService {
         RoleName roleFilter = null;
 
         if (currentUserService.hasRole(RoleName.USER)) {
-            if (!currentUserService.hasAuthority("MEETING_CREATE")) {
+            if (!currentUserService.canCreateMeeting()) {
                 throw new AppException(ErrorCode.UNAUTHOZIZED);
             }
             UUID callerDeptId = caller.getDepartment() != null ? caller.getDepartment().getId() : null;
@@ -437,18 +437,7 @@ public class UserService {
     @Transactional(readOnly = true)
     public UserResponse getCurrentUserResponse() {
         User user = currentUserService.getCurrentActiveUser();
-        UserResponse response = userMapper.toResponse(user);
-
-        var auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
-        if (auth != null && auth.isAuthenticated()) {
-           Set<String> perms = auth.getAuthorities().stream()
-                    .map(org.springframework.security.core.GrantedAuthority::getAuthority)
-                    .filter(a -> !a.startsWith("ROLE_"))
-                    .collect(java.util.stream.Collectors.toSet());
-                    response.setPermissions(perms);
-        }
-
-        return response;
+        return userMapper.toResponse(user);
     }
 
     public void delete(UUID id) {

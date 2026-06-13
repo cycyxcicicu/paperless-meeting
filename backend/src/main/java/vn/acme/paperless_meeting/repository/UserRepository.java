@@ -52,12 +52,14 @@ public interface UserRepository extends JpaRepository<User, UUID>, JpaSpecificat
         @EntityGraph(attributePaths = { "position", "department", "role" })
         List<User> findByIdIn(List<UUID> ids);
 
-        // Load only role (no permissions) when finding user by username for auth fast path
+        // Load only role (no permissions) when finding user by username for auth fast
+        // path
         @EntityGraph(attributePaths = { "position", "department", "role" })
         Optional<User> findWithRoleByUsernameAndStatus(String username, UserStatus status);
 
         // Load role + permissions (eager) khi xác thực để tránh N+1
-        @EntityGraph(attributePaths = { "position", "department", "role", "role.rolePermissionSet", "role.rolePermissionSet.permission" })
+        @EntityGraph(attributePaths = { "position", "department", "role", "role.rolePermissionSet",
+                        "role.rolePermissionSet.permission" })
         Optional<User> findWithAuthoritiesByUsernameAndStatus(String username, UserStatus status);
 
         boolean existsByDepartmentIdAndRole_RoleName(UUID departmentId, String roleName);
@@ -83,4 +85,7 @@ public interface UserRepository extends JpaRepository<User, UUID>, JpaSpecificat
         long countByRole_RoleCode(String roleCode);
 
         long countByRole_RoleCodeAndStatus(String roleCode, UserStatus status);
+
+        @Query("SELECT u FROM User u WHERE u.department.id = :deptId AND u.position IS NOT NULL AND (u.position.positionCode = 'CHU_TICH' OR u.position.positionCode = 'GIAM_DOC') AND u.status = vn.acme.paperless_meeting.entity.enums.UserStatus.ACTIVE")
+        List<User> findActiveLeadersByDepartmentId(@Param("deptId") UUID deptId);
 }

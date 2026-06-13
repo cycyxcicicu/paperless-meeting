@@ -62,6 +62,7 @@ class ApprovalServiceTest {
     @Mock vn.acme.paperless_meeting.event.audit.AuditLogPublisher auditLogPublisher;
     @Mock UserRepository userRepository;
     @Mock RoleRepository roleRepository;
+    @Mock vn.acme.paperless_meeting.service.websocket.WebSocketNotificationService webSocketNotificationService;
 
     @InjectMocks ApprovalService approvalService;
 

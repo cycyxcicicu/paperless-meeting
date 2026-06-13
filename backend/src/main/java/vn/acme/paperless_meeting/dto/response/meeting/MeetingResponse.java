@@ -49,4 +49,5 @@ public class MeetingResponse {
     private Boolean canDelete;
     private Boolean canSubmitApproval;
     private Boolean canUploadDocs;
+    private Boolean canApprove;
 }

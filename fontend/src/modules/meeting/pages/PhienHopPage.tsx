@@ -2,6 +2,7 @@ import { Clock, Eye, Plus, Search, Users, CalendarIcon } from "lucide-react";
 import { useMemo, useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { toast } from '@/lib/toast';
+import { useWebSocket } from "@/app/context/WebSocketContext";
 import { CustomDropdown } from '@/common/components/ui/custom-dropdown';
 import { FilterBar } from '@/common/components/layout/FilterBar';
 import { PageHeader } from '@/common/components/layout/PageHeader';
@@ -18,6 +19,7 @@ import { createMeetingColumns, createMeetingRowActions, Meeting } from "../table
 import { PHIEN_HOP_SIDEBAR_ITEMS } from '@/app/constants/sidebar';
 
 import { useAuth } from '@/app/context/AuthContext';
+import { PositionCode } from '@/common/types/position';
 import { meetingApi, MeetingResponse } from '../services/meeting.api';
 import { Popover, PopoverContent, PopoverTrigger } from '@/common/components/ui/popover';
 import { ScrollDatePicker } from '@/common/components/ui/scroll-date-picker';
@@ -87,6 +89,7 @@ const PhienHopPage = () => {
     const navigate = useNavigate();
     const location = useLocation();
     const { user } = useAuth();
+    const { subscribe } = useWebSocket();
 
     const isPollManagement =
         location.pathname === "/phien-hop/phieu-lay-y-kien";
@@ -149,6 +152,7 @@ const PhienHopPage = () => {
         canSubmitApproval: res.canSubmitApproval,
         canUploadDocs: res.canUploadDocs,
         canCopy: res.createdById === user?.id,
+        canApprove: res.canApprove,
       };
     };
 
@@ -189,6 +193,16 @@ const PhienHopPage = () => {
         }
         fetchMeetings();
     }, [currentPage, pageSize, searchQuery, selectedStatus, selectedTime, customFromDate, customToDate]);
+
+    useEffect(() => {
+        const unsubscribe = subscribe('/topic/meeting-updates', (message) => {
+            console.log("WebSocket meeting update received:", message);
+            fetchMeetings();
+        });
+        return () => {
+            unsubscribe();
+        };
+    }, [subscribe, currentPage, pageSize, searchQuery, selectedStatus, selectedTime, customFromDate, customToDate]);
 
     // Action handlers
     const handleViewDetail = (id: string) => {
@@ -357,7 +371,13 @@ const PhienHopPage = () => {
         />
     );
 
-    const hasCreatePermission = user?.permissions?.includes('MEETING_CREATE');
+    const hasCreatePermission = useMemo(() => {
+        if (!user) return false;
+        const role = user.role?.roleCode;
+        if (role === 'SUPER_ADMIN' || role === 'DEPARTMENT_ADMIN') return true;
+        const posCode = user.position?.positionCode;
+        return posCode === PositionCode.THU_KY;
+    }, [user]);
 
     return (
         <>

@@ -1,10 +1,10 @@
 import { User } from '@/app/context/AuthContext';
+import { PositionCode } from '@/common/types/position';
 
 export const hasRoutePermission = (user: User | null, path: string): boolean => {
   if (!user) return false;
 
   const role = user.role?.roleCode || 'USER';
-  const permissions = user.permissions || [];
   
   // 1. SUPER_ADMIN thấy được tất cả
   if (role === 'SUPER_ADMIN') {
@@ -25,14 +25,21 @@ export const hasRoutePermission = (user: User | null, path: string): boolean => 
     });
   }
   
-  // 3. USER (Trang chủ, lịch họp, quản lý họp. KHÔNG có Mẫu thư mời trừ khi có quyền MEETING_CREATE)
+  // 3. USER (Trang chủ, lịch họp, quản lý họp. KHÔNG có Mẫu thư mời trừ khi có quyền tạo cuộc họp)
   if (role === 'USER') {
-    // Kiểm tra các trang yêu cầu quyền tạo cuộc họp (MEETING_CREATE)
+    const posCode = user.position?.positionCode;
+    const canCreateMeeting = posCode === PositionCode.THU_KY;
+
+    // Kiểm tra các trang yêu cầu quyền tạo cuộc họp
     if (path === '/phien-hop/mau-thu-moi' || path.startsWith('/phien-hop/mau-thu-moi/')) {
-        return permissions.includes('MEETING_CREATE');
+        return !!canCreateMeeting;
     }
-    if (path === '/phien-hop/tao-moi' || path.includes('/cap-nhat')) {
-        return permissions.includes('MEETING_CREATE');
+    if (path === '/phien-hop/tao-moi') {
+        return !!canCreateMeeting;
+    }
+    if (path.includes('/cap-nhat')) {
+        const isLeader = posCode === 'CHU_TICH' || posCode === 'GIAM_DOC';
+        return !!canCreateMeeting || isLeader;
     }
 
     // Các đường dẫn mà USER được truy cập mặc định:

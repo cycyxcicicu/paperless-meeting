@@ -209,10 +209,7 @@ public class LocationService {
     }
 
     private boolean hasViewPermission() {
-        return currentUserService.hasRole(RoleName.SUPER_ADMIN) ||
-               currentUserService.hasRole(RoleName.DEPARTMENT_ADMIN) ||
-               currentUserService.hasAuthority("LOCATION_VIEW_DEPARTMENT") ||
-               currentUserService.hasAuthority("MEETING_CREATE");
+        return true;
     }
 
     private boolean hasManagePermission() {

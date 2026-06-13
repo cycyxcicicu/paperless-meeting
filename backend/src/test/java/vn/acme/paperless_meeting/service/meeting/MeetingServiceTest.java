@@ -39,6 +39,7 @@ import vn.acme.paperless_meeting.service.department.DepartmentService;
 import vn.acme.paperless_meeting.service.speaker.SpeakerService;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import vn.acme.paperless_meeting.repository.RoleRepository;
 import vn.acme.paperless_meeting.repository.AgendaItemRepository;
 
 @ExtendWith(MockitoExtension.class)
@@ -71,6 +72,8 @@ class MeetingServiceTest {
     SpeakerService speakerService;
     @Mock
     vn.acme.paperless_meeting.service.motion.MotionService motionService;
+    @Mock
+    RoleRepository roleRepository;
 
     @InjectMocks
     MeetingService meetingService;
@@ -108,6 +111,8 @@ class MeetingServiceTest {
         meeting.setDepartment(department);
         meeting.setLocation(location);
         meeting.setStatus(MeetingStatus.DRAFT);
+        meeting.setStartTime(LocalDateTime.now().plusMinutes(60));
+        meeting.setEndTime(LocalDateTime.now().plusMinutes(120));
         meeting.setMeetingParticipantList(new ArrayList<>());
 
         request = new MeetingUpsertRequest();
@@ -117,7 +122,7 @@ class MeetingServiceTest {
         request.setEndTime(LocalDateTime.now().plusMinutes(120));
         request.setLateAfterMinutes(15);
 
-        lenient().when(currentUserService.hasAuthority("MEETING_CREATE")).thenReturn(true);
+        lenient().when(currentUserService.canCreateMeeting()).thenReturn(true);
 
         // Inject speakerService mock vào MeetingService (vì dùng setter injection, Mockito @InjectMocks không tự gọi setter)
         ReflectionTestUtils.setField(meetingService, "speakerService", speakerService);
@@ -143,7 +148,7 @@ class MeetingServiceTest {
         request.setStartTime(LocalDateTime.now().plusMinutes(10)); // Less than 30 mins in future
         request.setEndTime(LocalDateTime.now().plusMinutes(40));
 
-        lenient().when(currentUserService.hasAuthority("MEETING_CREATE")).thenReturn(true);
+        lenient().when(currentUserService.canCreateMeeting()).thenReturn(true);
 
         // Act & Assert
         AppException ex = assertThrows(AppException.class, () -> {
@@ -158,7 +163,7 @@ class MeetingServiceTest {
         request.setStartTime(LocalDateTime.now().plusMinutes(60));
         request.setEndTime(LocalDateTime.now().plusMinutes(120));
 
-        when(currentUserService.hasAuthority("MEETING_CREATE")).thenReturn(true);
+        when(currentUserService.canCreateMeeting()).thenReturn(true);
         when(meetingRepository.existsRoomConflict(any(), any(), any(), any(), any())).thenReturn(true);
 
         // Act & Assert
@@ -171,7 +176,7 @@ class MeetingServiceTest {
     @Test
     void create_Successful_ShouldAutomaticallyAddCreatorAsSecretary() {
         // Arrange
-        when(currentUserService.hasAuthority("MEETING_CREATE")).thenReturn(true);
+        when(currentUserService.canCreateMeeting()).thenReturn(true);
         when(currentUserService.getCurrentActiveUser()).thenReturn(caller);
         when(departmentRepository.findById(departmentId)).thenReturn(Optional.of(department));
         when(locationRepository.findById(locationId)).thenReturn(Optional.of(location));
@@ -218,6 +223,20 @@ class MeetingServiceTest {
             meetingService.submitForApproval(meetingId);
         });
         assertEquals(ErrorCode.MEETING_SECRETARY_REQUIRED, ex.getErrorCode());
+    }
+
+    @Test
+    void submitForApproval_WhenTimeInPast_ShouldThrowException() {
+        // Arrange
+        meeting.setStartTime(LocalDateTime.now().minusMinutes(10)); // in past
+        when(meetingRepository.findById(meetingId)).thenReturn(Optional.of(meeting));
+        when(currentUserService.getCurrentActiveUser()).thenReturn(caller);
+
+        // Act & Assert
+        AppException ex = assertThrows(AppException.class, () -> {
+            meetingService.submitForApproval(meetingId);
+        });
+        assertEquals(ErrorCode.MEETING_MUST_BE_SCHEDULED_BEFORE_30_MINUTES, ex.getErrorCode());
     }
 
     @Test
@@ -303,7 +322,7 @@ class MeetingServiceTest {
     @Test
     void create_WhenNoAuthority_ShouldThrowUnauthorized() {
         // Arrange
-        when(currentUserService.hasAuthority("MEETING_CREATE")).thenReturn(false);
+        when(currentUserService.canCreateMeeting()).thenReturn(false);
 
         // Act & Assert
         AppException ex = assertThrows(AppException.class, () -> {
@@ -315,7 +334,7 @@ class MeetingServiceTest {
     @Test
     void create_WhenDepartmentNotExist_ShouldThrowException() {
         // Arrange
-        when(currentUserService.hasAuthority("MEETING_CREATE")).thenReturn(true);
+        when(currentUserService.canCreateMeeting()).thenReturn(true);
         when(meetingRepository.existsRoomConflict(any(), any(), any(), any(), any())).thenReturn(false);
         when(currentUserService.getCurrentActiveUser()).thenReturn(caller);
         when(departmentRepository.findById(departmentId)).thenReturn(Optional.empty());
@@ -330,7 +349,7 @@ class MeetingServiceTest {
     @Test
     void create_WhenLocationNotExist_ShouldThrowException() {
         // Arrange
-        when(currentUserService.hasAuthority("MEETING_CREATE")).thenReturn(true);
+        when(currentUserService.canCreateMeeting()).thenReturn(true);
         when(meetingRepository.existsRoomConflict(any(), any(), any(), any(), any())).thenReturn(false);
         when(currentUserService.getCurrentActiveUser()).thenReturn(caller);
         when(departmentRepository.findById(departmentId)).thenReturn(Optional.of(department));
@@ -494,6 +513,22 @@ class MeetingServiceTest {
     }
 
     @Test
+    void publish_WhenTimeInPast_ShouldThrowException() {
+        // Arrange
+        meeting.setStatus(MeetingStatus.APPROVED);
+        meeting.setStartTime(LocalDateTime.now().minusMinutes(10)); // in past
+        when(meetingRepository.findById(meetingId)).thenReturn(Optional.of(meeting));
+        when(currentUserService.getCurrentActiveUser()).thenReturn(caller);
+        when(currentUserService.hasRole(RoleName.SUPER_ADMIN)).thenReturn(false);
+
+        // Act & Assert
+        AppException ex = assertThrows(AppException.class, () -> {
+            meetingService.publish(meetingId);
+        });
+        assertEquals(ErrorCode.MEETING_MUST_BE_SCHEDULED_BEFORE_30_MINUTES, ex.getErrorCode());
+    }
+
+    @Test
     void publish_Successful_ShouldTransitionToUpcoming() {
         // Arrange
         meeting.setStatus(MeetingStatus.APPROVED);
@@ -624,7 +659,7 @@ class MeetingServiceTest {
         request.setStartTime(LocalDateTime.now().plusMinutes(60));
         request.setRsvpDeadline(LocalDateTime.now().plusMinutes(70));
 
-        when(currentUserService.hasAuthority("MEETING_CREATE")).thenReturn(true);
+        when(currentUserService.canCreateMeeting()).thenReturn(true);
 
         // Act & Assert
         AppException ex = assertThrows(AppException.class, () -> {

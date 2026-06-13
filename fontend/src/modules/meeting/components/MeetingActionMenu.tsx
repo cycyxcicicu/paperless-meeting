@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MoreVertical, Edit, Copy, Clock, XCircle, Send, FileUp } from 'lucide-react';
+import { MoreVertical, Edit, Copy, Clock, XCircle, Send, FileUp, CheckSquare } from 'lucide-react';
 import { cn } from '@/common/utils/cn';
 
 interface MeetingActionMenuProps {
@@ -12,6 +12,7 @@ interface MeetingActionMenuProps {
   canSubmitApproval?: boolean;
   canUploadDocs?: boolean;
   canCopy?: boolean;
+  canApprove?: boolean;
   onViewDetail: (id: string) => void;
   onUpdate: (id: string) => void;
   onCopy: (id: string) => void;
@@ -30,6 +31,7 @@ export const MeetingActionMenu: React.FC<MeetingActionMenuProps> = ({
   canSubmitApproval,
   canUploadDocs,
   canCopy,
+  canApprove,
   onViewDetail,
   onUpdate,
   onCopy,
@@ -67,8 +69,8 @@ export const MeetingActionMenu: React.FC<MeetingActionMenuProps> = ({
   const getActions = () => {
     const actions = [];
 
-    // 1. Quyền sửa toàn phần (Creator/Chair/Admin)
-    if (canEdit) {
+    // 1. Quyền sửa toàn phần (Creator/Chair/Admin) hoặc Quyền phê duyệt (Giám đốc/Chủ tịch)
+    if (canEdit || canApprove) {
       actions.push({
         icon: Edit,
         label: 'Cập nhật phiên họp',

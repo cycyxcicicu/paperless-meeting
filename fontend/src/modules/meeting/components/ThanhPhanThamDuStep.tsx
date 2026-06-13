@@ -39,9 +39,11 @@ const ThanhPhanThamDuStep: React.FC<ThanhPhanThamDuStepProps> = ({ data, onChang
 
   const handleConfirmUnitSelection = (selectedMembers: Member[]) => {
     const chairMap = new Map((data.donVi || []).map(m => [m.id, m.isChair]));
+    const secretaryMap = new Map((data.donVi || []).map(m => [m.id, m.isSecretary]));
     const updatedMembers = selectedMembers.map(m => ({
       ...m,
-      isChair: chairMap.get(m.id) || false
+      isChair: chairMap.get(m.id) || false,
+      isSecretary: secretaryMap.get(m.id) || false
     }));
 
     if (onChange) {
@@ -98,7 +100,23 @@ const ThanhPhanThamDuStep: React.FC<ThanhPhanThamDuStepProps> = ({ data, onChang
 
     const updatedDonVi = (data.donVi || []).map(m => {
       if (m.id === memberId) {
-        return { ...m, isChair: checked };
+        return { ...m, isChair: checked, isSecretary: checked ? false : m.isSecretary };
+      }
+      return m;
+    });
+
+    if (onChange) {
+      onChange({
+        ...data,
+        donVi: updatedDonVi,
+      });
+    }
+  };
+
+  const handleToggleSecretary = (memberId: string, checked: boolean) => {
+    const updatedDonVi = (data.donVi || []).map(m => {
+      if (m.id === memberId) {
+        return { ...m, isSecretary: checked, isChair: checked ? false : m.isChair };
       }
       return m;
     });
@@ -148,6 +166,36 @@ const ThanhPhanThamDuStep: React.FC<ThanhPhanThamDuStepProps> = ({ data, onChang
                 className={`w-4 h-4 rounded border-gray-300 text-[#C8102E] focus:ring-[#C8102E] transition-all ${
                   isDisabled ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer hover:scale-105'
                 }`}
+              />
+            </div>
+          );
+        }
+      },
+      {
+        key: 'isSecretary',
+        header: 'Thư ký',
+        width: '120px',
+        align: 'center',
+        render: (row) => {
+          if (readOnly) {
+            return row.isSecretary ? (
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                Thư ký
+              </span>
+            ) : (
+              <span className="text-gray-400 text-xs">-</span>
+            );
+          }
+
+          const isChecked = !!row.isSecretary;
+
+          return (
+            <div className="flex justify-center">
+              <input
+                type="checkbox"
+                checked={isChecked}
+                onChange={(e) => handleToggleSecretary(row.id, e.target.checked)}
+                className="w-4 h-4 rounded border-gray-300 text-[#C8102E] focus:ring-[#C8102E] transition-all cursor-pointer hover:scale-105"
               />
             </div>
           );

@@ -1,4 +1,4 @@
-import { ArrowLeft, Check, Clock, Download, Eye, FileText, MapPin, Upload } from "lucide-react";
+import { ArrowLeft, Check, Clock, Download, Eye, FileText, MapPin, Upload, AlertCircle } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router";
 import { PageHeader } from '@/common/components/layout/PageHeader';
@@ -280,6 +280,15 @@ export default function PhienHopChiTietPage() {
                 />
 
                 <div className="space-y-6">
+                    {meetingDetail?.status === 'REJECTED' && meetingDetail?.rejectReason && (
+                        <div className="p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3">
+                            <AlertCircle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
+                            <div>
+                                <h4 className="text-sm font-semibold text-red-800">Phiên họp bị từ chối duyệt</h4>
+                                <p className="text-sm text-red-700 mt-1"><span className="font-medium">Lý do:</span> {meetingDetail.rejectReason}</p>
+                            </div>
+                        </div>
+                    )}
                     <Card className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
                         {/* 1. Thông tin tổng quan (Tiêu đề + Meta + Collapse cho Section 2) */}
                         <CollapsibleSection

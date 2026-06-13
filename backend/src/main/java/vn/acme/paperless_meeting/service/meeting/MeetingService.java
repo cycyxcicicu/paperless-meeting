@@ -38,6 +38,9 @@ import vn.acme.paperless_meeting.entity.enums.AttendanceStatus;
 import vn.acme.paperless_meeting.repository.MeetingParticipantRepository;
 import vn.acme.paperless_meeting.repository.MeetingRepository;
 import vn.acme.paperless_meeting.repository.UserRepository;
+import vn.acme.paperless_meeting.repository.RoleRepository;
+import vn.acme.paperless_meeting.entity.Role;
+import vn.acme.paperless_meeting.entity.enums.PositionCode;
 import vn.acme.paperless_meeting.repository.AgendaItemRepository;
 import vn.acme.paperless_meeting.service.approval.ApprovalService;
 import vn.acme.paperless_meeting.service.auth.CurrentUserService;
@@ -84,6 +87,50 @@ public class MeetingService {
     AgendaItemRepository agendaItemRepository;
     ApprovalService approvalService;
     AuditLogPublisher auditLogPublisher;
+    UserRepository userRepository;
+    RoleRepository roleRepository;
+
+    static final java.util.Set<MeetingStatus> PUBLISHED_STATUSES = java.util.Set.of(
+        MeetingStatus.UPCOMING, MeetingStatus.IN_PROGRESS, MeetingStatus.CLOSED, MeetingStatus.CANCELLED, MeetingStatus.EXPIRED
+    );
+    
+    static final java.util.Set<MeetingStatus> CAN_CANCEL_STATUSES = java.util.Set.of(
+        MeetingStatus.PENDING_APPROVAL, MeetingStatus.APPROVED, MeetingStatus.UPCOMING
+    );
+    
+    static final java.util.Set<MeetingStatus> CAN_EDIT_STATUSES = java.util.Set.of(
+        MeetingStatus.DRAFT, MeetingStatus.REJECTED, MeetingStatus.PENDING_APPROVAL, MeetingStatus.APPROVED, MeetingStatus.UPCOMING
+    );
+
+    private boolean isLeader(User user) {
+        if (user == null || user.getPosition() == null) return false;
+        String posCode = user.getPosition().getPositionCode();
+        return PositionCode.CHU_TICH.getCode().equals(posCode) || 
+               PositionCode.GIAM_DOC.getCode().equals(posCode);
+    }
+
+    private boolean isLeaderOrAdminOfDepartment(User user, UUID targetDeptId) {
+        if (user == null || targetDeptId == null) return false;
+        if (currentUserService.hasRole(RoleName.SUPER_ADMIN)) return true;
+        
+        boolean isLeader = isLeader(user);
+        if ((currentUserService.hasRole(RoleName.DEPARTMENT_ADMIN) || isLeader) && user.getDepartment() != null) {
+            List<UUID> subDepts = departmentService.getAllSubDepartmentIds(user.getDepartment().getId());
+            return subDepts.contains(targetDeptId);
+        }
+        return false;
+    }
+
+    private Department getDepartment(UUID departmentId) {
+        return departmentRepository.findById(departmentId)
+                .orElseThrow(() -> new AppException(ErrorCode.DEPARTMENT_NOT_EXIST));
+    }
+
+    private Location getLocation(UUID locationId) {
+        if (locationId == null) return null;
+        return locationRepository.findById(locationId)
+                .orElseThrow(() -> new AppException(ErrorCode.LOCATION_NOT_EXIST));
+    }
 
     /**
      * Tìm kiếm và phân trang danh sách cuộc họp theo bộ lọc (từ khóa, trạng thái, thời gian).
@@ -94,11 +141,8 @@ public class MeetingService {
         boolean isSuperAdmin = currentUserService.hasRole(RoleName.SUPER_ADMIN);
         
         List<UUID> allowedDeptIds = null;
-        if (!isSuperAdmin) {
-            // Lịch họp của ai người đó xem, riêng Admin đơn vị thì được xem tất cả cuộc họp thuộc đơn vị và cấp con
-            if (currentUserService.hasRole(RoleName.DEPARTMENT_ADMIN) && caller.getDepartment() != null) {
-                allowedDeptIds = departmentService.getAllSubDepartmentIds(caller.getDepartment().getId());
-            }
+        if (!isSuperAdmin && (currentUserService.hasRole(RoleName.DEPARTMENT_ADMIN) || isLeader(caller)) && caller.getDepartment() != null) {
+            allowedDeptIds = departmentService.getAllSubDepartmentIds(caller.getDepartment().getId());
         }
 
         Specification<Meeting> spec = MeetingSpecification.build(keyword, null, statuses, fromDate, toDate, allowedDeptIds, caller.getId(), isSuperAdmin, false);
@@ -131,10 +175,8 @@ public class MeetingService {
         boolean isSuperAdmin = currentUserService.hasRole(RoleName.SUPER_ADMIN);
         
         List<UUID> allowedDeptIds = null;
-        if (!isSuperAdmin) {
-            if (currentUserService.hasRole(RoleName.DEPARTMENT_ADMIN) && caller.getDepartment() != null) {
-                allowedDeptIds = departmentService.getAllSubDepartmentIds(caller.getDepartment().getId());
-            }
+        if (!isSuperAdmin && (currentUserService.hasRole(RoleName.DEPARTMENT_ADMIN) || isLeader(caller)) && caller.getDepartment() != null) {
+            allowedDeptIds = departmentService.getAllSubDepartmentIds(caller.getDepartment().getId());
         }
 
         Specification<Meeting> spec = MeetingSpecification.build(null, null, statuses, fromDate, toDate, allowedDeptIds, caller.getId(), isSuperAdmin, onlyMyMeetings);
@@ -188,7 +230,7 @@ public class MeetingService {
      */
     @Transactional
     public MeetingResponse create(MeetingUpsertRequest request) {
-        if (!currentUserService.hasAuthority("MEETING_CREATE")) {
+        if (!currentUserService.canCreateMeeting()) {
             throw new AppException(ErrorCode.UNAUTHOZIZED);
         }
 
@@ -197,14 +239,8 @@ public class MeetingService {
 
         User caller = currentUserService.getCurrentActiveUser();
         
-        Department department = departmentRepository.findById(request.getDepartmentId())
-                .orElseThrow(() -> new AppException(ErrorCode.DEPARTMENT_NOT_EXIST));
-
-        Location location = null;
-        if (request.getLocationId() != null) {
-            location = locationRepository.findById(request.getLocationId())
-                    .orElseThrow(() -> new AppException(ErrorCode.LOCATION_NOT_EXIST));
-        }
+        Department department = getDepartment(request.getDepartmentId());
+        Location location = getLocation(request.getLocationId());
 
         Meeting meeting = meetingMapper.toEntity(request);
         meeting.setStatus(MeetingStatus.DRAFT);
@@ -245,14 +281,8 @@ public class MeetingService {
         validateMeetingTime(request);
         validateLocationConflict(id, request.getLocationId(), request.getStartTime(), request.getEndTime());
 
-        Department department = departmentRepository.findById(request.getDepartmentId())
-                .orElseThrow(() -> new AppException(ErrorCode.DEPARTMENT_NOT_EXIST));
-
-        Location location = null;
-        if (request.getLocationId() != null) {
-            location = locationRepository.findById(request.getLocationId())
-                    .orElseThrow(() -> new AppException(ErrorCode.LOCATION_NOT_EXIST));
-        }
+        Department department = getDepartment(request.getDepartmentId());
+        Location location = getLocation(request.getLocationId());
 
         meetingMapper.updateEntity(request, meeting);
         meeting.setDepartment(department);
@@ -275,9 +305,6 @@ public class MeetingService {
         submitForApproval(id, null, null);
     }
 
-    /**
-     * Trình duyệt cuộc họp. Chuyển trạng thái sang CHỜ PHÊ DUYỆT.
-     */
     @Transactional
     public void submitForApproval(UUID id, UUID approverUserId, UUID approverRoleId) {
         Meeting meeting = getMeeting(id);
@@ -285,6 +312,10 @@ public class MeetingService {
 
         if (meeting.getStatus() != MeetingStatus.DRAFT && meeting.getStatus() != MeetingStatus.REJECTED) {
             throw new AppException(ErrorCode.MEETING_STATUS_TRANSITION_INVALID);
+        }
+
+        if (meeting.getStartTime() == null || meeting.getStartTime().isBefore(LocalDateTime.now().plusMinutes(30))) {
+            throw new AppException(ErrorCode.MEETING_MUST_BE_SCHEDULED_BEFORE_30_MINUTES);
         }
 
         if (meeting.getAgendaItemList() != null && !meeting.getAgendaItemList().isEmpty()) {
@@ -308,7 +339,39 @@ public class MeetingService {
             throw new AppException(ErrorCode.MEETING_SECRETARY_REQUIRED);
         }
 
-        approvalService.submitResource(ResourceType.MEETING, id, null, approverUserId, approverRoleId);
+        UUID finalApproverUserId = approverUserId;
+        UUID finalApproverRoleId = approverRoleId;
+
+        if (finalApproverUserId != null) {
+            User approver = userRepository.findById(finalApproverUserId)
+                    .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
+
+            if (!isLeader(approver) || approver.getDepartment() == null || meeting.getDepartment() == null) {
+                throw new AppException(ErrorCode.UNAUTHOZIZED);
+            }
+            List<UUID> allowedSubDeptIds = departmentService.getAllSubDepartmentIds(approver.getDepartment().getId());
+            if (!allowedSubDeptIds.contains(meeting.getDepartment().getId())) {
+                throw new AppException(ErrorCode.UNAUTHOZIZED);
+            }
+        } else if (finalApproverRoleId == null) {
+            List<User> leaders = new java.util.ArrayList<>();
+            Department currentDept = meeting.getDepartment();
+            while (currentDept != null && leaders.isEmpty()) {
+                leaders = userRepository.findActiveLeadersByDepartmentId(currentDept.getId());
+                currentDept = currentDept.getParentDepartment();
+            }
+
+            if (!leaders.isEmpty()) {
+                finalApproverUserId = leaders.get(0).getId();
+            } else {
+                Role deptAdminRole = roleRepository.findByRoleCode(RoleName.DEPARTMENT_ADMIN.name()).orElse(null);
+                if (deptAdminRole != null) {
+                    finalApproverRoleId = deptAdminRole.getId();
+                }
+            }
+        }
+
+        approvalService.submitResource(ResourceType.MEETING, id, null, finalApproverUserId, finalApproverRoleId);
     }
 
     /**
@@ -332,6 +395,10 @@ public class MeetingService {
 
         if (meeting.getStatus() != MeetingStatus.APPROVED) {
             throw new AppException(ErrorCode.MEETING_STATUS_TRANSITION_INVALID);
+        }
+
+        if (meeting.getStartTime() == null || meeting.getStartTime().isBefore(LocalDateTime.now())) {
+            throw new AppException(ErrorCode.MEETING_MUST_BE_SCHEDULED_BEFORE_30_MINUTES);
         }
 
         meeting.setStatus(MeetingStatus.UPCOMING);
@@ -549,11 +616,8 @@ public class MeetingService {
         User caller = currentUserService.getCurrentActiveUser();
         if (meeting.getCreatedBy() != null && meeting.getCreatedBy().getId().equals(caller.getId())) return;
         
-        // Cho phép nếu là Admin của đơn vị quản lý cuộc họp
-        if (currentUserService.hasRole(RoleName.DEPARTMENT_ADMIN) && meeting.getDepartment() != null && caller.getDepartment() != null) {
-            List<UUID> subDepts = departmentService.getAllSubDepartmentIds(caller.getDepartment().getId());
-            if (subDepts.contains(meeting.getDepartment().getId())) return;
-        }
+        // Cho phép nếu là Admin của đơn vị hoặc Lãnh đạo (Chủ tịch/Giám đốc) của đơn vị quản lý cuộc họp
+        if (meeting.getDepartment() != null && isLeaderOrAdminOfDepartment(caller, meeting.getDepartment().getId())) return;
 
         // Cho phép nếu là Người chuẩn bị tài liệu cho cuộc họp này (được gán ở AgendaItem)
         boolean isPreparer = agendaItemRepository.existsByMeetingIdAndPreparedByUserId(meeting.getId(), caller.getId());
@@ -562,14 +626,7 @@ public class MeetingService {
         // Cho phép đại biểu tham gia cuộc họp xem NHƯNG chỉ khi cuộc họp ĐÃ ĐƯỢC CÔNG BỐ
         boolean isParticipant = meetingParticipantRepository.existsByMeetingIdAndUserId(meeting.getId(), caller.getId());
         if (isParticipant) {
-            List<MeetingStatus> publishedStatuses = List.of(
-                MeetingStatus.UPCOMING,
-                MeetingStatus.IN_PROGRESS,
-                MeetingStatus.CLOSED,
-                MeetingStatus.CANCELLED,
-                MeetingStatus.EXPIRED
-            );
-            if (publishedStatuses.contains(meeting.getStatus())) {
+            if (PUBLISHED_STATUSES.contains(meeting.getStatus())) {
                 return;
             }
         }
@@ -581,29 +638,9 @@ public class MeetingService {
      * Kiểm tra quyền chỉnh sửa cuộc họp.
      */
     private void requireEditPermission(Meeting meeting) {
-        if (currentUserService.hasRole(RoleName.SUPER_ADMIN)) return;
-
-        User caller = currentUserService.getCurrentActiveUser();
-        
-        // Cho phép nếu là người tạo cuộc họp
-        if (meeting.getCreatedBy() != null && meeting.getCreatedBy().getId().equals(caller.getId())) {
-            return;
+        if (!hasEditPermission(meeting, currentUserService.getCurrentActiveUser())) {
+            throw new AppException(ErrorCode.UNAUTHOZIZED);
         }
-
-        // Cho phép nếu là Admin của đơn vị quản lý cuộc họp
-        if (currentUserService.hasRole(RoleName.DEPARTMENT_ADMIN) && meeting.getDepartment() != null && caller.getDepartment() != null) {
-            List<UUID> subDepts = departmentService.getAllSubDepartmentIds(caller.getDepartment().getId());
-            if (subDepts.contains(meeting.getDepartment().getId())) {
-                return;
-            }
-        }
-
-        // Cho phép nếu là chủ tọa cuộc họp (CHAIR)
-        boolean isChair = meetingParticipantRepository.existsByMeetingIdAndUserIdAndParticipantRole(
-            meeting.getId(), caller.getId(), ParticipantRole.CHAIR);
-        if (isChair) return;
-
-        throw new AppException(ErrorCode.UNAUTHOZIZED);
     }
 
     private boolean hasEditPermission(Meeting meeting, User caller) {
@@ -635,12 +672,22 @@ public class MeetingService {
         boolean isCreatorOnly = meeting.getCreatedBy() != null && meeting.getCreatedBy().getId().equals(caller.getId());
         boolean isPreparer = agendaItemRepository.existsByMeetingIdAndPreparedByUserId(meeting.getId(), caller.getId());
 
-        resp.setCanEdit(isCreatorOrAdminOrChair && (meeting.getStatus() == MeetingStatus.DRAFT || meeting.getStatus() == MeetingStatus.REJECTED));
-        resp.setCanCancel(isCreatorOnly && (meeting.getStatus() == MeetingStatus.PENDING_APPROVAL || meeting.getStatus() == MeetingStatus.APPROVED || meeting.getStatus() == MeetingStatus.UPCOMING));
+        resp.setCanEdit(isCreatorOrAdminOrChair && CAN_EDIT_STATUSES.contains(meeting.getStatus()));
+        resp.setCanCancel(isCreatorOnly && CAN_CANCEL_STATUSES.contains(meeting.getStatus()));
         resp.setCanPublish(isCreatorOnly && meeting.getStatus() == MeetingStatus.APPROVED);
-        resp.setCanPostpone(isCreatorOnly && (meeting.getStatus() == MeetingStatus.APPROVED || meeting.getStatus() == MeetingStatus.UPCOMING));
+        resp.setCanPostpone(isCreatorOnly && CAN_CANCEL_STATUSES.contains(meeting.getStatus()));
         resp.setCanDelete(isCreatorOnly && meeting.getStatus() == MeetingStatus.DRAFT);
         resp.setCanSubmitApproval(isCreatorOrAdminOrChair && (meeting.getStatus() == MeetingStatus.DRAFT || meeting.getStatus() == MeetingStatus.REJECTED));
         resp.setCanUploadDocs(isPreparer && (meeting.getStatus() == MeetingStatus.DRAFT || meeting.getStatus() == MeetingStatus.REJECTED));
+
+        boolean canApprove = false;
+        if (meeting.getStatus() == MeetingStatus.PENDING_APPROVAL) {
+            if (currentUserService.hasRole(RoleName.SUPER_ADMIN)) {
+                canApprove = true;
+            } else if (meeting.getDepartment() != null && isLeader(caller) && caller.getDepartment() != null) {
+                canApprove = departmentService.getAllSubDepartmentIds(caller.getDepartment().getId()).contains(meeting.getDepartment().getId());
+            }
+        }
+        resp.setCanApprove(canApprove);
     }
 }

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Plus, X, Trash2, CalendarIcon, Send, Check, AlertCircle } from 'lucide-react';
 import { FileUploader } from '@/common/components/ui/FileUploader';
 import { toast } from '@/lib/toast';
+import { useWebSocket } from '@/app/context/WebSocketContext';
 import { Button } from '@/common/components/ui/button';
 import { Label } from '@/common/components/ui/label';
 import { Input } from '@/common/components/ui/input';
@@ -15,6 +16,7 @@ import { cn } from '@/common/utils/cn';
 import { Member } from './SelectUnitModal';
 import { Modal } from '@/common/components/ui/modal';
 import { meetingApi } from '../services/meeting.api';
+import { FeedbackChatSection } from './FeedbackChatSection';
 
 interface BieuQuyetIssue {
   id: string;
@@ -84,43 +86,11 @@ const NoiDungHopStep: React.FC<NoiDungHopStepProps> = ({
   meetingId,
   isReadOnly = false,
 }) => {
+  const { subscribe } = useWebSocket();
+
   const [activeContentId, setActiveContentId] = useState(data.contents[0]?.id || '');
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [isUploading, setIsUploading] = useState(false);
-  const [chatInputs, setChatInputs] = useState<Record<string, string>>({});
-
-  const handleSendChat = async (agendaItemId: string) => {
-    const text = chatInputs[agendaItemId] || "";
-    if (!text.trim()) return;
-
-    try {
-      // Creator/host sends feedback as type 'INSTRUCTION'
-      const res = await meetingApi.addFeedback(agendaItemId, text.trim(), "INSTRUCTION");
-      if (res.success) {
-        setChatInputs(prev => ({ ...prev, [agendaItemId]: "" }));
-        toast.success("Đã gửi ý kiến thành công");
-        
-        // Update the feedback in local data so it displays immediately
-        if (res.data) {
-          const updatedContents = data.contents.map(c => {
-            if (c.id === agendaItemId) {
-              return {
-                ...c,
-                feedbacks: res.data.feedbacks || []
-              };
-            }
-            return c;
-          });
-          onChange({ contents: updatedContents });
-        }
-      } else {
-        toast.error("Lỗi", res.message || "Không thể gửi ý kiến.");
-      }
-    } catch (error: any) {
-      console.error("Error sending feedback:", error);
-      toast.error("Lỗi kết nối", error.message || "Đã xảy ra lỗi khi gửi ý kiến.");
-    }
-  };
   const [rejectModal, setRejectModal] = useState<{
     isOpen: boolean;
     agendaId: string;
@@ -273,12 +243,49 @@ const NoiDungHopStep: React.FC<NoiDungHopStepProps> = ({
     if (data.contents.length > 0) {
       const exists = data.contents.some(c => c.id === activeContentId);
       if (!activeContentId || !exists) {
+        // If the activeContentId was a temp ID like 'content-1', try to keep the same index
+        if (activeContentId && activeContentId.startsWith('content-')) {
+          const indexStr = activeContentId.replace('content-', '');
+          const index = parseInt(indexStr, 10);
+          if (!isNaN(index) && data.contents[index]) {
+            setActiveContentId(data.contents[index].id);
+            return;
+          }
+        }
+        // Fallback to first item
         setActiveContentId(data.contents[0].id);
       }
     } else {
       setActiveContentId('');
     }
   }, [data.contents, activeContentId]);
+
+  useEffect(() => {
+    if (!meetingId || data.contents.length === 0) return;
+
+    const unsubscribers = data.contents.map(item => {
+      if (!item.id || item.id.startsWith('content-')) return () => {};
+
+      return subscribe(`/topic/meeting/${meetingId}/agenda/${item.id}/chat`, (newFeedbacks: any) => {
+        console.log(`Real-time chat update for agenda item ${item.id} (coordinator view):`, newFeedbacks);
+        
+        const updatedContents = data.contents.map(c => {
+          if (c.id === item.id) {
+            return {
+              ...c,
+              feedbacks: newFeedbacks
+            };
+          }
+          return c;
+        });
+        onChange({ contents: updatedContents });
+      });
+    });
+
+    return () => {
+      unsubscribers.forEach(unsub => unsub());
+    };
+  }, [subscribe, meetingId, data.contents.map(c => c.id).join(',')]);
 
   // Sync inherited participants from step 2 to all content items
   useEffect(() => {
@@ -639,10 +646,10 @@ const NoiDungHopStep: React.FC<NoiDungHopStepProps> = ({
                 }
                 disabled={participantOptions.length === 0 || isReadOnly}
               />
-              {activeContent.nguoiChuanBi && (
+              {activeContent.nguoiChuanBi && (!activeContent.status || activeContent.status === 'DRAFT') && (
                 <div className="space-y-1.5 mt-3">
                   <Label htmlFor="prepInstructions" className="text-sm">
-                    Nội dung ghi chú / Hướng dẫn chuẩn bị tài liệu
+                    Nội dung ghi chú / Hướng dẫn chuẩn bị tài liệu <span className="text-red-500">*</span>
                   </Label>
                   <Textarea
                     id="prepInstructions"
@@ -653,88 +660,49 @@ const NoiDungHopStep: React.FC<NoiDungHopStepProps> = ({
                     placeholder="Nhập ghi chú yêu cầu chuẩn bị tài liệu gì..."
                     rows={3}
                     disabled={isReadOnly}
-                    className="resize-none rounded-xl border-gray-400 hover:border-gray-500"
+                    className={cn(
+                      "resize-none rounded-xl border-gray-400 hover:border-gray-500",
+                      errors[activeContentId]?.prepInstructions && "border-red-500 focus-visible:ring-red-500"
+                    )}
                   />
+                  {errors[activeContentId]?.prepInstructions && (
+                    <p className="text-xs text-red-600 body">
+                      {errors[activeContentId].prepInstructions}
+                    </p>
+                  )}
                 </div>
               )}
               {!isReadOnly && activeContent.nguoiChuanBi && (
-                <div className="mt-3 space-y-2">
-                  <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider block">
-                    Lịch sử trao đổi / Giao việc
-                  </span>
-                  <div className="border border-gray-100 rounded-xl p-3 bg-gray-50/50 space-y-3">
-                    {activeContent.feedbacks && activeContent.feedbacks.length > 0 ? (
-                      <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
-                        {activeContent.feedbacks.map((fb) => {
-                          const isInstruction = fb.type === 'INSTRUCTION';
-                          const isResponse = fb.type === 'RESPONSE';
-                          return (
-                            <div
-                              key={fb.id}
-                              className={`p-2.5 rounded-xl border text-sm transition-all duration-200 ${
-                                isInstruction
-                                  ? 'bg-blue-50/70 border-blue-100 text-blue-900'
-                                  : isResponse
-                                  ? 'bg-emerald-50/70 border-emerald-100 text-emerald-900'
-                                  : 'bg-red-50/70 border-red-100 text-red-900'
-                              }`}
-                            >
-                              <div className="flex justify-between items-center mb-1 text-xs font-medium opacity-80">
-                                <span>{fb.authorName || (isInstruction ? 'Người duyệt' : isResponse ? 'Người chuẩn bị' : 'Người duyệt')}</span>
-                                <span>
-                                  {new Date(fb.createdAt).toLocaleDateString('vi-VN', {
-                                    hour: '2-digit',
-                                    minute: '2-digit',
-                                    day: '2-digit',
-                                    month: '2-digit',
-                                    year: 'numeric',
-                                  })}
-                                </span>
-                              </div>
-                              <p className="whitespace-pre-wrap leading-relaxed text-[13px]">
-                                <span className="font-semibold block mb-0.5 text-xs opacity-75">
-                                  {isInstruction 
-                                    ? '📌 Hướng dẫn chuẩn bị:' 
-                                    : isResponse 
-                                    ? '📤 Phản hồi từ người chuẩn bị:' 
-                                    : '⚠️ Lý do từ chối:'}
-                                </span>
-                                {fb.content}
-                              </p>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <p className="text-xs text-gray-500 italic">Chưa có lịch sử trao đổi.</p>
-                    )}
-
-                    {/* Chat Input for sending feedback/questions (Only if persisted) */}
-                    {activeContent.id && !activeContent.id.startsWith('content-') ? (
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          value={chatInputs[activeContent.id] || ''}
-                          onChange={(e) => setChatInputs(prev => ({ ...prev, [activeContent.id]: e.target.value }))}
-                          placeholder="Trả lời / Nhập ý kiến phản hồi hướng dẫn..."
-                          className="flex-1 bg-white border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#C8102E] focus:border-[#C8102E]"
-                        />
-                        {(chatInputs[activeContent.id] || '').trim().length > 0 && (
-                          <Button
-                            type="button"
-                            onClick={() => handleSendChat(activeContent.id)}
-                            className="bg-[#C8102E] hover:bg-[#A90F14] text-white rounded-xl text-xs font-semibold px-4 animate-in fade-in slide-in-from-right-1 duration-200"
-                          >
-                            Gửi
-                          </Button>
-                        )}
-                      </div>
-                    ) : (
+                <div className="mt-3">
+                  {activeContent.id && !activeContent.id.startsWith('content-') ? (
+                    <FeedbackChatSection
+                      agendaItemId={activeContent.id}
+                      feedbacks={activeContent.feedbacks}
+                      feedbackType="INSTRUCTION"
+                      placeholder="Trả lời / Nhập ý kiến phản hồi hướng dẫn..."
+                      onSuccess={(updatedFeedbacks) => {
+                        const updatedContents = data.contents.map(c => {
+                          if (c.id === activeContent.id) {
+                            return {
+                              ...c,
+                              feedbacks: updatedFeedbacks
+                            };
+                          }
+                          return c;
+                        });
+                        onChange({ contents: updatedContents });
+                      }}
+                    />
+                  ) : (
+                    <div className="space-y-2">
+                      <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider block">
+                        Lịch sử trao đổi / Ý kiến phản hồi
+                      </span>
                       <p className="text-xs text-amber-600 font-medium bg-amber-50 border border-amber-100 p-2 rounded-xl">
                         Vui lòng lưu phiên họp trước khi thực hiện trao đổi/phản hồi.
                       </p>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

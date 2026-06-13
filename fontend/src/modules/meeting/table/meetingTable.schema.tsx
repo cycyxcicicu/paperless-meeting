@@ -20,6 +20,7 @@ export interface Meeting {
     canSubmitApproval?: boolean;
     canUploadDocs?: boolean;
     canCopy?: boolean;
+    canApprove?: boolean;
 }
 
 export const createMeetingColumns = (handlers: {

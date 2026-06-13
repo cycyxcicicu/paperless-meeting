@@ -8,4 +8,5 @@ import vn.acme.paperless_meeting.entity.AgendaItemFeedback;
 
 public interface AgendaItemFeedbackRepository extends JpaRepository<AgendaItemFeedback, UUID> {
     List<AgendaItemFeedback> findByAgendaItemIdOrderByCreatedAtAsc(UUID agendaItemId);
+    List<AgendaItemFeedback> findByAgendaItemIdInOrderByCreatedAtAsc(List<UUID> agendaItemIds);
 }

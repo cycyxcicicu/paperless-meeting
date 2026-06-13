@@ -22,6 +22,11 @@ export default defineConfig({
         target: 'http://localhost:8081/PaperlessMeeting',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, '')
+      },
+      '/ws': {
+        target: 'http://localhost:8081/PaperlessMeeting',
+        ws: true,
+        changeOrigin: true
       }
     }
   },

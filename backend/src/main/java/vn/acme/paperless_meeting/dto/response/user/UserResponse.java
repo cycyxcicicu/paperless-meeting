@@ -4,7 +4,6 @@ import java.time.LocalDateTime;
 import java.util.Set;
 import java.util.UUID;
 
-import com.fasterxml.jackson.annotation.JsonInclude;
 
 import lombok.Builder;
 import lombok.Getter;
@@ -30,6 +29,5 @@ public class UserResponse {
     private DepartmentSimpleResponse department;
     private RoleSimpleResponse role;
     private PositionSimpleResponse position;
-    @JsonInclude(JsonInclude.Include.NON_NULL)
-    private Set<String> permissions;
+
 }

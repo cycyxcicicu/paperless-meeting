@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import { Toaster } from 'sonner';
 import { router } from '@/app/routes';
 import { AuthProvider } from '@/app/context/AuthContext';
+import { WebSocketProvider } from '@/app/context/WebSocketContext';
 
 function App() {
   useEffect(() => {
@@ -25,7 +26,9 @@ function App() {
 
   return (
     <AuthProvider>
-      <RouterProvider router={router} />
+      <WebSocketProvider>
+        <RouterProvider router={router} />
+      </WebSocketProvider>
       <Toaster
         position="top-right"
         expand={false}

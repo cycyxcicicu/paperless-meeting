@@ -338,6 +338,7 @@ public class SampleDataInitializer implements CommandLineRunner {
             new PositionSeed("PHO_GIAM_DOC", "Phó Giám đốc / Phó chánh văn phòng", "Cấp phó", 11, true, PositionRole.DEPUTY_OF_DEPARTMENT_LEVEL),
             new PositionSeed("TRUONG_PHONG", "Trưởng phòng", "Lãnh đạo phòng ban", 15, true, PositionRole.HEAD_OF_DIVISION),
             new PositionSeed("PHO_TRUONG_PHONG", "Phó Trưởng phòng", "Phó phòng ban", 16, true, PositionRole.DEPUTY_OF_DIVISION),
+            new PositionSeed("THU_KY", "Thư ký", "Thư ký / Văn phòng", 19, false, PositionRole.SPECIALIST),
             new PositionSeed("CHUYEN_VIEN", "Chuyên viên", "Cán bộ chuyên môn", 20, false, PositionRole.SPECIALIST)
         );
 
@@ -598,7 +599,7 @@ public class SampleDataInitializer implements CommandLineRunner {
                 "global.creator@paperless.local",
                 "0999000002",
                 blueprint.topLevelPath(),
-                "CHUYEN_VIEN");
+                "THU_KY");
     }
 
     private User upsertUser(UserSeed seed,

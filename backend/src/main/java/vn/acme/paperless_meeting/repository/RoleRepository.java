@@ -1,6 +1,7 @@
 package vn.acme.paperless_meeting.repository;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -12,6 +13,7 @@ import vn.acme.paperless_meeting.entity.Role;
 
 public interface RoleRepository extends JpaRepository<Role, UUID> {
 	boolean existsByRoleCode(String roleCode);
+	Optional<Role> findByRoleCode(String roleCode);
 
 	@Query("SELECT r FROM Role r WHERE :keyword IS NULL OR LOWER(r.roleName) LIKE LOWER(CONCAT('%', :keyword, '%')) OR LOWER(r.roleCode) LIKE LOWER(CONCAT('%', :keyword, '%'))")
 	List<Role> findAllByKeyword(@Param("keyword") String keyword);

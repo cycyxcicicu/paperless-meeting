@@ -19,4 +19,4 @@ export * from './TestModal';
 export * from './ThanhPhanThamDuStep';
 export * from './WizardFooter';
 export * from './WizardStepper';
-
+export * from './FeedbackChatSection';

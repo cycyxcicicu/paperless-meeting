@@ -55,6 +55,10 @@ import vn.acme.paperless_meeting.mapper.motion.MotionMapper;
 import vn.acme.paperless_meeting.entity.Motion;
 import vn.acme.paperless_meeting.dto.request.motion.MotionUpsertRequest;
 import vn.acme.paperless_meeting.dto.response.motion.MotionResponse;
+import vn.acme.paperless_meeting.service.websocket.WebSocketNotificationService;
+import vn.acme.paperless_meeting.entity.enums.RoleName;
+import vn.acme.paperless_meeting.entity.enums.PositionCode;
+import vn.acme.paperless_meeting.service.department.DepartmentService;
 
 @Service
 @RequiredArgsConstructor
@@ -73,6 +77,8 @@ public class AgendaItemService {
     AgendaItemMapper agendaItemMapper;
     MeetingMapper meetingMapper;
     MotionMapper motionMapper;
+    WebSocketNotificationService webSocketNotificationService;
+    DepartmentService departmentService;
 
     /**
      * Xóa nội dung cuộc họp
@@ -106,7 +112,7 @@ public class AgendaItemService {
         User caller = currentUserService.getCurrentActiveUser();
         boolean isCreator = meeting.getCreatedBy() != null && meeting.getCreatedBy().getId().equals(caller.getId());
         
-        // 1. Tải toàn bộ danh sách Agenda của cuộc họp kèm theo preparedByUser bằng 1 query duy nhất
+        // 1. Tải toàn bộ Agenda của cuộc họp kèm theo preparedByUser bằng 1 query duy nhất
         List<AgendaItem> list = agendaItemRepository.findByMeetingIdOrderByOrderNoAscWithPreparer(meetingId);
         
         // 2. Tải toàn bộ tài liệu đính kèm kèm thông tin phiên bản của cuộc họp bằng 1 query duy nhất
@@ -122,25 +128,48 @@ public class AgendaItemService {
         Map<UUID, List<Motion>> motionsByAgendaId = allMotions.stream()
                 .filter(m -> m.getAgendaItem() != null)
                 .collect(Collectors.groupingBy(m -> m.getAgendaItem().getId()));
+
+        // 3.6. Tải toàn bộ feedbacks của cuộc họp bằng 1 query duy nhất để tránh N+1 queries
+        List<UUID> agendaIds = list.stream().map(AgendaItem::getId).collect(Collectors.toList());
+        List<AgendaItemFeedback> allFeedbacks = agendaItemFeedbackRepository.findByAgendaItemIdInOrderByCreatedAtAsc(agendaIds);
+        Map<UUID, List<AgendaItemFeedback>> feedbacksByAgendaId = allFeedbacks.stream()
+                .filter(fb -> fb.getAgendaItem() != null)
+                .collect(Collectors.groupingBy(fb -> fb.getAgendaItem().getId()));
         
         List<MeetingStatus> publishedStatuses = List.of(
             MeetingStatus.APPROVED, MeetingStatus.UPCOMING, MeetingStatus.IN_PROGRESS, 
             MeetingStatus.CLOSED, MeetingStatus.CANCELLED, MeetingStatus.EXPIRED
         );
         boolean isPublished = publishedStatuses.contains(meeting.getStatus());
-
+ 
+        boolean isSuperAdmin = currentUserService.hasRole(RoleName.SUPER_ADMIN);
+        boolean isDeptAdmin = currentUserService.hasRole(RoleName.DEPARTMENT_ADMIN);
+        boolean isLeader = caller.getPosition() != null && 
+                (PositionCode.CHU_TICH.getCode().equals(caller.getPosition().getPositionCode()) || 
+                 PositionCode.GIAM_DOC.getCode().equals(caller.getPosition().getPositionCode()));
+        
+        boolean tempAccess = isCreator || isSuperAdmin;
+        if (!tempAccess && (isDeptAdmin || isLeader) && meeting.getDepartment() != null && caller.getDepartment() != null) {
+            List<UUID> subDepts = departmentService.getAllSubDepartmentIds(caller.getDepartment().getId());
+            if (subDepts.contains(meeting.getDepartment().getId())) {
+                tempAccess = true;
+            }
+        }
+        final boolean hasAccessToDraftDocs = tempAccess;
+ 
         // 4. Ánh xạ danh sách Response kết hợp dữ liệu in-memory mà không bị N+1 query
         return list.stream()
                 .map(item -> {
                     AgendaItemResponse res = toResponseWithPreloadedDocs(
                             item, 
                             docsByAgendaId.getOrDefault(item.getId(), Collections.emptyList()),
-                            motionsByAgendaId.getOrDefault(item.getId(), Collections.emptyList())
+                            motionsByAgendaId.getOrDefault(item.getId(), Collections.emptyList()),
+                            feedbacksByAgendaId.getOrDefault(item.getId(), Collections.emptyList())
                     );
                     boolean isPreparerOfThis = item.getPreparedByUser() != null && item.getPreparedByUser().getId().equals(caller.getId());
                     
-                    // Nếu không phải người tạo và không phải người được giao chuẩn bị của Agenda này
-                    if (!isCreator && !isPreparerOfThis) {
+                    // Nếu không phải người tạo, không phải người được giao chuẩn bị của Agenda này, và không có quyền xem tài liệu nháp
+                    if (!isCreator && !isPreparerOfThis && !hasAccessToDraftDocs) {
                         res.setRejectReason(null);
                         
                         // Nếu cuộc họp chưa công bố (đang thảo luận nháp), ẩn luôn tài liệu của Agenda này
@@ -198,6 +227,12 @@ public class AgendaItemService {
                 .type("INSTRUCTION")
                 .build();
         agendaItemFeedbackRepository.save(feedback);
+
+        notifyAgendaUpdate(savedAgendaItem, "ASSIGN_PREPARER", "Bạn được gán chuẩn bị tài liệu", caller);
+        webSocketNotificationService.sendToTopic(
+            "/topic/meeting-updates",
+            Map.of("action", "REFRESH_MEETING_LIST", "meetingId", meetingId.toString())
+        );
 
         return toResponseWithDocs(savedAgendaItem);
     }
@@ -274,7 +309,27 @@ public class AgendaItemService {
             agendaItemFeedbackRepository.save(feedback);
         }
 
-        return toResponseWithDocs(saved);
+        AgendaItemResponse response = toResponseWithDocs(saved);
+
+        // Gửi thông báo WebSocket
+        webSocketNotificationService.sendToTopic(
+            "/topic/meeting/" + saved.getMeeting().getId() + "/agenda/" + saved.getId() + "/chat",
+            response.getFeedbacks()
+        );
+        if (saved.getMeeting().getCreatedBy() != null) {
+            webSocketNotificationService.sendNotificationToUser(
+                saved.getMeeting().getCreatedBy().getUsername(),
+                "SUBMIT_DOCS",
+                "[" + caller.getFullName() + "] - [Phiên họp: " + saved.getMeeting().getTitle() + "] - [Đầu mục: " + saved.getTitle() + "]: Đã nộp tài liệu chuẩn bị",
+                Map.of("meetingId", saved.getMeeting().getId().toString(), "agendaItemId", saved.getId().toString())
+            );
+        }
+        webSocketNotificationService.sendToTopic(
+            "/topic/meeting/" + saved.getMeeting().getId(),
+            Map.of("action", "REFRESH_MEETING_DETAIL", "status", saved.getMeeting().getStatus().name())
+        );
+
+        return response;
     }
 
     /**
@@ -296,7 +351,31 @@ public class AgendaItemService {
                 .build();
         agendaItemFeedbackRepository.save(feedback);
 
-        return toResponseWithDocs(agendaItem);
+        AgendaItemResponse response = toResponseWithDocs(agendaItem);
+
+        // Phát WebSocket cập nhật chat
+        webSocketNotificationService.sendToTopic(
+            "/topic/meeting/" + agendaItem.getMeeting().getId() + "/agenda/" + agendaItem.getId() + "/chat",
+            response.getFeedbacks()
+        );
+
+        // Gửi Toast thông báo cá nhân
+        User recipient = null;
+        if (agendaItem.getMeeting().getCreatedBy() != null && caller.getId().equals(agendaItem.getMeeting().getCreatedBy().getId())) {
+            recipient = agendaItem.getPreparedByUser();
+        } else {
+            recipient = agendaItem.getMeeting().getCreatedBy();
+        }
+        if (recipient != null) {
+            webSocketNotificationService.sendNotificationToUser(
+                recipient.getUsername(),
+                "NEW_CHAT_MESSAGE",
+                "[" + caller.getFullName() + "] - [Phiên họp: " + agendaItem.getMeeting().getTitle() + "] - [Đầu mục: " + agendaItem.getTitle() + "]: " + content,
+                Map.of("meetingId", agendaItem.getMeeting().getId().toString(), "agendaItemId", agendaItem.getId().toString())
+            );
+        }
+
+        return response;
     }
 
     /**
@@ -306,7 +385,12 @@ public class AgendaItemService {
     public AgendaItemResponse approveDocs(UUID id) {
         AgendaItem agendaItem = validateAndGetAgendaForApproval(id);
         agendaItem.setStatus(AgendaItemStatus.APPROVED);
-        return toResponseWithDocs(agendaItemRepository.save(agendaItem));
+        AgendaItem saved = agendaItemRepository.save(agendaItem);
+        AgendaItemResponse response = toResponseWithDocs(saved);
+
+        notifyAgendaUpdate(saved, "APPROVE_DOCS", "Tài liệu đã được duyệt", currentUserService.getCurrentActiveUser());
+
+        return response;
     }
 
     /**
@@ -334,7 +418,16 @@ public class AgendaItemService {
                 .build();
         agendaItemFeedbackRepository.save(feedback);
 
-        return toResponseWithDocs(savedAgendaItem);
+        AgendaItemResponse response = toResponseWithDocs(savedAgendaItem);
+
+        // Gửi thông báo WebSocket
+        webSocketNotificationService.sendToTopic(
+            "/topic/meeting/" + savedAgendaItem.getMeeting().getId() + "/agenda/" + savedAgendaItem.getId() + "/chat",
+            response.getFeedbacks()
+        );
+        notifyAgendaUpdate(savedAgendaItem, "REJECT_DOCS", "Tài liệu bị từ chối duyệt (Lý do: " + rejectContent + ")", caller);
+
+        return response;
     }
 
     /**
@@ -368,23 +461,7 @@ public class AgendaItemService {
      */
     @Transactional
     public AgendaItemResponse startAgenda(UUID meetingId, UUID id) {
-        Meeting meeting = getMeeting(meetingId);
-        User caller = currentUserService.getCurrentActiveUser();
-        
-        if (meeting.getCreatedBy() == null || !meeting.getCreatedBy().getId().equals(caller.getId())) {
-            throw new AppException(ErrorCode.AGENDA_MODIFICATION_FORBIDDEN);
-        }
-        if (meeting.getStatus() != MeetingStatus.IN_PROGRESS) {
-            throw new AppException(ErrorCode.MEETING_STATUS_TRANSITION_INVALID);
-        }
-
-        AgendaItem agendaItem = agendaItemRepository.findById(id)
-                .orElseThrow(() -> new AppException(ErrorCode.AGENDA_ITEM_NOT_FOUND));
-
-        if (!agendaItem.getMeeting().getId().equals(meetingId)) {
-            throw new AppException(ErrorCode.AGENDA_ITEM_NOT_FOUND);
-        }
-
+        AgendaItem agendaItem = getAgendaAndRequireCreator(meetingId, id);
         agendaItem.setStatus(AgendaItemStatus.IN_PROGRESS);
         return toResponseWithDocs(agendaItemRepository.save(agendaItem));
     }
@@ -394,22 +471,7 @@ public class AgendaItemService {
      */
     @Transactional
     public AgendaItemResponse completeAgenda(UUID meetingId, UUID id) {
-        Meeting meeting = getMeeting(meetingId);
-        User caller = currentUserService.getCurrentActiveUser();
-        
-        if (meeting.getCreatedBy() == null || !meeting.getCreatedBy().getId().equals(caller.getId())) {
-            throw new AppException(ErrorCode.AGENDA_MODIFICATION_FORBIDDEN);
-        }
-        if (meeting.getStatus() != MeetingStatus.IN_PROGRESS) {
-            throw new AppException(ErrorCode.MEETING_STATUS_TRANSITION_INVALID);
-        }
-
-        AgendaItem agendaItem = agendaItemRepository.findById(id)
-                .orElseThrow(() -> new AppException(ErrorCode.AGENDA_ITEM_NOT_FOUND));
-
-        if (!agendaItem.getMeeting().getId().equals(meetingId)) {
-            throw new AppException(ErrorCode.AGENDA_ITEM_NOT_FOUND);
-        }
+        AgendaItem agendaItem = getAgendaAndRequireCreator(meetingId, id);
         if (agendaItem.getStatus() != AgendaItemStatus.IN_PROGRESS) {
             throw new AppException(ErrorCode.MEETING_STATUS_TRANSITION_INVALID);
         }
@@ -423,23 +485,7 @@ public class AgendaItemService {
      */
     @Transactional
     public AgendaItemResponse skipAgenda(UUID meetingId, UUID id) {
-        Meeting meeting = getMeeting(meetingId);
-        User caller = currentUserService.getCurrentActiveUser();
-        
-        if (meeting.getCreatedBy() == null || !meeting.getCreatedBy().getId().equals(caller.getId())) {
-            throw new AppException(ErrorCode.AGENDA_MODIFICATION_FORBIDDEN);
-        }
-        if (meeting.getStatus() != MeetingStatus.IN_PROGRESS) {
-            throw new AppException(ErrorCode.MEETING_STATUS_TRANSITION_INVALID);
-        }
-
-        AgendaItem agendaItem = agendaItemRepository.findById(id)
-                .orElseThrow(() -> new AppException(ErrorCode.AGENDA_ITEM_NOT_FOUND));
-
-        if (!agendaItem.getMeeting().getId().equals(meetingId)) {
-            throw new AppException(ErrorCode.AGENDA_ITEM_NOT_FOUND);
-        }
-
+        AgendaItem agendaItem = getAgendaAndRequireCreator(meetingId, id);
         agendaItem.setStatus(AgendaItemStatus.SKIPPED);
         return toResponseWithDocs(agendaItemRepository.save(agendaItem));
     }
@@ -519,6 +565,7 @@ public class AgendaItemService {
 
         // 8. Tạo hoặc cập nhật các agenda items trong bộ nhớ
         List<AgendaItem> itemsToSave = new ArrayList<>();
+        List<AgendaItem> itemsToNotify = new ArrayList<>();
         Map<AgendaItem, List<UUID>> docsToSync = new java.util.HashMap<>();
         Map<AgendaItem, List<MotionUpsertRequest>> motionsToSync = new java.util.HashMap<>();
 
@@ -533,6 +580,20 @@ public class AgendaItemService {
                 item = new AgendaItem();
                 item.setMeeting(meeting);
                 item.setStatus(AgendaItemStatus.DRAFT);
+            }
+
+            // Check if preparer is newly assigned
+            User oldPreparedBy = item.getPreparedByUser();
+            User newPreparedBy = null;
+            if (req.getPreparedByUserId() != null) {
+                newPreparedBy = preparerMap.get(req.getPreparedByUserId());
+            }
+
+            boolean isNewAssignment = false;
+            if (newPreparedBy != null) {
+                if (oldPreparedBy == null || !oldPreparedBy.getId().equals(newPreparedBy.getId())) {
+                    isNewAssignment = true;
+                }
             }
 
             // Gán các trường
@@ -551,6 +612,10 @@ public class AgendaItemService {
                 item.setPreparedByUser(preparedBy);
             } else {
                 item.setPreparedByUser(null);
+            }
+
+            if (isNewAssignment) {
+                itemsToNotify.add(item);
             }
 
             itemsToSave.add(item);
@@ -580,6 +645,13 @@ public class AgendaItemService {
         agendaItemRepository.saveAll(itemsToSave);
         agendaItemRepository.flush();
 
+        // 10.5. Tải toàn bộ feedbacks cho các saved items để tối ưu in-memory
+        List<UUID> savedIds = itemsToSave.stream().map(AgendaItem::getId).filter(Objects::nonNull).collect(Collectors.toList());
+        List<AgendaItemFeedback> allFeedbacks = agendaItemFeedbackRepository.findByAgendaItemIdInOrderByCreatedAtAsc(savedIds);
+        Map<UUID, List<AgendaItemFeedback>> feedbacksByAgendaId = allFeedbacks.stream()
+                .filter(fb -> fb.getAgendaItem() != null)
+                .collect(Collectors.groupingBy(fb -> fb.getAgendaItem().getId()));
+
         // 11. Đồng bộ tài liệu đính kèm, biểu quyết và tạo Response
         List<AgendaItemResponse> responses = new ArrayList<>();
         User caller = currentUserService.getCurrentActiveUser();
@@ -593,8 +665,10 @@ public class AgendaItemService {
             List<MotionUpsertRequest> motionReqs = motionsToSync.get(item);
             List<Motion> finalMotions = syncMotions(meeting, item, motionReqs, caller);
             
+            List<AgendaItemFeedback> itemFeedbacks = new ArrayList<>(feedbacksByAgendaId.getOrDefault(item.getId(), Collections.emptyList()));
+
             if (req.getPrepInstructions() != null) {
-                List<AgendaItemFeedback> existingInstructions = agendaItemFeedbackRepository.findByAgendaItemIdOrderByCreatedAtAsc(item.getId()).stream()
+                List<AgendaItemFeedback> existingInstructions = itemFeedbacks.stream()
                         .filter(f -> "INSTRUCTION".equals(f.getType()))
                         .collect(Collectors.toList());
                 
@@ -611,12 +685,33 @@ public class AgendaItemService {
                             .createdAt(LocalDateTime.now())
                             .build();
                     agendaItemFeedbackRepository.save(newFeedback);
+                    itemFeedbacks.add(newFeedback);
                 }
             }
             
-            responses.add(toResponseWithPreloadedDocs(item, finalDocs, finalMotions));
+            responses.add(toResponseWithPreloadedDocs(item, finalDocs, finalMotions, itemFeedbacks));
         }
-
+ 
+        // Gửi thông báo WebSocket
+        for (AgendaItem item : itemsToNotify) {
+            if (item.getPreparedByUser() != null) {
+                webSocketNotificationService.sendNotificationToUser(
+                    item.getPreparedByUser().getUsername(),
+                    "ASSIGN_PREPARER",
+                    "[" + caller.getFullName() + "] - [Phiên họp: " + item.getMeeting().getTitle() + "] - [Đầu mục: " + item.getTitle() + "]: Bạn được gán chuẩn bị tài liệu",
+                    Map.of("meetingId", meetingId.toString(), "agendaItemId", item.getId().toString())
+                );
+            }
+        }
+        webSocketNotificationService.sendToTopic(
+            "/topic/meeting-updates",
+            Map.of("action", "REFRESH_MEETING_LIST", "meetingId", meetingId.toString())
+        );
+        webSocketNotificationService.sendToTopic(
+            "/topic/meeting/" + meetingId,
+            Map.of("action", "REFRESH_MEETING_DETAIL")
+        );
+ 
         return responses;
     }
 
@@ -853,6 +948,43 @@ public class AgendaItemService {
             throw new AppException(ErrorCode.MEETING_STATUS_TRANSITION_INVALID);
         }
     }
+    private void notifyAgendaUpdate(AgendaItem agendaItem, String action, String message, User caller) {
+        if (agendaItem.getPreparedByUser() != null) {
+            webSocketNotificationService.sendNotificationToUser(
+                agendaItem.getPreparedByUser().getUsername(),
+                action,
+                "[" + caller.getFullName() + "] - [Phiên họp: " + agendaItem.getMeeting().getTitle() 
+                    + "] - [Đầu mục: " + agendaItem.getTitle() + "]: " + message,
+                Map.of("meetingId", agendaItem.getMeeting().getId().toString(), 
+                       "agendaItemId", agendaItem.getId().toString())
+            );
+        }
+        webSocketNotificationService.sendToTopic(
+            "/topic/meeting/" + agendaItem.getMeeting().getId(),
+            Map.of("action", "REFRESH_MEETING_DETAIL", "status", agendaItem.getMeeting().getStatus().name())
+        );
+    }
+
+    private AgendaItem getAgendaAndRequireCreator(UUID meetingId, UUID id) {
+        Meeting meeting = getMeeting(meetingId);
+        User caller = currentUserService.getCurrentActiveUser();
+        
+        if (meeting.getCreatedBy() == null || !meeting.getCreatedBy().getId().equals(caller.getId())) {
+            throw new AppException(ErrorCode.AGENDA_MODIFICATION_FORBIDDEN);
+        }
+        if (meeting.getStatus() != MeetingStatus.IN_PROGRESS) {
+            throw new AppException(ErrorCode.MEETING_STATUS_TRANSITION_INVALID);
+        }
+
+        AgendaItem agendaItem = agendaItemRepository.findById(id)
+                .orElseThrow(() -> new AppException(ErrorCode.AGENDA_ITEM_NOT_FOUND));
+
+        if (!agendaItem.getMeeting().getId().equals(meetingId)) {
+            throw new AppException(ErrorCode.AGENDA_ITEM_NOT_FOUND);
+        }
+        return agendaItem;
+    }
+
     private AgendaItemResponse toResponseWithDocs(AgendaItem agendaItem) {
         List<MeetingDocument> mDocs = meetingDocumentRepository.findByAgendaItemId(agendaItem.getId());
         List<Motion> motions = motionRepository.findByAgendaItemId(agendaItem.getId());
@@ -860,6 +992,11 @@ public class AgendaItemService {
     }
 
     private AgendaItemResponse toResponseWithPreloadedDocs(AgendaItem agendaItem, List<MeetingDocument> mDocs, List<Motion> motions) {
+        List<AgendaItemFeedback> feedbacks = agendaItemFeedbackRepository.findByAgendaItemIdOrderByCreatedAtAsc(agendaItem.getId());
+        return toResponseWithPreloadedDocs(agendaItem, mDocs, motions, feedbacks);
+    }
+
+    private AgendaItemResponse toResponseWithPreloadedDocs(AgendaItem agendaItem, List<MeetingDocument> mDocs, List<Motion> motions, List<AgendaItemFeedback> feedbacks) {
         AgendaItemResponse res = agendaItemMapper.toResponse(agendaItem);
         List<AgendaDocumentResponse> docsResponse = new ArrayList<>();
         
@@ -883,7 +1020,6 @@ public class AgendaItemService {
         }
         res.setDocuments(docsResponse);
 
-        List<AgendaItemFeedback> feedbacks = agendaItemFeedbackRepository.findByAgendaItemIdOrderByCreatedAtAsc(agendaItem.getId());
         List<AgendaItemFeedbackResponse> fbResponses = feedbacks.stream()
                 .map(fb -> AgendaItemFeedbackResponse.builder()
                         .id(fb.getId())

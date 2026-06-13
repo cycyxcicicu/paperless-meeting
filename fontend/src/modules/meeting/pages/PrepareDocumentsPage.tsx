@@ -4,11 +4,13 @@ import { ArrowLeft, Calendar, MapPin, Clock, AlertCircle, CheckCircle2, FileUp, 
 import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
 import { useAuth } from '@/app/context/AuthContext';
+import { useWebSocket } from '@/app/context/WebSocketContext';
 import { meetingApi, MeetingResponse, AgendaItemResponse } from '../services/meeting.api';
 import { FileUploader } from '@/common/components/ui/FileUploader';
 import { Button } from '@/common/components/ui/button';
 import { Textarea } from '@/common/components/ui/textarea';
 import { toast } from '@/lib/toast';
+import { FeedbackChatSection } from '../components/FeedbackChatSection';
 
 const STATUS_BADGES: Record<string, { label: string; className: string }> = {
   DRAFT: { label: 'Bản nháp', className: 'bg-gray-100 text-gray-700 border-gray-200' },
@@ -22,6 +24,7 @@ export default function PrepareDocumentsPage() {
   const { id: meetingId } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { subscribe } = useWebSocket();
 
   const [meeting, setMeeting] = useState<MeetingResponse | null>(null);
   const [agendaItems, setAgendaItems] = useState<AgendaItemResponse[]>([]);
@@ -30,11 +33,12 @@ export default function PrepareDocumentsPage() {
   
   // Track files for each agenda item: agendaItemId -> array of File objects
   const [agendaFiles, setAgendaFiles] = useState<Record<string, File[]>>({});
-  const [chatInputs, setChatInputs] = useState<Record<string, string>>({});
 
-  const loadData = async () => {
+  const loadData = async (silent = false) => {
     if (!meetingId) return;
-    setLoading(true);
+    if (!silent) {
+      setLoading(true);
+    }
     try {
       const [meetingRes, agendaRes] = await Promise.all([
         meetingApi.getMeetingById(meetingId),
@@ -43,7 +47,7 @@ export default function PrepareDocumentsPage() {
 
       if (meetingRes.success && meetingRes.data) {
         setMeeting(meetingRes.data);
-      } else {
+      } else if (!silent) {
         toast.error("Lỗi", "Không thể tải thông tin cuộc họp.");
       }
 
@@ -51,32 +55,75 @@ export default function PrepareDocumentsPage() {
         setAgendaItems(agendaRes.data);
 
         // Initialize files state for each agenda item
-        const initialFiles: Record<string, File[]> = {};
-        agendaRes.data.forEach(item => {
-          initialFiles[item.id] = (item.documents || []).map(doc => {
-            // Reconstruct a File-like object from document response
-            const mockFile = new File([], doc.fileName || doc.title || "Tài liệu", { type: "application/octet-stream" });
-            Object.defineProperty(mockFile, 'size', { value: doc.fileSize || 0 });
-            // Add custom documentId property to distinguish existing files
-            Object.defineProperty(mockFile, 'documentId', { value: doc.documentId, writable: true });
-            return mockFile;
+        setAgendaFiles(prev => {
+          const updatedFiles = { ...prev };
+          agendaRes.data.forEach(item => {
+            // Check if there are unsaved files (files without documentId) in the local state
+            const hasUnsavedFiles = (prev[item.id] || []).some(f => !(f as any).documentId);
+            
+            // Only overwrite from server if the user doesn't have unsaved files
+            if (!hasUnsavedFiles) {
+              updatedFiles[item.id] = (item.documents || []).map(doc => {
+                const mockFile = new File([], doc.fileName || doc.title || "Tài liệu", { type: "application/octet-stream" });
+                Object.defineProperty(mockFile, 'size', { value: doc.fileSize || 0 });
+                Object.defineProperty(mockFile, 'documentId', { value: doc.documentId, writable: true });
+                return mockFile;
+              });
+            }
           });
+          return updatedFiles;
         });
-        setAgendaFiles(initialFiles);
-      } else {
+      } else if (!silent) {
         toast.error("Lỗi", "Không thể tải chương trình họp.");
       }
     } catch (error) {
       console.error("Error loading preparation data:", error);
-      toast.error("Lỗi kết nối", "Đã xảy ra lỗi khi tải dữ liệu từ máy chủ.");
+      if (!silent) {
+        toast.error("Lỗi kết nối", "Đã xảy ra lỗi khi tải dữ liệu từ máy chủ.");
+      }
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   };
 
   useEffect(() => {
     loadData();
   }, [meetingId]);
+
+  useEffect(() => {
+    if (!meetingId) return;
+
+    const unsubscribe = subscribe(`/topic/meeting/${meetingId}`, (message: any) => {
+      if (message.action === "REFRESH_MEETING_DETAIL") {
+        loadData(true);
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [subscribe, meetingId]);
+
+  useEffect(() => {
+    if (!meetingId || agendaItems.length === 0) return;
+
+    const unsubscribers = agendaItems.map(item => {
+      return subscribe(`/topic/meeting/${meetingId}/agenda/${item.id}/chat`, (newFeedbacks: any) => {
+        setAgendaItems(prevItems => prevItems.map(prev => {
+          if (prev.id === item.id) {
+            return { ...prev, feedbacks: newFeedbacks };
+          }
+          return prev;
+        }));
+      });
+    });
+
+    return () => {
+      unsubscribers.forEach(unsub => unsub());
+    };
+  }, [subscribe, meetingId, agendaItems.map(item => item.id).join(',')]);
 
   // Filter agenda items that are assigned to the current user
   const assignedItems = agendaItems.filter(item => item.preparedByUserId === user?.id);
@@ -120,7 +167,7 @@ export default function PrepareDocumentsPage() {
       if (submitRes.success) {
         toast.success("Nộp tài liệu thành công", "Tài liệu của bạn đã được gửi đi phê duyệt.");
         // Refresh local data to show updated statuses and documents
-        await loadData();
+        await loadData(true);
       } else {
         toast.error("Nộp tài liệu thất bại", submitRes.message || "Đã xảy ra lỗi.");
       }
@@ -132,24 +179,7 @@ export default function PrepareDocumentsPage() {
     }
   };
 
-  const handleSendChat = async (agendaItemId: string) => {
-    const text = chatInputs[agendaItemId] || "";
-    if (!text.trim()) return;
 
-    try {
-      const res = await meetingApi.addFeedback(agendaItemId, text.trim(), "RESPONSE");
-      if (res.success) {
-        setChatInputs(prev => ({ ...prev, [agendaItemId]: "" }));
-        toast.success("Đã gửi ý kiến thành công");
-        await loadData();
-      } else {
-        toast.error("Lỗi", res.message || "Không thể gửi ý kiến.");
-      }
-    } catch (error: any) {
-      console.error("Error sending feedback:", error);
-      toast.error("Lỗi kết nối", error.message || "Đã xảy ra lỗi khi gửi ý kiến.");
-    }
-  };
 
   if (loading) {
     return (
@@ -195,7 +225,7 @@ export default function PrepareDocumentsPage() {
         <Button
           variant="outline"
           size="sm"
-          onClick={loadData}
+          onClick={() => loadData(true)}
           className="flex items-center gap-1.5 border-gray-300 rounded-xl bg-white hover:bg-gray-50 text-gray-700"
         >
           <RefreshCw className="h-4 w-4" />
@@ -290,78 +320,13 @@ export default function PrepareDocumentsPage() {
                       </div>
                     )}
 
-                    {/* Lịch sử trao đổi / Giao việc */}
-                    <div className="space-y-2">
-                      <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider block">
-                        Lịch sử trao đổi / Ý kiến phản hồi
-                      </span>
-                      <div className="border border-gray-100 rounded-xl bg-gray-50/50 p-3 space-y-3">
-                        {item.feedbacks && item.feedbacks.length > 0 ? (
-                          <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
-                            {item.feedbacks.map((fb) => {
-                              const isInstruction = fb.type === 'INSTRUCTION';
-                              const isResponse = fb.type === 'RESPONSE';
-                              return (
-                                <div
-                                  key={fb.id}
-                                  className={`p-2.5 rounded-xl border text-sm transition-all duration-200 ${
-                                    isInstruction
-                                      ? 'bg-blue-50/70 border-blue-100 text-blue-900'
-                                      : isResponse
-                                      ? 'bg-emerald-50/70 border-emerald-100 text-emerald-900'
-                                      : 'bg-red-50/70 border-red-100 text-red-900'
-                                  }`}
-                                >
-                                  <div className="flex justify-between items-center mb-1 text-xs font-medium opacity-80">
-                                    <span>{fb.authorName || (isInstruction ? 'Người duyệt' : isResponse ? 'Người chuẩn bị' : 'Người duyệt')}</span>
-                                    <span>
-                                      {new Date(fb.createdAt).toLocaleDateString('vi-VN', {
-                                        hour: '2-digit',
-                                        minute: '2-digit',
-                                        day: '2-digit',
-                                        month: '2-digit',
-                                        year: 'numeric',
-                                      })}
-                                    </span>
-                                  </div>
-                                  <p className="whitespace-pre-wrap leading-relaxed text-[13px]">
-                                    <span className="font-semibold block mb-0.5 text-xs opacity-75">
-                                      {isInstruction 
-                                        ? '📌 Hướng dẫn chuẩn bị:' 
-                                        : isResponse 
-                                        ? '📤 Phản hồi từ người chuẩn bị:' 
-                                        : '⚠️ Lý do từ chối:'}
-                                    </span>
-                                    {fb.content}
-                                  </p>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        ) : (
-                          <p className="text-xs text-gray-500 italic">Chưa có lịch sử trao đổi.</p>
-                        )}
-
-                        {/* Chat Input for sending feedback/questions */}
-                        <div className="flex gap-2">
-                          <input
-                            type="text"
-                            value={chatInputs[item.id] || ''}
-                            onChange={(e) => setChatInputs(prev => ({ ...prev, [item.id]: e.target.value }))}
-                            placeholder="Nhập ý kiến phản hồi hoặc câu hỏi của bạn..."
-                            className="flex-1 bg-white border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#C8102E] focus:border-[#C8102E]"
-                          />
-                          {(chatInputs[item.id] || '').trim().length > 0 && (
-                            <Button
-                              onClick={() => handleSendChat(item.id)}
-                              className="bg-[#C8102E] hover:bg-[#A90F14] text-white rounded-xl text-xs font-semibold px-4 animate-in fade-in slide-in-from-right-1 duration-200"
-                            >
-                              Gửi
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
+                    <FeedbackChatSection
+                      agendaItemId={item.id}
+                      feedbacks={item.feedbacks}
+                      feedbackType="RESPONSE"
+                      placeholder="Nhập ý kiến phản hồi hoặc câu hỏi của bạn..."
+                      onSuccess={() => loadData(true)}
+                    />
 
                     {/* File Uploader */}
                     <div className="space-y-2">

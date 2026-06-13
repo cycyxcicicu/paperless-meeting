@@ -15,7 +15,6 @@ export interface User {
   department?: any;
   role?: any;
   position?: any;
-  permissions?: string[];
 }
 
 interface AuthContextType {

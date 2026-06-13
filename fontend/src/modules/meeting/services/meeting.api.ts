@@ -40,6 +40,8 @@ export interface MeetingResponse {
   canDelete?: boolean;
   canSubmitApproval?: boolean;
   canUploadDocs?: boolean;
+  canApprove?: boolean;
+  rejectReason?: string;
 }
 
 export interface AgendaDocumentResponse {
@@ -64,7 +66,7 @@ export interface AgendaItemFeedbackResponse {
   id: string;
   authorName: string;
   content: string;
-  type: 'INSTRUCTION' | 'REJECTION';
+  type: 'INSTRUCTION' | 'REJECTION' | 'RESPONSE';
   createdAt: string;
 }
 
@@ -85,6 +87,58 @@ export interface AgendaItemResponse {
   documents: AgendaDocumentResponse[];
   motions?: MotionResponse[];
   feedbacks?: AgendaItemFeedbackResponse[];
+  prepInstructions?: string;
+}
+
+export interface MeetingUpsertRequest {
+  title: string;
+  startTime: string;
+  endTime: string;
+  locationId?: string;
+  departmentId?: string;
+  content?: string | null;
+  agendaFile?: { id: string; name: string; url: string } | null;
+  onlineLink?: string;
+  rsvpDeadline?: string;
+  lateAfterMinutes?: number;
+}
+
+export interface ParticipantRequest {
+  userId: string;
+  participantRole: 'CHAIR' | 'SECRETARY' | 'PARTICIPANT';
+}
+
+export interface GuestRequest {
+  fullName: string;
+  email: string;
+  phone?: string;
+  company?: string;
+  position?: string;
+  note?: string;
+}
+
+export interface AttendeesSubmitRequest {
+  participants: ParticipantRequest[];
+  guests: GuestRequest[];
+}
+
+export interface MotionUpsertRequest {
+  id?: string;
+  title: string;
+  description?: string;
+}
+
+export interface AgendaItemUpsertRequest {
+  id?: string;
+  title: string;
+  content?: string;
+  durationEst: number;
+  preparedByUserId?: string;
+  startTime: string;
+  endTime: string;
+  orderNo: number;
+  documentIds?: string[];
+  motions?: MotionUpsertRequest[];
   prepInstructions?: string;
 }
 
@@ -184,15 +238,15 @@ export const meetingApi = {
     });
   },
 
-  createMeeting: (data: any): Promise<ApiResponse<MeetingResponse>> => {
+  createMeeting: (data: MeetingUpsertRequest): Promise<ApiResponse<MeetingResponse>> => {
     return api.post('/meetings', data);
   },
 
-  updateMeeting: (id: string, data: any): Promise<ApiResponse<MeetingResponse>> => {
+  updateMeeting: (id: string, data: MeetingUpsertRequest): Promise<ApiResponse<MeetingResponse>> => {
     return api.put(`/meetings/${id}`, data);
   },
 
-  createAgendaItem: (meetingId: string, data: any[]): Promise<ApiResponse<AgendaItemResponse[]>> => {
+  createAgendaItem: (meetingId: string, data: AgendaItemUpsertRequest[]): Promise<ApiResponse<AgendaItemResponse[]>> => {
     return api.post(`/meetings/${meetingId}/agenda-items`, data);
   },
 
@@ -204,11 +258,11 @@ export const meetingApi = {
     return api.delete(`/meetings/${meetingId}/agenda-items/${id}`);
   },
 
-  submitAttendees: (meetingId: string, data: any): Promise<ApiResponse<void>> => {
+  submitAttendees: (meetingId: string, data: AttendeesSubmitRequest): Promise<ApiResponse<void>> => {
     return api.post(`/meetings/${meetingId}/attendees`, data);
   },
 
-  attachDocument: (meetingId: string, data: any): Promise<ApiResponse<any>> => {
+  attachDocument: (meetingId: string, data: { title: string; docType: string; documentId: string; note?: string }): Promise<ApiResponse<any>> => {
     return api.post(`/meetings/${meetingId}/documents`, data);
   },
 
@@ -235,6 +289,16 @@ export const meetingApi = {
   getSpeakersQueue: (meetingId: string, status?: string): Promise<ApiResponse<any[]>> => {
     return api.get(`/meetings/${meetingId}/speakers/queue`, {
       params: { status }
+    });
+  },
+
+  approveMeeting: (id: string): Promise<ApiResponse<void>> => {
+    return api.post(`/meetings/${id}/approve`);
+  },
+
+  rejectMeeting: (id: string, rejectReason: string): Promise<ApiResponse<void>> => {
+    return api.post(`/meetings/${id}/reject`, null, {
+      params: { rejectReason }
     });
   }
 };
