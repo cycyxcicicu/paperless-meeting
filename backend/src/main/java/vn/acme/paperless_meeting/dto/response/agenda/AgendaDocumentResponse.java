@@ -16,4 +16,6 @@ public class AgendaDocumentResponse {
     private String fileName;
     private Long fileSize;
     private MeetingDocumentUsageType usageType;
+    private UUID createdByUserId;
+    private String createdByFullName;
 }

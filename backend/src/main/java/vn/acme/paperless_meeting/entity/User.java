@@ -104,8 +104,7 @@ public class User extends SoftDeletable {
         @OneToMany(mappedBy = "createdBy")
         private List<DocTemplate> docTemplateList = new ArrayList<>();
 
-        @OneToMany(mappedBy = "createdBy")
-        private List<GeneratedDocument> generatedDocumentList = new ArrayList<>();
+
 
         @OneToMany(mappedBy = "user")
         private List<MeetingParticipant> meetingParticipantList = new ArrayList<>();
@@ -135,14 +134,7 @@ public class User extends SoftDeletable {
         @JoinColumn(name = "role_id")
         private Role role;
 
-        @OneToMany(mappedBy = "user")
-        private List<AclPrincipal> aclPrincipalList = new ArrayList<>();
 
-        @OneToMany(mappedBy = "grantedBy")
-        private List<AclEntry> aclEntryList = new ArrayList<>();
-
-        @OneToMany(mappedBy = "user")
-        private List<DocumentAccessLog> documentAccessLogList = new ArrayList<>();
 
         @OneToMany(mappedBy = "requestedBy")
         private List<ApprovalRequest> approvalRequestList = new ArrayList<>();

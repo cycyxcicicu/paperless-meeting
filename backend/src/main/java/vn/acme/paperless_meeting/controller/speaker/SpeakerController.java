@@ -15,6 +15,7 @@ import vn.acme.paperless_meeting.dto.request.speaker.StartTurnRequest;
 import vn.acme.paperless_meeting.dto.base.ApiResponse;
 import vn.acme.paperless_meeting.dto.response.speaker.SpeakerQueueResponse;
 import vn.acme.paperless_meeting.dto.response.speaker.SpeakerTurnResponse;
+import vn.acme.paperless_meeting.entity.enums.SpeakerQueueStatus;
 import vn.acme.paperless_meeting.service.speaker.SpeakerService;
 
 @RestController
@@ -26,7 +27,7 @@ public class SpeakerController {
     SpeakerService speakerService;
 
     @PostMapping("/request")
-    @PreAuthorize("hasAnyRole('ADMIN', 'USER')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DEPARTMENT_ADMIN', 'USER')")
     public ApiResponse<SpeakerQueueResponse> requestToSpeak(
             @PathVariable UUID meetingId,
             @RequestParam(required = false) UUID agendaItemId) {
@@ -36,7 +37,7 @@ public class SpeakerController {
     }
 
     @DeleteMapping("/request/{queueId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'USER')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DEPARTMENT_ADMIN', 'USER')")
     public ApiResponse<Void> cancelRequest(
             @PathVariable UUID meetingId,
             @PathVariable UUID queueId) {
@@ -45,7 +46,7 @@ public class SpeakerController {
     }
 
     @PutMapping("/reject/{queueId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'USER')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DEPARTMENT_ADMIN', 'USER')")
     public ApiResponse<Void> rejectRequest(
             @PathVariable UUID meetingId,
             @PathVariable UUID queueId) {
@@ -54,17 +55,17 @@ public class SpeakerController {
     }
 
     @GetMapping("/queue")
-    @PreAuthorize("hasAnyRole('ADMIN', 'USER')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DEPARTMENT_ADMIN', 'USER')")
     public ApiResponse<List<SpeakerQueueResponse>> getQueue(
             @PathVariable UUID meetingId,
-            @RequestParam(required = false) vn.acme.paperless_meeting.entity.enums.SpeakerQueueStatus status) {
+            @RequestParam(required = false) SpeakerQueueStatus status) {
         return ApiResponse.<List<SpeakerQueueResponse>>builder()
                 .data(speakerService.getQueue(meetingId, status))
                 .build();
     }
 
     @PutMapping("/reorder")
-    @PreAuthorize("hasAnyRole('ADMIN', 'USER')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DEPARTMENT_ADMIN', 'USER')")
     public ApiResponse<Void> reorderQueue(
             @PathVariable UUID meetingId,
             @RequestBody ReorderQueueRequest request) {
@@ -73,7 +74,7 @@ public class SpeakerController {
     }
 
     @PostMapping("/start-turn/{queueId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'USER')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DEPARTMENT_ADMIN', 'USER')")
     public ApiResponse<SpeakerTurnResponse> startTurn(
             @PathVariable UUID meetingId,
             @PathVariable UUID queueId,
@@ -84,7 +85,7 @@ public class SpeakerController {
     }
 
     @PostMapping("/start-direct-turn")
-    @PreAuthorize("hasAnyRole('ADMIN', 'USER')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DEPARTMENT_ADMIN', 'USER')")
     public ApiResponse<SpeakerTurnResponse> startDirectTurn(
             @PathVariable UUID meetingId,
             @RequestBody StartDirectTurnRequest request) {
@@ -94,7 +95,7 @@ public class SpeakerController {
     }
 
     @PostMapping("/stop-turn/{turnId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'USER')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DEPARTMENT_ADMIN', 'USER')")
     public ApiResponse<SpeakerTurnResponse> stopTurn(
             @PathVariable UUID meetingId,
             @PathVariable UUID turnId) {

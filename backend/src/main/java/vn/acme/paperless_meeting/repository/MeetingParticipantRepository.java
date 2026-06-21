@@ -29,6 +29,10 @@ public interface MeetingParticipantRepository extends JpaRepository<MeetingParti
 
 	long countByMeetingIdAndParticipantRole(UUID meetingId, ParticipantRole participantRole);
 
+	long countByMeetingIdAndParticipantRoleNot(UUID meetingId, ParticipantRole participantRole);
+
+	List<MeetingParticipant> findBySubstituteForParticipantId(UUID substituteForParticipantId);
+
 	void deleteByMeetingIdAndUserId(UUID meetingId, UUID userId);
 
 	@Query("SELECT COUNT(mp) > 0 FROM MeetingParticipant mp " +
@@ -46,4 +50,11 @@ public interface MeetingParticipantRepository extends JpaRepository<MeetingParti
 		@Param("startTime") LocalDateTime startTime,
 		@Param("endTime") LocalDateTime endTime
 	);
+
+	@EntityGraph(attributePaths = {"user", "user.department", "user.position", "substituteUser", "meeting"})
+	List<MeetingParticipant> findByMeetingIdIn(List<UUID> meetingIds);
+
+	@Query("SELECT COUNT(mp) > 0 FROM MeetingParticipant mp " +
+		   "WHERE mp.meeting.id IN :meetingIds AND mp.user.id = :userId")
+	boolean isUserParticipantOfAnyMeeting(@Param("meetingIds") List<UUID> meetingIds, @Param("userId") UUID userId);
 }

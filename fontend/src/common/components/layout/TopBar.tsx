@@ -19,6 +19,7 @@ import { LazyScrollContainer } from "@/common/components/ui/LazyScrollContainer"
 
 import { useAuth } from "@/app/context/AuthContext";
 import { hasRoutePermission } from "@/app/routes/config";
+import { api } from '@/lib/api/axios';
 
 const TopBar = () => {
     const location = useLocation();
@@ -44,29 +45,93 @@ const TopBar = () => {
     };
     
     // State cho lazy load thông báo
-    const [displayNotifications, setDisplayNotifications] = useState([
-        { id: 1, title: "Cuộc họp mới", message: "Họp ban Thường vụ lúc 14:00", time: "5 phút trước", unread: true },
-        { id: 2, title: "Tài liệu mới", message: "Báo cáo tháng 4 đã được tải lên", time: "1 giờ trước", unread: true },
-        { id: 3, title: "Phê duyệt", message: "Yêu cầu #1234 đã được phê duyệt", time: "3 giờ trước", unread: false },
-        { id: 4, title: "Thông báo hệ thống", message: "Hệ thống sẽ bảo trì vào 23:00 tối nay", time: "5 giờ trước", unread: false },
-        { id: 5, title: "Nhắc lịch", message: "Bạn có lịch công tác vào sáng mai", time: "1 ngày trước", unread: false },
-    ]);
+    const [displayNotifications, setDisplayNotifications] = useState<any[]>([]);
     const [isLoadingMore, setIsLoadingMore] = useState(false);
-    const [hasMoreNotifs, setHasMoreNotifs] = useState(true);
+    const [hasMoreNotifs, setHasMoreNotifs] = useState(false);
+    const [currentPage, setCurrentPage] = useState(0);
+
+    const formatTime = (dateStr: string) => {
+        if (!dateStr) return '';
+        try {
+            const date = new Date(dateStr);
+            const now = new Date();
+            const diffMs = now.getTime() - date.getTime();
+            const diffMins = Math.floor(diffMs / (1000 * 60));
+            const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+            const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+            if (diffMins < 1) return 'Vừa xong';
+            if (diffMins < 60) return `${diffMins} phút trước`;
+            if (diffHours < 24) return `${diffHours} giờ trước`;
+            return `${diffDays} ngày trước`;
+        } catch (e) {
+            return '';
+        }
+    };
+
+    const fetchNotifications = async (page: number, append: boolean = false) => {
+        try {
+            setIsLoadingMore(true);
+            const res: any = await api.get('/notifications', {
+                params: { page, size: 15 }
+            });
+            
+            // res = { success, data: Page<NotificationDTO>, message }
+            // Page có: content, last, totalElements, ...
+            const pageData = res?.data;
+            if (res?.success && pageData && pageData.content) {
+                const mapped = pageData.content.map((notif: any) => ({
+                    id: notif.id,
+                    title: notif.type === 'MEETING_POSTPONED' ? 'Hoãn cuộc họp' : notif.type === 'MEETING_CANCELLED' ? 'Hủy cuộc họp' : 'Thông báo',
+                    message: notif.content,
+                    time: formatTime(notif.scheduledAt),
+                    unread: notif.unread
+                }));
+
+                if (append) {
+                    setDisplayNotifications(prev => [...prev, ...mapped]);
+                } else {
+                    setDisplayNotifications(mapped);
+                }
+                
+                setHasMoreNotifs(!pageData.last);
+                setCurrentPage(page);
+            }
+        } catch (e) {
+            console.error("Failed to fetch notifications", e);
+        } finally {
+            setIsLoadingMore(false);
+        }
+    };
+
+    useEffect(() => {
+        if (!user) return;
+
+        fetchNotifications(0, false);
+
+        const handleNewNotification = (event: Event) => {
+            const customEvent = event as CustomEvent;
+            const payload = customEvent.detail;
+            
+            const newNotif = {
+                id: payload.id || Date.now().toString(),
+                title: payload.type === 'MEETING_POSTPONED' ? 'Hoãn cuộc họp' : payload.type === 'MEETING_CANCELLED' ? 'Hủy cuộc họp' : 'Thông báo',
+                message: payload.message || payload.content,
+                time: 'Vừa xong',
+                unread: true
+            };
+            setDisplayNotifications(prev => [newNotif, ...prev]);
+        };
+
+        window.addEventListener('ws:notification:any', handleNewNotification);
+        return () => {
+            window.removeEventListener('ws:notification:any', handleNewNotification);
+        };
+    }, [user]);
 
     const handleLoadMoreNotifs = () => {
         if (isLoadingMore || !hasMoreNotifs) return;
-        
-        setIsLoadingMore(true);
-        setTimeout(() => {
-            const newNotifs = [
-                { id: Date.now() + 1, title: "Thông báo cũ hơn", message: "Dữ liệu được tải thêm qua Lazy Load", time: "2 ngày trước", unread: false },
-                { id: Date.now() + 2, title: "Thông báo cũ hơn", message: "Tính năng này giúp giảm tải cho trình duyệt", time: "3 ngày trước", unread: false },
-            ];
-            setDisplayNotifications(prev => [...prev, ...newNotifs]);
-            setIsLoadingMore(false);
-            if (displayNotifications.length > 15) setHasMoreNotifs(false);
-        }, 1000);
+        fetchNotifications(currentPage + 1, true);
     };
 
     // Refs for click outside logic
@@ -224,35 +289,53 @@ const TopBar = () => {
                                         isLoading={isLoadingMore}
                                         itemCount={displayNotifications.length}
                                     >
-                                        {displayNotifications.map((notif) => (
-                                            <div
-                                                key={notif.id}
-                                                className={cn(
-                                                    "p-4 border-b border-gray-50 hover:bg-gray-50/50 transition-colors cursor-pointer",
-                                                    notif.unread && "bg-blue-50/30",
-                                                )}
-                                            >
-                                                <div className="flex items-start gap-3">
-                                                    <div
-                                                        className={cn(
-                                                            "w-2 h-2 rounded-full mt-1.5 shrink-0",
-                                                            notif.unread ? "bg-[#C8102E]" : "bg-gray-300",
-                                                        )}
-                                                    />
-                                                    <div className="flex-1 min-w-0">
-                                                        <p className="text-sm btn-primary text-gray-900 mb-0.5">
-                                                            {notif.title}
-                                                        </p>
-                                                        <p className="text-xs text-gray-600 mb-1">
-                                                            {notif.message}
-                                                        </p>
-                                                        <p className="text-[10px] text-gray-400 body">
-                                                            {notif.time}
-                                                        </p>
+                                        {displayNotifications.length === 0 ? (
+                                            <div className="p-8 text-center text-gray-400 text-xs">
+                                                Không có thông báo nào
+                                            </div>
+                                        ) : (
+                                            displayNotifications.map((notif) => (
+                                                <div
+                                                    key={notif.id}
+                                                    onClick={async () => {
+                                                        if (notif.unread) {
+                                                            try {
+                                                                await api.post(`/notifications/${notif.id}/read`);
+                                                                setDisplayNotifications(prev => 
+                                                                    prev.map(n => n.id === notif.id ? { ...n, unread: false } : n)
+                                                                );
+                                                            } catch (e) {
+                                                                console.error("Failed to mark as read", e);
+                                                            }
+                                                        }
+                                                    }}
+                                                    className={cn(
+                                                        "p-4 border-b border-gray-50 hover:bg-gray-50/50 transition-colors cursor-pointer",
+                                                        notif.unread && "bg-blue-50/30",
+                                                    )}
+                                                >
+                                                    <div className="flex items-start gap-3">
+                                                        <div
+                                                            className={cn(
+                                                                "w-2 h-2 rounded-full mt-1.5 shrink-0",
+                                                                notif.unread ? "bg-[#C8102E]" : "bg-gray-300",
+                                                            )}
+                                                        />
+                                                        <div className="flex-1 min-w-0">
+                                                            <p className="text-sm btn-primary text-gray-900 mb-0.5">
+                                                                {notif.title}
+                                                            </p>
+                                                            <p className="text-xs text-gray-600 mb-1">
+                                                                {notif.message}
+                                                            </p>
+                                                            <p className="text-[10px] text-gray-400 body">
+                                                                {notif.time}
+                                                            </p>
+                                                        </div>
                                                     </div>
                                                 </div>
-                                            </div>
-                                        ))}
+                                            ))
+                                        )}
                                     </LazyScrollContainer>
                                 </motion.div>
                             )}

@@ -20,6 +20,7 @@ import vn.acme.paperless_meeting.dto.base.ApiResponse;
 import vn.acme.paperless_meeting.dto.base.PageResponse;
 import vn.acme.paperless_meeting.dto.request.location.LocationUpsertRequest;
 import vn.acme.paperless_meeting.dto.response.location.LocationResponse;
+import vn.acme.paperless_meeting.dto.response.location.LocationStatsResponse;
 import vn.acme.paperless_meeting.service.location.LocationService;
 
 @RestController
@@ -43,9 +44,9 @@ public class LocationController {
 	}
 
 	@GetMapping("/stats")
-	public ApiResponse<vn.acme.paperless_meeting.dto.response.location.LocationStatsResponse> getStats(
+	public ApiResponse<LocationStatsResponse> getStats(
 			@RequestParam(required = false) UUID departmentId) {
-		return ApiResponse.<vn.acme.paperless_meeting.dto.response.location.LocationStatsResponse>builder()
+		return ApiResponse.<LocationStatsResponse>builder()
 				.success(true)
 				.message("Lấy thống kê địa điểm thành công")
 				.data(locationService.getStats(departmentId))

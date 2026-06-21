@@ -36,7 +36,7 @@ public class VoteStatusJob {
                 if (now.isAfter(expireTime)) {
                     motionService.completeVoteSession(session);
                     if (session.getMotion() != null) {
-                        log.info("Auto closed expired VoteSession ID: {} for Motion: {}", session.getId(), session.getMotion().getTitle());
+                        log.info("Tự động đóng phiên biểu quyết hết hạn - VoteSession ID: {} cho Motion: {}", session.getId(), session.getMotion().getTitle());
                     }
                 }
             }

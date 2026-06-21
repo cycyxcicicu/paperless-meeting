@@ -22,6 +22,7 @@ import vn.acme.paperless_meeting.dto.base.ApiResponse;
 import vn.acme.paperless_meeting.dto.base.PageResponse;
 import vn.acme.paperless_meeting.dto.request.position.PositionUpsertRequest;
 import vn.acme.paperless_meeting.dto.response.position.PositionResponse;
+import vn.acme.paperless_meeting.dto.response.position.PositionStatsResponse;
 import vn.acme.paperless_meeting.service.position.PositionService;
 
 @RestController
@@ -51,8 +52,8 @@ public class PositionController {
      * Get position stats
      */
     @GetMapping("/stats")
-    public ApiResponse<vn.acme.paperless_meeting.dto.response.position.PositionStatsResponse> getStats() {
-        return ApiResponse.<vn.acme.paperless_meeting.dto.response.position.PositionStatsResponse>builder()
+    public ApiResponse<PositionStatsResponse> getStats() {
+        return ApiResponse.<PositionStatsResponse>builder()
                 .success(true)
                 .message("Lấy thông số thống kê chức vụ thành công")
                 .data(positionService.getStats())

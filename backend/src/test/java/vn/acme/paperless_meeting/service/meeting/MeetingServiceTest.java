@@ -74,6 +74,18 @@ class MeetingServiceTest {
     vn.acme.paperless_meeting.service.motion.MotionService motionService;
     @Mock
     RoleRepository roleRepository;
+    @Mock
+    vn.acme.paperless_meeting.repository.MeetingGuestRepository meetingGuestRepository;
+    @Mock
+    vn.acme.paperless_meeting.repository.DocTemplateRepository docTemplateRepository;
+    @Mock
+    vn.acme.paperless_meeting.service.notification.NotificationService notificationService;
+    @Mock
+    vn.acme.paperless_meeting.service.document.InvitationPdfService invitationPdfService;
+    @Mock
+    org.springframework.context.ApplicationEventPublisher eventPublisher;
+    @Mock
+    vn.acme.paperless_meeting.service.websocket.WebSocketNotificationService webSocketNotificationService;
 
     @InjectMocks
     MeetingService meetingService;

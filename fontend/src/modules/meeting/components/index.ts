@@ -9,7 +9,6 @@ export * from './ConfirmActionModal';
 export * from './ConfirmAttendanceModal';
 export * from './MeetingActionMenu';
 export * from './NoiDungHopStep';
-export * from './PostponeModal';
 export * from './RichTextEditor';
 export * from './SelectSpeakerModal';
 export * from './SelectUnitModal';

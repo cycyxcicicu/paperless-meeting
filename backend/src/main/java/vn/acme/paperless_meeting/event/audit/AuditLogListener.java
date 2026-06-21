@@ -34,12 +34,12 @@ public class AuditLogListener {
             }
             
             auditLogRepository.save(auditLog);
-            log.info("Saved AuditLog: Action={}, ResourceType={}, ResourceId={}", 
+            log.info("Đã lưu Nhật ký hệ thống (AuditLog): Hành động={}, Loại tài nguyên={}, ID tài nguyên={}", 
                      event.getAction(), event.getResourceType(), event.getResourceId());
         } catch (JsonProcessingException e) {
-            log.error("Failed to serialize AuditLog metadata: {}", e.getMessage(), e);
+            log.error("Lỗi tuần tự hóa metadata của AuditLog: {}", e.getMessage(), e);
         } catch (Exception e) {
-            log.error("Failed to save AuditLog: {}", e.getMessage(), e);
+            log.error("Lưu AuditLog thất bại: {}", e.getMessage(), e);
         }
     }
 }

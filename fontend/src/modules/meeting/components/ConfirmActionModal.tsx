@@ -2,7 +2,7 @@ import React from 'react';
 import { X, AlertTriangle, Send, XCircle, Clock } from 'lucide-react';
 import { cn } from '@/common/utils/cn';
 
-type ActionType = 'cancel' | 'send' | 'postpone' | 'end';
+type ActionType = 'cancel' | 'send' | 'end' | 'revertToDraft';
 
 interface ConfirmActionModalProps {
   isOpen: boolean;
@@ -21,7 +21,15 @@ export const ConfirmActionModal: React.FC<ConfirmActionModalProps> = ({
 }) => {
   if (!isOpen) return null;
 
-  const getModalContent = () => {
+  const getModalContent = (): {
+    icon: React.ComponentType<any>;
+    iconColor: string;
+    iconBg: string;
+    title: string;
+    message: string;
+    confirmText: string;
+    confirmVariant: 'danger' | 'primary' | 'warning';
+  } => {
     switch (actionType) {
       case 'cancel':
         return {
@@ -38,21 +46,12 @@ export const ConfirmActionModal: React.FC<ConfirmActionModalProps> = ({
           icon: Send,
           iconColor: 'text-[#C8102E]',
           iconBg: 'bg-red-50',
-          title: 'Gửi phiên họp',
-          message: 'Bạn có chắc chắn muốn gửi phiên họp này?',
-          confirmText: 'Gửi phiên họp',
+          title: 'Công bố phiên họp',
+          message: 'Bạn có chắc chắn muốn công bố phiên họp này?',
+          confirmText: 'Công bố phiên họp',
           confirmVariant: 'primary' as const,
         };
-      case 'postpone':
-        return {
-          icon: Clock,
-          iconColor: 'text-amber-600',
-          iconBg: 'bg-amber-50',
-          title: 'Hoãn phiên họp',
-          message: 'Bạn có chắc chắn muốn hoãn phiên họp này?',
-          confirmText: 'Hoãn phiên họp',
-          confirmVariant: 'warning' as const,
-        };
+
       case 'end':
         return {
           icon: AlertTriangle,
@@ -63,6 +62,18 @@ export const ConfirmActionModal: React.FC<ConfirmActionModalProps> = ({
           confirmText: 'Kết thúc',
           confirmVariant: 'danger' as const,
         };
+
+      case 'revertToDraft':
+        return {
+          icon: Clock,
+          iconColor: 'text-[#C8102E]',
+          iconBg: 'bg-red-50',
+          title: 'Thiết lập lại thời gian họp',
+          message: 'Thời gian bắt đầu phiên họp phải trước ít nhất 30 phút. Bạn có muốn thiết lập lại thời gian họp không? (Phiên họp sẽ được chuyển về Bản nháp để bạn chỉnh sửa).',
+          confirmText: 'Đồng ý',
+          confirmVariant: 'primary' as const,
+        };
+
       default:
         return {
           icon: AlertTriangle,
@@ -81,7 +92,6 @@ export const ConfirmActionModal: React.FC<ConfirmActionModalProps> = ({
 
   const handleConfirm = () => {
     onConfirm();
-    onClose();
   };
 
   return (

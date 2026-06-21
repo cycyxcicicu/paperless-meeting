@@ -25,6 +25,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import vn.acme.paperless_meeting.entity.base.SoftDeletable;
 import vn.acme.paperless_meeting.entity.enums.ChannelType;
+import vn.acme.paperless_meeting.entity.enums.SendStatus;
 
 @Getter
 @Setter
@@ -52,7 +53,7 @@ public class MeetingInvitation extends SoftDeletable {
 
         @Enumerated(EnumType.STRING)
         @Column(name = "send_status")
-        private vn.acme.paperless_meeting.entity.enums.SendStatus sendStatus = vn.acme.paperless_meeting.entity.enums.SendStatus.PENDING;
+        private SendStatus sendStatus = SendStatus.PENDING;
 
         private LocalDateTime sentAt;
 

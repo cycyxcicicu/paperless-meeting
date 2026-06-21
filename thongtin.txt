@@ -1,0 +1,2182 @@
+A) CORE ENTITIES
+1) User
+Ý nghĩa: người dùng hệ thống (tạo họp, tham gia, duyệt, vote, xem tài liệu…).
+Trường
+user_id (PK): định danh duy nhất.
+
+
+username (unique): tên đăng nhập.
+
+
+password → nên là password_hash: mật khẩu dạng băm.
+
+
+email (unique): email liên hệ/nhận thư mời.
+
+
+phone: số điện thoại.
+
+
+status: trạng thái tài khoản (active/locked/inactive).
+
+
+avatar: ảnh đại diện.
+
+
+created_at: thời điểm tạo.
+
+
+Quan hệ
+User 1–N Meeting (created_by)
+
+
+User N–N Meeting qua MeetingParticipant
+
+
+User 1–N Document (created_by), DocumentVersion (created_by)
+
+
+User 1–N Minutes (created_by)
+
+
+User 1–N VoteSession (created_by), Motion (created_by), VoteBallot (user_id)
+
+
+User 1–N AttendanceLog (user_id), MeetingInvitation (invited_by, invitee_user_id)
+
+
+User 1–N Notification, AuditLog
+
+
+
+2) Department
+Ý nghĩa: phòng ban/đơn vị trong tổ chức; dùng cho scope phân quyền và sở hữu tài liệu.
+Trường
+dept_id (PK)
+
+
+dept_name: tên phòng ban.
+
+
+parent_dept_id (FK -> Department, nullable): phòng ban cha.
+
+
+Quan hệ
+Department 1–N Meeting (dept_id)
+
+
+Department 1–N Document (owner_dept_id)
+
+
+Department N–N User qua UserDepartment
+
+
+Department 1–N Department (self-reference qua parent_dept_id)
+
+
+
+3) Location
+Ý nghĩa: địa điểm họp (offline/online/hybrid).
+Trường
+location_id (PK)
+
+
+name: tên phòng/địa điểm.
+
+
+address: địa chỉ (offline).
+
+
+room_code: mã phòng (nội bộ/thiết bị) (nullable).
+
+
+online_link: link họp online (nullable).
+
+
+type: offline/online/hybrid.
+
+
+Quan hệ
+Location 1–N Meeting (location_id)
+
+
+
+4) Meeting
+Ý nghĩa: cuộc họp – thực thể trung tâm của hệ thống.
+Trường
+meeting_id (PK)
+
+
+title: tiêu đề.
+
+
+description: mô tả.
+
+
+start_time, end_time: thời gian họp.
+
+
+status: draft/scheduled/ongoing/closed/cancelled.
+
+
+created_by (FK -> User): người tạo.
+
+
+created_at: thời điểm tạo.
+
+
+location_id (FK -> Location): nơi họp.
+
+
+dept_id (FK -> Department): thuộc phòng ban nào.
+
+
+checkin_open_at: mở điểm danh.
+
+
+checkin_close_at: đóng điểm danh.
+
+
+late_after_minutes: số phút trễ tính “late”.
+
+
+cancel_reason: lý do hủy (nullable).
+
+
+Quan hệ
+Meeting 1–N AgendaItem
+
+
+Meeting N–N User qua MeetingParticipant
+
+
+Meeting 1–N MeetingInvitation
+
+
+Meeting 1–N AttendanceLog
+
+
+Meeting N–N Document qua MeetingDocument
+
+
+Meeting 1–N Minutes (thường 1–1 theo nghiệp vụ, nhưng DB có thể cho 1–N để version)
+
+
+Meeting 1–N Motion
+
+
+Meeting 1–N VoteSession
+
+
+Meeting 1–N SpeakerQueue / SpeakerTurn
+
+
+Meeting 1–N Scope (nếu scope_type=MEETING)
+
+
+
+5) AgendaItem
+Ý nghĩa: mục chương trình họp, theo thứ tự.
+Trường
+agenda_id (PK)
+
+
+meeting_id (FK -> Meeting)
+
+
+title: tên mục.
+
+
+content: nội dung mô tả.
+
+
+order_no: thứ tự.
+
+
+duration_est: thời lượng dự kiến.
+
+
+owner_user_id (FK -> User): người phụ trách chuẩn bị/trình bày.
+
+
+prep_deadline: hạn chuẩn bị.
+
+
+status: pending/in_progress/done/skipped.
+
+
+Quan hệ
+Meeting 1–N AgendaItem
+
+
+AgendaItem 1–N SpeakerQueue/SpeakerTurn
+
+
+AgendaItem 1–N Motion (agenda_id nullable)
+
+
+
+6) Minutes
+Ý nghĩa: biên bản họp (có quy trình duyệt).
+Trường
+minutes_id (PK)
+
+
+meeting_id (FK -> Meeting)
+
+
+created_by (FK -> User): thư ký tạo.
+
+
+content: nội dung biên bản.
+
+
+status: draft/submitted/approved/published.
+
+
+finalized_at: thời điểm chốt.
+
+
+version_no: phiên bản (nếu sửa nhiều lần).
+
+
+Quan hệ
+Meeting 1–N Minutes (thực tế thường 1–1)
+
+
+Minutes 1–N ApprovalRequest (qua resource_type/resource_id)
+
+
+
+7) Document
+Ý nghĩa: metadata tài liệu (tài liệu họp, báo cáo, slide, template, file sinh ra…).
+Trường
+doc_id (PK)
+
+
+title: tên tài liệu.
+
+
+doc_type: agenda_doc/report/slides/minutes_attachment/other.
+
+
+created_by (FK -> User), created_at
+
+
+current_version_id (FK -> DocumentVersion): version hiện hành.
+
+
+owner_dept_id (FK -> Department): đơn vị sở hữu.
+
+
+status: draft/in_review/approved/published/archived.
+
+
+Quan hệ
+Document 1–N DocumentVersion
+
+
+Document N–N Meeting qua MeetingDocument
+
+
+Document 1–N DocumentAccessLog
+
+
+Document 1–N ApprovalRequest (DOCUMENT)
+
+
+Document 1–N DocTemplate (file_doc_id)
+
+
+Document 1–N GeneratedDocument (generated_doc_id)
+
+
+
+8) DocumentVersion
+Ý nghĩa: version file thực tế của tài liệu.
+Trường
+version_id (PK)
+
+
+doc_id (FK -> Document)
+
+
+storage_key/file_url: nơi lưu file.
+
+
+file_name: tên file.
+
+
+file_size: dung lượng.
+
+
+checksum: kiểm tra toàn vẹn.
+
+
+created_at, created_by (FK -> User)
+
+
+note: mô tả thay đổi.
+
+
+Quan hệ
+Document 1–N DocumentVersion
+
+
+DocumentAccessLog N–1 DocumentVersion (version_id nullable)
+
+
+
+9) Motion
+Ý nghĩa: đề xuất/nghị quyết để đưa ra vote.
+Trường
+motion_id (PK)
+
+
+meeting_id (FK -> Meeting)
+
+
+agenda_id (FK -> AgendaItem, nullable)
+
+
+title, description
+
+
+created_by (FK -> User), created_at
+
+
+status: draft/submitted/withdrawn/closed.
+
+
+Quan hệ
+Meeting 1–N Motion
+
+
+Motion 1–N VoteSession
+
+
+
+10) VoteSession
+Ý nghĩa: một phiên biểu quyết cho một Motion.
+Trường
+vote_session_id (PK)
+
+
+motion_id (FK -> Motion)
+
+
+meeting_id (FK -> Meeting)
+
+
+created_by (FK -> User)
+
+
+opened_at, closed_at
+
+
+status: scheduled/open/closed/cancelled
+
+
+vote_type: yes_no / yes_no_abstain / multiple_choice
+
+
+is_anonymous: ẩn danh khi hiển thị kết quả
+
+
+allow_change_vote: cho đổi phiếu khi đang open
+
+
+quorum_required_pct: % quorum tối thiểu
+
+
+pass_rule: simple_majority/two_thirds/custom
+
+
+pass_threshold_pct: ngưỡng khi custom
+
+
+min_choices: tối thiểu option cần chọn (multiple_choice)
+
+
+max_choices: tối đa option được chọn (multiple_choice)
+
+
+Quan hệ
+VoteSession 1–N VoteOption
+
+
+VoteSession 1–N VoteEligibility
+
+
+VoteSession 1–N VoteBallot
+
+
+VoteSession 1–1 VoteResult
+
+
+VoteSession 1–N VoteResultOption
+
+
+VoteSession có thể được ACL (AclEntry resource_type=VOTE_SESSION)
+
+
+
+11) DocTemplate
+Ý nghĩa: mẫu Word (thư mời/biên bản…), lưu như 1 Document.
+Trường
+template_id (PK)
+
+
+name: tên mẫu
+
+
+template_type: INVITATION/MINUTES/AGENDA/RESOLUTION…
+
+
+file_doc_id (FK -> Document): file template
+
+
+owner_dept_id (FK -> Department, nullable)
+
+
+status: active/inactive
+
+
+created_by (FK -> User), created_at
+
+
+Quan hệ
+DocTemplate 1–N TemplateField
+
+
+DocTemplate 1–N GeneratedDocument
+
+
+
+12) TemplateField
+Ý nghĩa: khai báo biến/placeholder trong template và mapping dữ liệu.
+Trường
+field_id (PK)
+
+
+template_id (FK -> DocTemplate)
+
+
+field_key: tên biến (MEETING_TITLE…)
+
+
+source_type: MEETING/USER/DEPARTMENT/MINUTES/AGENDA/VOTE…
+
+
+source_path: đường dẫn lấy dữ liệu (Meeting.title…)
+
+
+format_rule: định dạng (dd/MM/yyyy…)
+
+
+is_required: bắt buộc hay không
+
+
+Quan hệ
+DocTemplate 1–N TemplateField
+
+
+
+13) GeneratedDocument
+Ý nghĩa: file sinh ra từ template + dữ liệu meeting.
+Trường
+generated_id (PK)
+
+
+template_id (FK -> DocTemplate)
+
+
+meeting_id (FK -> Meeting, nullable)
+
+
+generated_doc_id (FK -> Document): file kết quả
+
+
+created_by (FK -> User), created_at
+
+
+status: generated/sent/archived
+
+
+params_json: tham số nhập thêm ngoài DB
+
+
+Quan hệ
+DocTemplate 1–N GeneratedDocument
+
+
+Meeting 1–N GeneratedDocument (nếu có)
+
+
+Document 1–N GeneratedDocument (generated_doc_id)
+
+
+
+B) HỖ TRỢ NGHIỆP VỤ
+14) UserDepartment
+Ý nghĩa: gán user vào nhiều phòng ban (N–N).
+Trường
+user_id (FK -> User)
+
+
+dept_id (FK -> Department)
+
+
+is_primary: phòng ban chính
+
+
+Quan hệ
+User N–N Department qua UserDepartment
+
+
+
+15) MeetingParticipant
+Ý nghĩa: danh sách tham gia họp + vai trò + RSVP + trạng thái tham dự.
+Trường
+meeting_id (FK -> Meeting)
+
+
+user_id (FK -> User) (unique theo cặp meeting_id,user_id)
+
+
+participant_role: chair/secretary/member/guest
+
+
+invite_status: invited/accepted/declined/tentative/no_response
+
+
+attendance_status: present/late/absent/excused
+
+
+note
+
+
+Quan hệ
+Meeting N–N User qua MeetingParticipant
+
+
+
+16) MeetingInvitation
+Ý nghĩa: log mời họp theo kênh (email/sms/app).
+Trường
+invitation_id (PK)
+
+
+meeting_id (FK -> Meeting)
+
+
+invitee_user_id (FK -> User)
+
+
+invited_by (FK -> User)
+
+
+channel: email/sms/app
+
+
+sent_at
+
+
+message
+
+
+rsvp_deadline
+
+
+Quan hệ
+Meeting 1–N MeetingInvitation
+
+
+User 1–N MeetingInvitation (invited_by)
+
+
+User 1–N MeetingInvitation (invitee_user_id)
+
+
+
+17) AttendanceLog
+Ý nghĩa: nhật ký điểm danh checkin/checkout.
+Trường
+attendance_id (PK)
+
+
+meeting_id (FK -> Meeting)
+
+
+user_id (FK -> User)
+
+
+checkin_time, checkout_time
+
+
+method: qr/manual/gps/nfc
+
+
+status: present/late/absent/excused
+
+
+late_minutes
+
+
+recorded_by (FK -> User) (nullable nếu tự check-in)
+
+
+note
+
+
+Quan hệ
+Meeting 1–N AttendanceLog
+
+
+User 1–N AttendanceLog
+
+
+
+18) MeetingDocument
+Ý nghĩa: gắn tài liệu vào cuộc họp (N–N).
+Trường
+meeting_id (FK -> Meeting)
+
+
+doc_id (FK -> Document)
+
+
+usage_type: agenda/appendix/minutes_attachment
+
+
+required_before_meeting: bắt buộc đọc trước
+
+
+Quan hệ
+Meeting N–N Document qua MeetingDocument
+
+
+
+19) SpeakerQueue
+Ý nghĩa: hàng đợi phát biểu theo agenda.
+Trường
+queue_id (PK)
+
+
+meeting_id (FK -> Meeting)
+
+
+agenda_id (FK -> AgendaItem)
+
+
+user_id (FK -> User)
+
+
+requested_at
+
+
+priority: chair_override/normal
+
+
+queue_status: queued/speaking/done/cancelled
+
+
+Quan hệ
+AgendaItem 1–N SpeakerQueue
+
+
+User 1–N SpeakerQueue
+
+
+Meeting 1–N SpeakerQueue
+
+
+
+20) SpeakerTurn
+Ý nghĩa: lượt phát biểu thực tế (đo thời gian).
+Trường
+turn_id (PK)
+
+
+meeting_id (FK -> Meeting)
+
+
+agenda_id (FK -> AgendaItem)
+
+
+user_id (FK -> User)
+
+
+start_at, end_at
+
+
+duration_seconds
+
+
+created_by (FK -> User) (chair/secretary)
+
+
+Quan hệ
+AgendaItem 1–N SpeakerTurn
+
+
+User 1–N SpeakerTurn
+
+
+Meeting 1–N SpeakerTurn
+
+
+
+C) PHÂN QUYỀN & KIỂM SOÁT TRUY CẬP
+21) Role
+role_id (PK)
+
+
+role_name
+
+
+22) Permission
+perm_id (PK)
+
+
+perm_code
+
+
+description
+
+
+23) RolePermission
+Ý nghĩa: N–N giữa Role và Permission.
+role_id (FK -> Role)
+
+
+perm_id (FK -> Permission)
+
+
+Quan hệ
+Role N–N Permission qua RolePermission
+
+
+
+24) Scope
+Ý nghĩa: phạm vi phân quyền.
+scope_id (PK)
+
+
+scope_type: SYSTEM/DEPARTMENT/MEETING
+
+
+dept_id (FK -> Department, nullable)
+
+
+meeting_id (FK -> Meeting, nullable)
+
+
+Quan hệ
+Department 1–N Scope (khi scope_type=DEPARTMENT)
+
+
+Meeting 1–N Scope (khi scope_type=MEETING)
+
+
+
+25) UserRoleScope
+Ý nghĩa: gán role cho user trong scope.
+Trường
+user_id (FK -> User)
+
+
+role_id (FK -> Role)
+
+
+scope_id (FK -> Scope)
+
+
+assigned_by (FK -> User)
+
+
+assigned_at
+
+
+Quan hệ
+User N–N Role (có điều kiện scope) qua UserRoleScope
+
+
+
+26) AclPrincipal
+Ý nghĩa: đối tượng được cấp quyền ACL.
+Trường
+principal_id (PK)
+
+
+principal_type: USER/ROLE/DEPARTMENT
+
+
+user_id (nullable)
+
+
+role_id (nullable)
+
+
+dept_id (nullable)
+
+
+Quan hệ
+AclPrincipal 1–N AclEntry
+
+
+
+27) AclEntry
+Ý nghĩa: cấp quyền cụ thể trên tài nguyên cụ thể.
+Trường
+acl_id (PK)
+
+
+resource_type: MEETING/DOCUMENT/MINUTES/VOTE_SESSION
+
+
+resource_id: id của tài nguyên
+
+
+principal_id (FK -> AclPrincipal)
+
+
+permission_code: VIEW/DOWNLOAD/EDIT/SHARE/APPROVE/MANAGE/VIEW_RESULT
+
+
+granted_by (FK -> User)
+
+
+granted_at
+
+
+expires_at (nullable)
+
+
+Quan hệ
+AclPrincipal 1–N AclEntry
+
+
+(logic) AclEntry áp dụng cho Meeting/Document/Minutes/VoteSession theo resource_type/resource_id
+
+
+
+28) DocumentAccessLog
+Ý nghĩa: log truy cập tài liệu.
+Trường
+log_id (PK)
+
+
+doc_id (FK -> Document)
+
+
+version_id (FK -> DocumentVersion, nullable)
+
+
+user_id (FK -> User)
+
+
+action: view/download/preview
+
+
+accessed_at
+
+
+ip_address (nullable)
+
+
+device (nullable)
+
+
+Quan hệ
+Document 1–N DocumentAccessLog
+
+
+User 1–N DocumentAccessLog
+
+
+
+29) ApprovalRequest
+Ý nghĩa: yêu cầu duyệt cho Document hoặc Minutes.
+Trường
+approval_id (PK)
+
+
+resource_type: DOCUMENT/MINUTES
+
+
+resource_id
+
+
+requested_by (FK -> User)
+
+
+requested_at
+
+
+status: pending/approved/rejected/cancelled
+
+
+note
+
+
+Quan hệ
+ApprovalRequest 1–N ApprovalStep
+
+
+
+30) ApprovalStep
+Ý nghĩa: từng bước duyệt.
+Trường
+step_id (PK)
+
+
+approval_id (FK -> ApprovalRequest)
+
+
+step_no
+
+
+approver_user_id (hoặc approver_role_id): ai duyệt
+
+
+decision: pending/approved/rejected
+
+
+decided_at
+
+
+comment
+
+
+Quan hệ
+ApprovalRequest 1–N ApprovalStep
+
+
+
+D) VOTING TABLES
+31) VoteOption
+option_id (PK)
+
+
+vote_session_id (FK -> VoteSession)
+
+
+label
+
+
+order_no
+
+
+Quan hệ
+VoteSession 1–N VoteOption
+
+
+
+32) VoteEligibility
+vote_session_id (FK -> VoteSession)
+
+
+user_id (FK -> User)
+
+
+eligible (bool)
+
+
+reason
+
+
+Quan hệ
+VoteSession 1–N VoteEligibility
+
+
+User 1–N VoteEligibility
+
+
+
+33) VoteBallot
+Ý nghĩa: phiếu của 1 user trong 1 session (1 người 1 ballot).
+Trường
+ballot_id (PK)
+
+
+vote_session_id (FK -> VoteSession)
+
+
+user_id (FK -> User) (unique với vote_session_id)
+
+
+cast_at
+
+
+weight
+
+
+is_valid
+
+
+invalid_reason
+
+
+Quan hệ
+VoteSession 1–N VoteBallot
+
+
+User 1–N VoteBallot
+
+
+VoteBallot 1–N VoteBallotChoice
+
+
+
+34) VoteBallotChoice
+Ý nghĩa: các lựa chọn mà ballot chọn (hỗ trợ chọn 1 hoặc nhiều).
+Trường
+ballot_id (FK -> VoteBallot)
+
+
+option_id (FK -> VoteOption)
+
+
+Quan hệ
+VoteBallot 1–N VoteBallotChoice
+
+
+VoteOption 1–N VoteBallotChoice
+ => thực chất là N–N giữa Ballot và Option qua bảng này.
+
+
+
+35) VoteResult
+vote_session_id (PK/FK -> VoteSession)
+
+
+total_eligible
+
+
+total_cast
+
+
+total_valid
+
+
+passed (bool)
+
+
+computed_at
+
+
+computed_by (FK -> User)
+
+
+Quan hệ
+VoteSession 1–1 VoteResult
+
+
+
+36) VoteResultOption
+Ý nghĩa: kết quả theo từng option.
+Trường
+vote_session_id (FK -> VoteSession)
+
+
+option_id (FK -> VoteOption)
+
+
+vote_count
+
+
+weight_sum
+
+
+Quan hệ
+VoteSession 1–N VoteResultOption
+
+
+VoteOption 1–N VoteResultOption
+
+
+
+E) AUDIT & NOTIFICATION
+37) AuditLog
+Ý nghĩa: ghi log hành động quan trọng để audit.
+Trường
+log_id (PK)
+
+
+actor_user_id (FK -> User): ai thao tác
+
+
+action: loại hành động (CREATE_MEETING, OPEN_VOTE…)
+
+
+resource_type: loại tài nguyên
+
+
+resource_id: id tài nguyên
+
+
+created_at: thời điểm
+
+
+meta_json: dữ liệu chi tiết (old/new, extra info)
+
+
+Quan hệ
+User 1–N AuditLog
+
+
+
+38) Notification
+Ý nghĩa: thông báo/nhắc việc (mời họp, nhắc chuẩn bị, nhắc duyệt, nhắc tới lượt…).
+Trường
+noti_id (PK)
+
+
+user_id (FK -> User): người nhận
+
+
+type: loại thông báo
+
+
+content: nội dung
+
+
+channel: app/email/sms
+
+
+scheduled_at: thời điểm dự kiến gửi
+
+
+sent_at: thời điểm đã gửi (nullable)
+
+
+status: pending/sent/failed
+
+
+ref_type: loại đối tượng liên quan (MEETING/DOCUMENT/AGENDA/VOTE…)
+
+
+ref_id: id đối tượng liên quan
+
+
+Quan hệ
+User 1–N Notification
+A) CORE ENTITIES
+1) User
+Ý nghĩa: Tài khoản người dùng trong hệ thống: tạo họp, tham gia, duyệt, bỏ phiếu, xem tài liệu, nhận thông báo…
+Trường & giải thích
+user_id (PK): định danh duy nhất (UUID).
+
+
+username (UNIQUE): tên đăng nhập. UNIQUE để không trùng tài khoản.
+
+
+password_hash: mật khẩu đã băm (BCrypt/Argon2). Không lưu plain text.
+
+
+email (UNIQUE): email nhận thông báo / thư mời. UNIQUE để tránh trùng định danh liên hệ.
+
+
+phone: số điện thoại (OTP/nhắc SMS).
+
+
+status: trạng thái tài khoản (ACTIVE/LOCKED/INACTIVE).
+
+
+avatar: URL/đường dẫn ảnh đại diện.
+
+
+created_at: thời điểm tạo.
+
+
+UNIQUE
+UNIQUE(username) (bắt buộc)
+
+
+UNIQUE(email) (bắt buộc)
+
+
+UNIQUE(phone) (khuyến nghị nếu dùng phone làm định danh/OTP; nếu không thì bỏ)
+
+
+Vì sao: tránh trùng tài khoản, trùng email, trùng số điện thoại.
+INDEX
+INDEX(status) (lọc user theo trạng thái)
+
+
+INDEX(created_at) (sort/lọc theo thời gian tạo)
+
+
+
+2) Department
+Ý nghĩa: Phòng ban/đơn vị tổ chức. Dùng cho sở hữu tài liệu và scope phân quyền.
+Trường & giải thích
+dept_id (PK)
+
+
+dept_name: tên phòng ban.
+
+
+parent_dept_id (FK, nullable): phòng ban cha (tạo cây tổ chức).
+
+
+UNIQUE
+UNIQUE(parent_dept_id, dept_name) (khuyến nghị mạnh)
+
+
+Vì sao: cho phép “Phòng Kế toán” tồn tại ở nhánh khác, nhưng không trùng tên trong cùng cấp.
+INDEX
+INDEX(parent_dept_id) (load cây phòng ban nhanh)
+
+
+
+3) Location
+Ý nghĩa: Địa điểm họp (offline/online/hybrid).
+Trường & giải thích
+location_id (PK)
+
+
+name: tên phòng/địa điểm.
+
+
+address: địa chỉ (offline).
+
+
+room_code (nullable): mã phòng (thiết bị, nội bộ).
+
+
+online_link (nullable): link họp online.
+
+
+type: OFFLINE/ONLINE/HYBRID.
+
+
+UNIQUE
+UNIQUE(room_code) (tuỳ nghiệp vụ, nếu room_code là mã phòng duy nhất)
+
+
+INDEX
+INDEX(type) (lọc địa điểm theo loại)
+
+
+
+4) Meeting
+Ý nghĩa: Cuộc họp – thực thể trung tâm.
+Trường & giải thích
+meeting_id (PK)
+
+
+title: tiêu đề họp.
+
+
+description: mô tả.
+
+
+start_time, end_time: thời gian bắt đầu/kết thúc.
+
+
+status: DRAFT/SCHEDULED/ONGOING/CLOSED/CANCELLED.
+
+
+created_by (FK -> User): người tạo.
+
+
+created_at
+
+
+location_id (FK -> Location)
+
+
+dept_id (FK -> Department): thuộc đơn vị nào.
+
+
+checkin_open_at / checkin_close_at: mở/đóng điểm danh.
+
+
+late_after_minutes: quá số phút này thì tính “late”.
+
+
+cancel_reason (nullable): lý do huỷ.
+
+
+UNIQUE
+(không bắt buộc) nhưng khuyến nghị thêm meeting_code UNIQUE (nếu có) để dùng QR/check-in/link.
+
+
+INDEX (rất quan trọng)
+INDEX(start_time) (lịch họp theo thời gian)
+
+
+INDEX(status) (lọc họp đang diễn ra/đã đóng)
+
+
+INDEX(created_by) (danh sách họp do user tạo)
+
+
+INDEX(dept_id) (họp theo phòng ban)
+
+
+INDEX(location_id) (họp theo phòng)
+
+
+Vì sao: meeting là bảng được query nhiều nhất: lịch, danh sách theo thời gian, theo phòng ban, theo trạng thái.
+CHECK (khuyến nghị migration SQL)
+CHECK(end_time > start_time)
+
+
+
+5) AgendaItem
+Ý nghĩa: Mục chương trình họp theo thứ tự.
+Trường & giải thích
+agenda_id (PK)
+
+
+meeting_id (FK -> Meeting)
+
+
+title
+
+
+content
+
+
+order_no: thứ tự trong agenda.
+
+
+duration_est: thời lượng dự kiến (phút).
+
+
+owner_user_id (FK -> User): người phụ trách chuẩn bị/trình bày.
+
+
+prep_deadline: hạn chuẩn bị.
+
+
+status: PENDING/IN_PROGRESS/DONE/SKIPPED.
+
+
+UNIQUE
+UNIQUE(meeting_id, order_no) (bắt buộc)
+
+
+Vì sao: một cuộc họp không thể có 2 agenda cùng “số thứ tự”.
+INDEX
+INDEX(meeting_id) (load agenda của meeting)
+
+
+INDEX(owner_user_id) (agenda theo người phụ trách)
+
+
+INDEX(status) (lọc trạng thái agenda)
+
+
+
+6) Minutes
+Ý nghĩa: Biên bản họp (có quy trình duyệt).
+Trường & giải thích
+minutes_id (PK)
+
+
+meeting_id (FK)
+
+
+created_by (FK -> User): thư ký.
+
+
+content: nội dung biên bản (text/json).
+
+
+status: DRAFT/SUBMITTED/APPROVED/PUBLISHED.
+
+
+finalized_at: thời điểm chốt.
+
+
+version_no: phiên bản biên bản.
+
+
+UNIQUE
+UNIQUE(meeting_id, version_no) (khuyến nghị mạnh nếu versioning)
+
+
+Vì sao: mỗi meeting, mỗi version chỉ được tồn tại 1 bản.
+INDEX
+INDEX(meeting_id)
+
+
+INDEX(status)
+
+
+INDEX(created_by)
+
+
+
+7) Document
+Ý nghĩa: Metadata tài liệu (báo cáo, slide, file họp, template, file sinh ra…).
+Trường & giải thích
+doc_id (PK)
+
+
+title
+
+
+doc_type: AGENDA_DOC/REPORT/SLIDES/MINUTES_ATTACHMENT/OTHER
+
+
+created_by, created_at
+
+
+current_version_id (FK -> DocumentVersion): version hiện hành.
+
+
+owner_dept_id (FK -> Department)
+
+
+status: DRAFT/IN_REVIEW/APPROVED/PUBLISHED/ARCHIVED
+
+
+UNIQUE
+thường không unique theo title (vì title có thể trùng).
+
+
+INDEX
+INDEX(owner_dept_id) (tài liệu theo đơn vị)
+
+
+INDEX(status) (lọc trạng thái)
+
+
+INDEX(created_by) (tài liệu theo người tạo)
+
+
+(tuỳ dùng search) INDEX(created_at)
+
+
+Ghi chú tối ưu: current_version_id tạo vòng tham chiếu. Không sai, nhưng cần thứ tự insert/update hợp lý; hoặc dùng version_no để xác định version mới nhất.
+
+8) DocumentVersion
+Ý nghĩa: Version file thực tế.
+Trường & giải thích
+version_id (PK)
+
+
+doc_id (FK -> Document)
+
+
+storage_key/file_url: định danh file trong storage (S3/MinIO/local).
+
+
+file_name
+
+
+file_size
+
+
+checksum: kiểm tra toàn vẹn.
+
+
+created_at, created_by
+
+
+note: mô tả thay đổi.
+
+
+UNIQUE
+(khuyến nghị) thêm version_no và:
+
+
+UNIQUE(doc_id, version_no)
+
+
+Vì sao: versioning cần định danh thứ tự.
+INDEX
+INDEX(doc_id) (load version theo document)
+
+
+INDEX(created_at) (sort version mới nhất)
+
+
+INDEX(created_by)
+
+
+
+9) Motion
+Ý nghĩa: Đề xuất/nghị quyết đưa ra biểu quyết.
+Trường & giải thích
+motion_id (PK)
+
+
+meeting_id (FK)
+
+
+agenda_id (FK nullable): motion thuộc agenda nào (nếu có).
+
+
+title, description
+
+
+created_by, created_at
+
+
+status: DRAFT/SUBMITTED/WITHDRAWN/CLOSED
+
+
+UNIQUE
+không bắt buộc.
+
+
+INDEX
+INDEX(meeting_id)
+
+
+INDEX(agenda_id)
+
+
+INDEX(status)
+
+
+INDEX(created_by)
+
+
+
+10) VoteSession
+Ý nghĩa: Phiên biểu quyết cho Motion.
+Trường & giải thích
+vote_session_id (PK)
+
+
+motion_id (FK)
+
+
+meeting_id (FK)
+
+
+created_by
+
+
+opened_at, closed_at
+
+
+status: SCHEDULED/OPEN/CLOSED/CANCELLED
+
+
+vote_type: YES_NO / YES_NO_ABSTAIN / MULTIPLE_CHOICE
+
+
+is_anonymous: ẩn danh khi hiển thị kết quả
+
+
+allow_change_vote: cho đổi phiếu khi session đang open
+
+
+quorum_required_pct: % quorum tối thiểu
+
+
+pass_rule: SIMPLE_MAJORITY/TWO_THIRDS/CUSTOM
+
+
+pass_threshold_pct: dùng khi CUSTOM
+
+
+min_choices/max_choices: cho MULTIPLE_CHOICE
+
+
+UNIQUE
+không cần unique.
+
+
+INDEX
+INDEX(meeting_id) (vote theo meeting)
+
+
+INDEX(motion_id) (vote theo motion)
+
+
+INDEX(status) (lọc open/closed)
+
+
+INDEX(opened_at) (lịch sử phiên)
+
+
+CHECK (khuyến nghị)
+CHECK(closed_at >= opened_at) khi cả 2 có giá trị
+
+
+CHECK(min_choices <= max_choices) khi multiple_choice
+
+
+
+11) DocTemplate
+Ý nghĩa: Mẫu Word (thư mời/biên bản/agenda…), lưu như 1 Document.
+Trường & giải thích
+template_id (PK)
+
+
+name
+
+
+template_type: INVITATION/MINUTES/AGENDA/RESOLUTION...
+
+
+file_doc_id (FK -> Document): tài liệu template
+
+
+owner_dept_id (nullable)
+
+
+status: ACTIVE/INACTIVE
+
+
+created_by, created_at
+
+
+UNIQUE
+UNIQUE(name, template_type) (khuyến nghị mạnh)
+
+
+Vì sao: tránh tạo 2 template cùng loại và cùng tên.
+INDEX
+INDEX(template_type)
+
+
+INDEX(owner_dept_id)
+
+
+INDEX(status)
+
+
+
+12) TemplateField
+Ý nghĩa: Placeholder/biến trong template.
+Trường & giải thích
+field_id (PK)
+
+
+template_id (FK)
+
+
+field_key: tên biến (MEETING_TITLE…)
+
+
+source_type: nguồn dữ liệu MEETING/USER/...
+
+
+source_path: đường dẫn mapping (Meeting.title…)
+
+
+format_rule
+
+
+is_required
+
+
+UNIQUE
+UNIQUE(template_id, field_key) (bắt buộc)
+
+
+INDEX
+INDEX(template_id)
+
+
+
+13) GeneratedDocument
+Ý nghĩa: File sinh ra từ template + dữ liệu.
+Trường & giải thích
+generated_id (PK)
+
+
+template_id (FK)
+
+
+meeting_id (nullable): có thể sinh không gắn meeting
+
+
+generated_doc_id (FK -> Document): file kết quả
+
+
+created_by, created_at
+
+
+status: GENERATED/SENT/ARCHIVED
+
+
+params_json: tham số bổ sung
+
+
+UNIQUE
+không cần.
+
+
+INDEX
+INDEX(template_id)
+
+
+INDEX(meeting_id)
+
+
+INDEX(created_by)
+
+
+INDEX(created_at)
+
+
+
+B) HỖ TRỢ NGHIỆP VỤ
+14) UserDepartment
+Ý nghĩa: gán user vào nhiều phòng ban.
+UNIQUE / PK
+PRIMARY KEY(user_id, dept_id) (bắt buộc)
+
+
+Vì sao: tránh duplicate mapping.
+INDEX
+INDEX(dept_id) (list user theo dept)
+
+
+
+15) MeetingParticipant
+Ý nghĩa: danh sách tham dự + vai trò + RSVP.
+Trường & giải thích
+meeting_id, user_id
+
+
+participant_role: CHAIR/SECRETARY/MEMBER/GUEST
+
+
+invite_status: INVITED/ACCEPTED/DECLINED/TENTATIVE/NO_RESPONSE
+
+
+attendance_status: PRESENT/LATE/ABSENT/EXCUSED
+
+
+note
+
+
+UNIQUE
+UNIQUE(meeting_id, user_id) (bắt buộc)
+
+
+INDEX
+INDEX(user_id) (lịch họp của user)
+
+
+INDEX(invite_status) (lọc RSVP)
+
+
+INDEX(attendance_status) (thống kê tham dự)
+
+
+
+16) MeetingInvitation
+Ý nghĩa: log mời họp theo kênh.
+UNIQUE
+UNIQUE(meeting_id, invitee_user_id, channel) (khuyến nghị)
+
+
+Vì sao: tránh gửi trùng 1 kênh nhiều lần (hoặc bạn muốn cho resend thì bỏ unique và thay bằng rule khác).
+INDEX
+INDEX(meeting_id)
+
+
+INDEX(invitee_user_id)
+
+
+INDEX(sent_at)
+
+
+
+17) AttendanceLog
+Ý nghĩa: log checkin/checkout.
+UNIQUE (tuỳ nghiệp vụ)
+Nếu mỗi người chỉ checkin 1 lần/meeting:
+
+
+UNIQUE(meeting_id, user_id)
+
+
+Nếu muốn lưu nhiều log (vào/ra nhiều lần) thì không unique, thay bằng index.
+INDEX
+INDEX(meeting_id)
+
+
+INDEX(user_id)
+
+
+INDEX(checkin_time)
+
+
+
+18) MeetingDocument
+Ý nghĩa: gắn doc vào meeting.
+UNIQUE / PK
+PRIMARY KEY(meeting_id, doc_id) (bắt buộc)
+
+
+INDEX
+INDEX(doc_id) (tìm meeting liên quan tài liệu)
+
+
+
+19) SpeakerQueue
+Ý nghĩa: hàng đợi phát biểu.
+INDEX
+INDEX(meeting_id)
+
+
+INDEX(agenda_id)
+
+
+INDEX(user_id)
+
+
+INDEX(queue_status)
+
+
+
+20) SpeakerTurn
+Ý nghĩa: lượt phát biểu thực tế, đo thời gian.
+INDEX
+INDEX(meeting_id)
+
+
+INDEX(agenda_id)
+
+
+INDEX(user_id)
+
+
+
+C) PHÂN QUYỀN & KIỂM SOÁT TRUY CẬP
+21) Role
+UNIQUE
+UNIQUE(role_name) (bắt buộc)
+
+
+
+22) Permission
+UNIQUE
+UNIQUE(perm_code) (bắt buộc)
+
+
+
+23) RolePermission
+UNIQUE / PK
+PRIMARY KEY(role_id, perm_id) (bắt buộc)
+ Vì sao: tránh gán trùng quyền.
+
+
+INDEX
+INDEX(perm_id) (tìm role theo perm)
+
+
+
+24) Scope
+Ý nghĩa: phạm vi phân quyền (system/department/meeting).
+UNIQUE (khuyến nghị)
+UNIQUE(scope_type, dept_id) (khi scope_type=DEPARTMENT)
+
+
+UNIQUE(scope_type, meeting_id) (khi scope_type=MEETING)
+
+
+INDEX
+INDEX(scope_type)
+
+
+INDEX(dept_id)
+
+
+INDEX(meeting_id)
+
+
+
+25) UserRoleScope
+UNIQUE / PK
+PRIMARY KEY(user_id, role_id, scope_id) (bắt buộc)
+
+
+INDEX
+INDEX(role_id)
+
+
+INDEX(scope_id)
+
+
+INDEX(user_id) (thường PK đã cover, nhưng tuỳ DB)
+
+
+
+26) AclPrincipal
+Ý nghĩa: “đối tượng” được gán ACL (user/role/department).
+UNIQUE (khuyến nghị)
+UNIQUE(user_id)
+
+
+UNIQUE(role_id)
+
+
+UNIQUE(dept_id)
+
+
+Vì sao: mỗi user/role/dept chỉ cần 1 “principal record”.
+CHECK (khuyến nghị migration SQL)
+principal_type=USER → user_id NOT NULL và role_id/dept_id NULL
+
+
+principal_type=ROLE → role_id NOT NULL …
+
+
+principal_type=DEPARTMENT → dept_id NOT NULL …
+
+
+
+27) AclEntry
+Ý nghĩa: cấp quyền cụ thể trên resource cụ thể.
+UNIQUE
+UNIQUE(resource_type, resource_id, principal_id, permission_code) (bắt buộc)
+
+
+Vì sao: tránh cấp trùng “VIEW Document X cho user Y” nhiều lần.
+INDEX
+INDEX(resource_type, resource_id) (lookup ACL theo resource)
+
+
+INDEX(principal_id) (lookup ACL theo principal)
+
+
+INDEX(permission_code) (lọc quyền)
+
+
+
+28) DocumentAccessLog
+Ý nghĩa: log view/download tài liệu.
+INDEX
+INDEX(doc_id)
+
+
+INDEX(user_id)
+
+
+INDEX(accessed_at)
+
+
+
+29) ApprovalRequest
+Ý nghĩa: yêu cầu duyệt Document/Minutes.
+INDEX
+INDEX(resource_type, resource_id) (tìm request theo tài nguyên)
+
+
+INDEX(status) (lọc pending)
+
+
+INDEX(requested_by)
+
+
+
+30) ApprovalStep
+Ý nghĩa: từng bước duyệt.
+UNIQUE
+UNIQUE(approval_id, step_no) (bắt buộc)
+
+
+INDEX
+INDEX(approval_id) (load steps)
+
+
+INDEX(approver_user_id) (việc cần duyệt theo user)
+
+
+INDEX(decision) (lọc pending)
+
+
+CHECK (khuyến nghị)
+chỉ cho 1 trong 2: approver_user_id XOR approver_role_id
+ (hoặc chuyển sang approver_type + approver_id)
+
+
+
+D) VOTING TABLES
+31) VoteOption
+UNIQUE
+UNIQUE(vote_session_id, order_no) (bắt buộc)
+
+
+(khuyến nghị) UNIQUE(vote_session_id, label) để tránh 2 option cùng tên.
+
+
+INDEX
+INDEX(vote_session_id)
+
+
+
+32) VoteEligibility
+UNIQUE / PK
+PRIMARY KEY(vote_session_id, user_id) (bắt buộc)
+
+
+INDEX
+INDEX(user_id) (tìm vote sessions mà user thuộc eligibility)
+
+
+
+33) VoteBallot
+UNIQUE (cực quan trọng)
+UNIQUE(vote_session_id, user_id) (bắt buộc)
+
+
+Vì sao: đảm bảo 1 user chỉ có 1 ballot.
+INDEX
+INDEX(vote_session_id)
+
+
+INDEX(user_id)
+
+
+
+34) VoteBallotChoice
+UNIQUE / PK
+PRIMARY KEY(ballot_id, option_id) (bắt buộc)
+
+
+INDEX
+INDEX(option_id) (đếm phiếu theo option nhanh)
+
+
+
+35) VoteResult
+UNIQUE / PK
+PRIMARY KEY(vote_session_id) (bắt buộc)
+
+
+INDEX
+INDEX(computed_at)
+
+
+
+36) VoteResultOption
+UNIQUE / PK
+PRIMARY KEY(vote_session_id, option_id) (bắt buộc)
+
+
+
+E) AUDIT & NOTIFICATION
+37) AuditLog
+Ý nghĩa: log hành động phục vụ audit.
+INDEX (rất quan trọng)
+INDEX(actor_user_id) (log theo người thao tác)
+
+
+INDEX(resource_type, resource_id) (log theo tài nguyên)
+
+
+INDEX(created_at) (lọc theo thời gian)
+
+
+
+38) Notification
+Ý nghĩa: thông báo/nhắc việc.
+Khuyến nghị thêm field (rất nên)
+read_at (nullable) hoặc is_read để đánh dấu đã đọc.
+
+
+INDEX
+INDEX(user_id) (notifications của user)
+
+
+INDEX(status) (pending/sent/failed)
+
+
+INDEX(scheduled_at) (job gửi)
+
+
+INDEX(ref_type, ref_id) (thông báo liên quan tài nguyên nào)
+
+
+INDEX(channel) (monitor theo kênh)
+
+
+
+Tóm tắt “bắt buộc” cho UNIQUE + INDEX
+UNIQUE bắt buộc nhất
+User(username), User(email)
+
+
+Department(parent_dept_id, dept_name)
+
+
+AgendaItem(meeting_id, order_no)
+
+
+UserDepartment PK(user_id, dept_id)
+
+
+MeetingParticipant(meeting_id, user_id)
+
+
+MeetingDocument PK(meeting_id, doc_id)
+
+
+TemplateField(template_id, field_key)
+
+
+Role(role_name), Permission(perm_code)
+
+
+RolePermission PK(role_id, perm_id)
+
+
+UserRoleScope PK(user_id, role_id, scope_id)
+
+
+AclEntry(resource_type, resource_id, principal_id, permission_code)
+
+
+ApprovalStep(approval_id, step_no)
+
+
+VoteOption(vote_session_id, order_no)
+
+
+VoteEligibility PK(vote_session_id, user_id)
+
+
+VoteBallot(vote_session_id, user_id)
+
+
+VoteBallotChoice PK(ballot_id, option_id)
+
+
+VoteResult PK(vote_session_id)
+
+
+VoteResultOption PK(vote_session_id, option_id)
+
+
+INDEX bắt buộc nhất (để khỏi chậm)
+Meeting(start_time, status, dept_id, created_by)
+
+
+MeetingParticipant(user_id)
+
+
+Document(owner_dept_id, status)
+
+
+DocumentVersion(doc_id, created_at)
+
+
+VoteSession(meeting_id, motion_id, status)
+
+
+VoteBallot(vote_session_id, user_id)
+
+
+AuditLog(created_at, actor_user_id, resource_type+resource_id)
+
+
+Notification(user_id, status, scheduled_at)
+
+
+

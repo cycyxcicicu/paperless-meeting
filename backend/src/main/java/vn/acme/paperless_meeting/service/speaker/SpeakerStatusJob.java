@@ -2,6 +2,7 @@ package vn.acme.paperless_meeting.service.speaker;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -12,6 +13,7 @@ import vn.acme.paperless_meeting.entity.SpeakerTurn;
 import vn.acme.paperless_meeting.entity.enums.SpeakerQueueStatus;
 import vn.acme.paperless_meeting.repository.SpeakerQueueRepository;
 import vn.acme.paperless_meeting.repository.SpeakerTurnRepository;
+import vn.acme.paperless_meeting.service.websocket.WebSocketNotificationService;
 
 @Component
 @RequiredArgsConstructor
@@ -20,6 +22,7 @@ public class SpeakerStatusJob {
 
     private final SpeakerQueueRepository speakerQueueRepository;
     private final SpeakerTurnRepository speakerTurnRepository;
+    private final WebSocketNotificationService webSocketNotificationService;
 
     @Scheduled(fixedDelay = 5000) // Chạy mỗi 5 giây
     @Transactional
@@ -45,7 +48,13 @@ public class SpeakerStatusJob {
                         }
                     }
 
-                    log.info("Auto closed expired SpeakerTurn ID: {}", turn.getId());
+                    log.info("Tự động đóng lượt phát biểu hết hạn - SpeakerTurn ID: {}", turn.getId());
+
+                    // Gửi WebSocket thông báo cho frontend cập nhật trạng thái phát biểu
+                    webSocketNotificationService.sendToTopic(
+                            "/topic/meeting/" + turn.getMeeting().getId() + "/speakers",
+                            Map.of("action", "SPEAKER_TURN_EXPIRED", "turnId", turn.getId().toString())
+                    );
                 }
             }
         }
@@ -57,7 +66,13 @@ public class SpeakerStatusJob {
             if (q.getRequestedAt() != null && q.getRequestedAt().isBefore(expireThreshold)) {
                 q.setQueueStatus(SpeakerQueueStatus.EXPIRED);
                 speakerQueueRepository.save(q);
-                log.info("Auto expired SpeakerQueue ID: {}", q.getId());
+                log.info("Tự động hết hạn yêu cầu phát biểu - SpeakerQueue ID: {}", q.getId());
+
+                // Gửi WebSocket thông báo cho frontend cập nhật hàng chờ
+                webSocketNotificationService.sendToTopic(
+                        "/topic/meeting/" + q.getMeeting().getId() + "/speakers",
+                        Map.of("action", "SPEAKER_QUEUE_EXPIRED", "queueId", q.getId().toString())
+                );
             }
         }
     }

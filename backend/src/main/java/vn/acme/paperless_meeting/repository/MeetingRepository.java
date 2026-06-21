@@ -11,6 +11,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import vn.acme.paperless_meeting.entity.Meeting;
+import vn.acme.paperless_meeting.entity.enums.MeetingStatus;
+import org.springframework.data.jpa.repository.Modifying;
 
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 
@@ -23,9 +25,12 @@ public interface MeetingRepository extends JpaRepository<Meeting, UUID>, JpaSpec
     Optional<Meeting> findById(UUID id);
 
     @Query("SELECT m FROM Meeting m WHERE m.status = :status AND m.startTime <= :now")
-    List<Meeting> findMeetingsToStart(@Param("status") vn.acme.paperless_meeting.entity.enums.MeetingStatus status, @Param("now") LocalDateTime now);
+    List<Meeting> findMeetingsToStart(@Param("status") MeetingStatus status, @Param("now") LocalDateTime now);
 
-    List<Meeting> findByStatusAndStartTimeBetween(vn.acme.paperless_meeting.entity.enums.MeetingStatus status, LocalDateTime start, LocalDateTime end);
+    @Query("SELECT m FROM Meeting m WHERE m.status = :status AND m.endTime <= :threshold")
+    List<Meeting> findMeetingsToClose(@Param("status") MeetingStatus status, @Param("threshold") LocalDateTime threshold);
+
+    List<Meeting> findByStatusAndStartTimeBetween(MeetingStatus status, LocalDateTime start, LocalDateTime end);
 
     @Query("""
                 select case when count(m) > 0 then true else false end
@@ -38,14 +43,14 @@ public interface MeetingRepository extends JpaRepository<Meeting, UUID>, JpaSpec
             """)
     boolean existsRoomConflict(@Param("meetingId") UUID meetingId,
             @Param("locationId") UUID locationId,
-            @Param("statuses") List<vn.acme.paperless_meeting.entity.enums.MeetingStatus> statuses,
+            @Param("statuses") List<MeetingStatus> statuses,
             @Param("startTime") LocalDateTime startTime,
             @Param("endTime") LocalDateTime endTime);
 
     @Query(value = "SELECT * FROM meetings WHERE id = :id", nativeQuery = true)
     Optional<Meeting> findByIdIncludingDeleted(@Param("id") UUID id);
 
-    @org.springframework.data.jpa.repository.Modifying
+    @Modifying
     @Query(value = "UPDATE meetings SET is_deleted = false, deleted_at = null WHERE id = :id", nativeQuery = true)
     void restoreMeetingNative(@Param("id") UUID id);
 }

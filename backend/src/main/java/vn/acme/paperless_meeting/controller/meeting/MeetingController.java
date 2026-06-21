@@ -12,7 +12,10 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -29,8 +32,10 @@ import lombok.experimental.FieldDefaults;
 import vn.acme.paperless_meeting.dto.base.ApiResponse;
 import vn.acme.paperless_meeting.dto.base.PageResponse;
 import vn.acme.paperless_meeting.dto.request.meeting.MeetingUpsertRequest;
-import vn.acme.paperless_meeting.dto.request.meeting.MeetingPostponeRequest;
+import vn.acme.paperless_meeting.dto.request.meeting.MeetingInvitationUpdateRequest;
+import vn.acme.paperless_meeting.dto.request.meeting.MeetingInvitationPreviewRequest;
 import vn.acme.paperless_meeting.dto.response.meeting.MeetingResponse;
+import vn.acme.paperless_meeting.dto.response.meeting.MeetingInvitationPreviewResponse;
 import vn.acme.paperless_meeting.entity.enums.MeetingStatus;
 import vn.acme.paperless_meeting.service.meeting.MeetingService;
 
@@ -108,6 +113,50 @@ public class MeetingController {
                 .build());
     }
 
+    @Operation(summary = "Cập nhật mẫu thư mời của cuộc họp",
+               description = "Chỉ cập nhật 3 trường: yêu cầu giấy mời, mẫu thư mời và nội dung thư mời.")
+    @PutMapping("/{id}/invitation")
+    public ResponseEntity<ApiResponse<Void>> updateInvitation(
+            @PathVariable UUID id,
+            @RequestBody @Valid MeetingInvitationUpdateRequest request) {
+        meetingService.updateInvitation(id, request);
+        return ResponseEntity.ok(ApiResponse.<Void>builder()
+                .success(true)
+                .message("Đã lưu mẫu giấy mời thành công")
+                .build());
+    }
+
+    @Operation(summary = "Xem trước mẫu thư mời với dữ liệu đại biểu",
+               description = "Biên dịch động các placeholder trong mẫu thư mời dựa trên thông tin phiên họp và đại biểu được chọn.")
+    @PostMapping("/{id}/invitations/preview")
+    public ResponseEntity<ApiResponse<MeetingInvitationPreviewResponse>> previewInvitation(
+            @PathVariable UUID id,
+            @RequestBody @Valid MeetingInvitationPreviewRequest request) {
+        MeetingInvitationPreviewResponse response = meetingService.previewInvitation(id, request);
+        return ResponseEntity.ok(ApiResponse.<MeetingInvitationPreviewResponse>builder()
+                .success(true)
+                .data(response)
+                .build());
+    }
+
+    @Operation(summary = "Xuất PDF thư mời của đại biểu",
+               description = "Biên dịch động mẫu thư mời và xuất file PDF nhúng thông tin thực tế của đại biểu được chọn.")
+    @PostMapping("/{id}/invitations/export-pdf")
+    public ResponseEntity<byte[]> exportInvitationPdf(
+            @PathVariable UUID id,
+            @RequestBody @Valid MeetingInvitationPreviewRequest request) {
+        byte[] pdfBytes = meetingService.exportInvitationPdf(id, request);
+        
+        String filename = "Giay_Moi_Hop.pdf";
+        
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_PDF);
+        headers.setContentDispositionFormData("attachment", filename);
+        headers.setCacheControl("no-cache, no-store, must-revalidate");
+        
+        return new ResponseEntity<>(pdfBytes, headers, HttpStatus.OK);
+    }
+
     @Operation(summary = "Trình duyệt cuộc họp",
                description = "Chuyển cuộc họp từ DRAFT → PENDING_APPROVAL để ban thư ký xét duyệt. Yêu cầu tất cả nội dung nghị sự phải được phê duyệt tài liệu trước.")
     @PostMapping("/{id}/submit-approval")
@@ -144,19 +193,18 @@ public class MeetingController {
                 .build());
     }
 
-    @Operation(summary = "Hoãn cuộc họp",
-               description = "Hoãn cuộc họp đã được phê duyệt hoặc sắp diễn ra sang thời gian mới.")
-    @PostMapping("/{id}/postpone")
-    public ResponseEntity<ApiResponse<MeetingResponse>> postpone(
-            @PathVariable UUID id,
-            @RequestBody @Valid MeetingPostponeRequest request) {
-        MeetingResponse response = meetingService.postpone(id, request);
-        return ResponseEntity.ok(ApiResponse.<MeetingResponse>builder()
+    @Operation(summary = "Đưa cuộc họp đã duyệt về bản nháp",
+               description = "Chuyển trạng thái từ APPROVED → DRAFT để thiết lập lại thời gian khi cuộc họp không đủ thời gian công bố.")
+    @PostMapping("/{id}/revert-draft")
+    public ResponseEntity<ApiResponse<Void>> revertToDraft(@PathVariable UUID id) {
+        meetingService.revertToDraft(id);
+        return ResponseEntity.ok(ApiResponse.<Void>builder()
                 .success(true)
-                .data(response)
-                .message("Đã hoãn cuộc họp thành công")
+                .message("Đã đưa cuộc họp về bản nháp thành công")
                 .build());
     }
+
+
 
     @Operation(summary = "Từ chối cuộc họp",
                description = "Chuyển từ PENDING_APPROVAL → REJECTED kèm lý do. Người tạo có thể chỉnh sửa và trình duyệt lại.")
@@ -193,7 +241,7 @@ public class MeetingController {
 
     @Operation(summary = "Xóa cuộc họp",
                description = "Xóa cuộc họp đang ở trạng thái NHÁP (DRAFT).")
-    @org.springframework.web.bind.annotation.DeleteMapping("/{id}")
+    @DeleteMapping("/{id}")
     public ResponseEntity<ApiResponse<Void>> delete(@PathVariable UUID id) {
         meetingService.delete(id);
         return ResponseEntity.ok(ApiResponse.<Void>builder()

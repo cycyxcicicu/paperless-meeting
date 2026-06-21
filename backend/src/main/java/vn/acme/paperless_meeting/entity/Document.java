@@ -79,12 +79,10 @@ public class Document extends SoftDeletable {
     @OneToMany(mappedBy = "fileDocument", orphanRemoval = false)
     private List<DocTemplate> docTemplateList = new ArrayList<>();
 
-    @OneToMany(mappedBy = "generatedDocument", cascade = CascadeType.REMOVE, orphanRemoval = true)
-    private List<GeneratedDocument> generatedDocumentList = new ArrayList<>();
+
 
     @OneToMany(mappedBy = "document", orphanRemoval = false)
     private List<MeetingDocument> meetingDocumentList = new ArrayList<>();
 
-    @OneToMany(mappedBy = "document", orphanRemoval = false)
-    private List<DocumentAccessLog> documentAccessLogList = new ArrayList<>();
+
 }

@@ -1,13 +1,19 @@
 package vn.acme.paperless_meeting.controller.document;
 
+import java.io.InputStream;
 import java.util.List;
 import java.util.UUID;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+
+import org.springframework.core.io.InputStreamResource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import vn.acme.paperless_meeting.entity.enums.MeetingDocumentUsageType;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -20,6 +26,8 @@ import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import org.springframework.core.io.Resource;
+
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
@@ -27,6 +35,7 @@ import vn.acme.paperless_meeting.dto.base.ApiResponse;
 import vn.acme.paperless_meeting.dto.request.document.AttachDocumentRequest;
 import vn.acme.paperless_meeting.dto.response.document.DocumentResponse;
 import vn.acme.paperless_meeting.dto.response.document.MeetingDocumentResponse;
+import vn.acme.paperless_meeting.entity.DocumentVersion;
 import vn.acme.paperless_meeting.service.document.DocumentService;
 
 @RestController
@@ -158,11 +167,38 @@ public class DocumentController {
     
     @Operation(summary = "Lấy file qua liên kết bảo mật (Stream Redirect)", description = "Sử dụng Proxy/Redirect URL sau khi hệ thống đã check ACL và sở hữu file.")
     @GetMapping("/documents/{id}/download")
-    public ResponseEntity<Void> downloadDocument(@PathVariable UUID id) {
-        String presignedUrl = documentService.getDownloadUrl(id);
-        return ResponseEntity.status(HttpStatus.FOUND)
-                .location(java.net.URI.create(presignedUrl))
+    public ResponseEntity<Resource> downloadDocument(
+            @PathVariable UUID id,
+            @RequestParam(name = "inline", required = false, defaultValue = "false") boolean inline) {
+        DocumentVersion version = documentService.getDocumentVersion(id);
+        InputStream stream = documentService.getFileStream(version.getStorageKey());
+        Resource resource = new InputStreamResource(stream);
+
+        String contentType = "application/octet-stream";
+        if (version.getFileName() != null) {
+            String lowerName = version.getFileName().toLowerCase();
+            if (lowerName.endsWith(".pdf")) {
+                contentType = "application/pdf";
+            } else if (lowerName.endsWith(".docx")) {
+                contentType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+            } else if (lowerName.endsWith(".doc")) {
+                contentType = "application/msword";
+            } else if (lowerName.endsWith(".xlsx")) {
+                contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+            } else if (lowerName.endsWith(".xls")) {
+                contentType = "application/vnd.ms-excel";
+            }
+        }
+
+        String dispositionType = inline ? "inline" : "attachment";
+        ContentDisposition contentDisposition = ContentDisposition.builder(dispositionType)
+                .filename(version.getFileName(), java.nio.charset.StandardCharsets.UTF_8)
                 .build();
+ 
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(contentType))
+                .header(HttpHeaders.CONTENT_DISPOSITION, contentDisposition.toString())
+                .body(resource);
     }
 
     @Operation(summary = "Tải file và gán vào cuộc họp trong 1 giao dịch", description = "Vừa upload file vừa attach vào Meeting hoặc AgendaItem, tránh tình trạng rác file hoặc thiếu Transaction.")
@@ -174,7 +210,7 @@ public class DocumentController {
             @RequestParam(required = false) String title,
             @RequestParam(required = false) String docType,
             @RequestParam(required = false) String note,
-            @RequestParam(required = false) vn.acme.paperless_meeting.entity.enums.MeetingDocumentUsageType usageType,
+            @RequestParam(required = false) MeetingDocumentUsageType usageType,
             @RequestParam(required = false) Boolean requiredBeforeMeeting,
             @RequestParam(required = false) Boolean isConfidential) {
 

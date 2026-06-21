@@ -7,7 +7,6 @@ interface MeetingActionMenuProps {
   canEdit?: boolean;
   canCancel?: boolean;
   canPublish?: boolean;
-  canPostpone?: boolean;
   canDelete?: boolean;
   canSubmitApproval?: boolean;
   canUploadDocs?: boolean;
@@ -16,7 +15,6 @@ interface MeetingActionMenuProps {
   onViewDetail: (id: string) => void;
   onUpdate: (id: string) => void;
   onCopy: (id: string) => void;
-  onPostpone?: (id: string) => void;
   onCancel?: (id: string) => void;
   onSend?: (id: string) => void;
   onUploadDocs?: (id: string) => void;
@@ -27,7 +25,6 @@ export const MeetingActionMenu: React.FC<MeetingActionMenuProps> = ({
   canEdit,
   canCancel,
   canPublish,
-  canPostpone,
   canSubmitApproval,
   canUploadDocs,
   canCopy,
@@ -35,7 +32,6 @@ export const MeetingActionMenu: React.FC<MeetingActionMenuProps> = ({
   onViewDetail,
   onUpdate,
   onCopy,
-  onPostpone,
   onCancel,
   onSend,
   onUploadDocs,
@@ -89,15 +85,6 @@ export const MeetingActionMenu: React.FC<MeetingActionMenuProps> = ({
       });
     }
 
-    // 3. Quyền gửi đi / gửi duyệt
-    if (canSubmitApproval) {
-      actions.push({
-        icon: Send,
-        label: 'Gửi đi',
-        onClick: () => onSend?.(meetingId),
-        variant: 'primary'
-      });
-    }
 
     // 4. Quyền công bố (Publish)
     if (canPublish) {
@@ -109,15 +96,7 @@ export const MeetingActionMenu: React.FC<MeetingActionMenuProps> = ({
       });
     }
 
-    // 5. Quyền hoãn họp (Postpone)
-    if (canPostpone) {
-      actions.push({
-        icon: Clock,
-        label: 'Hoãn phiên họp',
-        onClick: () => onPostpone?.(meetingId),
-        variant: 'default'
-      });
-    }
+
 
     // 6. Quyền hủy họp (Cancel)
     if (canCancel) {

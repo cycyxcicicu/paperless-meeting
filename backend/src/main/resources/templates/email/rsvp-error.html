@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="vi" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lỗi xác nhận</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f1f5f9; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .card { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); text-align: center; max-width: 480px; width: 100%; box-sizing: border-box; }
+        .icon { font-size: 60px; color: #dc2626; margin-bottom: 20px; }
+        h2 { color: #0f172a; margin-top: 0; font-size: 24px; }
+        p { color: #475569; font-size: 16px; line-height: 1.6; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="icon">✗</div>
+        <h2>Xử Lý Thất Bại!</h2>
+        <p>Yêu cầu xác nhận không hợp lệ hoặc cuộc họp đã kết thúc.</p>
+        <p style="color: #ef4444; font-size: 14px; margin-top: 15px;" th:text="${errorMessage}">
+            Chi tiết lỗi ở đây.
+        </p>
+    </div>
+</body>
+</html>

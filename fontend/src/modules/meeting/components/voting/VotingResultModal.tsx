@@ -12,7 +12,7 @@ interface VotingResult {
 }
 
 interface VotedDelegate {
-  id: number;
+  id: string | number;
   name: string;
   position: string;
   unit: string;
@@ -21,7 +21,7 @@ interface VotedDelegate {
 }
 
 interface NotVotedDelegate {
-  id: number;
+  id: string | number;
   name: string;
   position: string;
   unit: string;

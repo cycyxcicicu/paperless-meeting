@@ -49,7 +49,7 @@ export const createChiTietHopFormSchema = (phongHopOptions: { value: string; lab
   },
 ];
 
-export const createThongBaoGiayMoiFormSchema = (): FormFieldGroup[] => [
+export const createThongBaoGiayMoiFormSchema = (templateOptions: { value: string; label: string }[]): FormFieldGroup[] => [
   {
     id: 'notification',
     fields: [
@@ -57,17 +57,8 @@ export const createThongBaoGiayMoiFormSchema = (): FormFieldGroup[] => [
         key: 'mauGiayMoi',
         type: 'select',
         label: 'Mẫu giấy mời',
-        options: [
-          { value: 'mau-1', label: 'Mẫu giấy mời tiêu chuẩn' },
-          { value: 'mau-2', label: 'Mẫu giấy mời hội nghị' },
-        ],
-        col: 'col-span-2',
-      },
-      {
-        key: 'tieuDe',
-        type: 'text',
-        label: 'Tiêu đề giấy mời',
         required: true,
+        options: templateOptions,
         col: 'col-span-2',
       },
       {
@@ -77,16 +68,6 @@ export const createThongBaoGiayMoiFormSchema = (): FormFieldGroup[] => [
         required: true,
         col: 'col-span-2',
         rows: 5,
-      },
-      {
-        key: 'trangThaiKy',
-        type: 'select',
-        label: 'Ký giấy mời',
-        options: [
-          { value: 'co-ky', label: 'Cần ký số' },
-          { value: 'khong-ky', label: 'Không cần ký' },
-        ],
-        col: 'col-span-2',
       },
     ],
   },

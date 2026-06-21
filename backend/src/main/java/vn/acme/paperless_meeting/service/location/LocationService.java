@@ -60,10 +60,17 @@ public class LocationService {
                 throw new AppException(ErrorCode.DEPARTMENT_ID_REQUIRED);
             }
 
+            List<UUID> allowedIdsForCaller = new ArrayList<>(departmentService.getAllSubDepartmentIds(caller.getDepartment().getId()));
+            Department parent = caller.getDepartment().getParentDepartment();
+            while (parent != null) {
+                allowedIdsForCaller.add(parent.getId());
+                parent = parent.getParentDepartment();
+            }
+
             if (departmentId == null) {
-                allowedDeptIds = departmentService.getAllSubDepartmentIds(caller.getDepartment().getId());
+                allowedDeptIds = allowedIdsForCaller;
             } else {
-                if (!departmentService.getAllSubDepartmentIds(caller.getDepartment().getId()).contains(departmentId)) {
+                if (!allowedIdsForCaller.contains(departmentId)) {
                     throw new AppException(ErrorCode.UNAUTHOZIZED);
                 }
                 allowedDeptIds = List.of(departmentId);
@@ -109,10 +116,17 @@ public class LocationService {
                 throw new AppException(ErrorCode.DEPARTMENT_ID_REQUIRED);
             }
 
+            List<UUID> allowedIdsForCaller = new ArrayList<>(departmentService.getAllSubDepartmentIds(caller.getDepartment().getId()));
+            Department parent = caller.getDepartment().getParentDepartment();
+            while (parent != null) {
+                allowedIdsForCaller.add(parent.getId());
+                parent = parent.getParentDepartment();
+            }
+
             if (departmentId == null) {
-                allowedDeptIds = departmentService.getAllSubDepartmentIds(caller.getDepartment().getId());
+                allowedDeptIds = allowedIdsForCaller;
             } else {
-                if (!departmentService.getAllSubDepartmentIds(caller.getDepartment().getId()).contains(departmentId)) {
+                if (!allowedIdsForCaller.contains(departmentId)) {
                     throw new AppException(ErrorCode.UNAUTHOZIZED);
                 }
                 allowedDeptIds = List.of(departmentId);
@@ -239,7 +253,13 @@ public class LocationService {
             if (caller.getDepartment() == null) {
                 throw new AppException(ErrorCode.UNAUTHOZIZED);
             }
-            if (!departmentService.getAllSubDepartmentIds(caller.getDepartment().getId()).contains(targetDeptId)) {
+            List<UUID> allowedIdsForCaller = new ArrayList<>(departmentService.getAllSubDepartmentIds(caller.getDepartment().getId()));
+            Department parent = caller.getDepartment().getParentDepartment();
+            while (parent != null) {
+                allowedIdsForCaller.add(parent.getId());
+                parent = parent.getParentDepartment();
+            }
+            if (!allowedIdsForCaller.contains(targetDeptId)) {
                 throw new AppException(ErrorCode.UNAUTHOZIZED);
             }
             return;

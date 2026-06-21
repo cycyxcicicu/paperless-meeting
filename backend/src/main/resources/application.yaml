@@ -1,20 +1,24 @@
 spring:
+    config:
+        import:
+            - optional:file:.env[.properties]
+            - optional:file:../.env[.properties]
     devtools:
         restart:
             enabled: false
     application:
         name: paperless_meeting
     datasource:
-        url: jdbc:mysql://localhost:4406/paperless_meeting?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
-        username: root
-        password: root
+        url: ${SPRING_DATASOURCE_URL}
+        username: ${SPRING_DATASOURCE_USERNAME}
+        password: ${SPRING_DATASOURCE_PASSWORD}
         driver-class-name: com.mysql.cj.jdbc.Driver
     jpa:
         hibernate:
             ddl-auto: update # none | validate | update | create | create-drop
             naming:
                 physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
-        show-sql: true
+        show-sql: false
         defer-datasource-initialization: true
         properties:
             hibernate:
@@ -36,14 +40,32 @@ spring:
         multipart:
             max-file-size: 20MB
             max-request-size: 20MB
+    # RabbitMQ Configuration
+    rabbitmq:
+        host: ${SPRING_RABBITMQ_HOST}
+        port: ${SPRING_RABBITMQ_PORT}
+        username: ${SPRING_RABBITMQ_USERNAME}
+        password: ${SPRING_RABBITMQ_PASSWORD}
+    # Gmail SMTP Configuration
+    mail:
+        host: ${SPRING_MAIL_HOST:smtp.gmail.com}
+        port: ${SPRING_MAIL_PORT:587}
+        username: ${SPRING_MAIL_USERNAME}
+        password: ${SPRING_MAIL_PASSWORD}
+        properties:
+            mail:
+                smtp:
+                    auth: true
+                    starttls:
+                        enable: true
 minio:
-  url: http://localhost:9000
-  access-key: root
-  secret-key: root1234
-  bucket: uploads
+  url: ${MINIO_URL}
+  access-key: ${MINIO_ACCESS_KEY}
+  secret-key: ${MINIO_SECRET_KEY}
+  bucket: ${MINIO_BUCKET}
 
 server:
-    port: 8081
+    port: ${SERVER_PORT}
     servlet:
         context-path: /PaperlessMeeting
     tomcat:
@@ -51,6 +73,9 @@ server:
 
 # cấu hình CORS để cho phép frontend (chạy trên localhost:3000) truy cập vào backend
 app:
+    urls:
+      frontend: ${APP_FRONTEND_URL:http://localhost:3000}
+      backend: ${APP_BACKEND_URL:http://localhost:8081/PaperlessMeeting}
     seed:
         enabled: false
     security:
@@ -62,7 +87,8 @@ app:
         access-token-expiration-seconds: 90000
         refresh-token-expiration-seconds: 604800
         issuer: "paperless-meeting"
-        jwt-secret-base64: "UhuZZ8UuCDy0eWTUwUP+D9hhnQ7WEDe2chpZWNHiPwkfqnCl+ivjEBdctFkcRVCI9vX4zqYn2v08/2R0TEY7dg=="
+        jwt-secret-base64: ${JWT_SECRET_BASE64}
+
 
 springdoc:
     swagger-ui:

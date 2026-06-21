@@ -25,7 +25,9 @@ import vn.acme.paperless_meeting.entity.Department;
 import vn.acme.paperless_meeting.entity.User;
 import vn.acme.paperless_meeting.entity.enums.RoleName;
 import vn.acme.paperless_meeting.exceptions.AppException;
+import vn.acme.paperless_meeting.exceptions.AppValidationException;
 import vn.acme.paperless_meeting.exceptions.ErrorCode;
+import vn.acme.paperless_meeting.entity.enums.DepartmentStatus;
 import vn.acme.paperless_meeting.mapper.department.DepartmentMapper;
 import vn.acme.paperless_meeting.repository.DepartmentRepository;
 import vn.acme.paperless_meeting.repository.UserRepository;
@@ -44,7 +46,7 @@ public class DepartmentService {
     public List<DepartmentTreeResponse> getTree() {
         User caller = currentUserService.getCurrentActiveUser();
 
-        if (currentUserService.hasRole(RoleName.SUPER_ADMIN)) {
+        if (currentUserService.hasRole(RoleName.SUPER_ADMIN) || currentUserService.canCreateMeeting()) {
             return buildFullTree();
         }
 
@@ -156,7 +158,7 @@ public class DepartmentService {
         User caller = currentUserService.getCurrentActiveUser();
 
         // Kiểm tra quyền
-        if (!currentUserService.hasRole(RoleName.SUPER_ADMIN)) {
+        if (!currentUserService.hasRole(RoleName.SUPER_ADMIN) && !currentUserService.canCreateMeeting()) {
             if (parentId == null) {
                 // DEPARTMENT_ADMIN không được xem gốc của toàn hệ thống (trừ khi gốc đó là Sở
                 // của họ, nhưng parentId=null nghĩa là root system)
@@ -199,17 +201,17 @@ public class DepartmentService {
         if (currentUserService.hasRole(RoleName.SUPER_ADMIN)) {
             // Cấp SUPER_ADMIN: Chỉ tính đơn vị cấp 2 (Sở/Ban/Ngành - Parent is Level 1)
             totalUnits = departmentRepository.countLevel2Departments();
-            activeUnits = departmentRepository.countLevel2DepartmentsByStatus(vn.acme.paperless_meeting.entity.enums.DepartmentStatus.ACTIVE);
+            activeUnits = departmentRepository.countLevel2DepartmentsByStatus(DepartmentStatus.ACTIVE);
         } else if (currentUserService.hasRole(RoleName.DEPARTMENT_ADMIN)) {
             // Cấp DEPARTMENT_ADMIN: Chỉ lấy số đơn vị con trực thuộc (Level 3 nếu admin quản lý Level 2)
             UUID callerDeptId = caller.getDepartment() != null ? caller.getDepartment().getId() : null;
             if (callerDeptId != null) {
                 totalUnits = departmentRepository.countByParentDepartment_Id(callerDeptId);
-                activeUnits = departmentRepository.countByParentDepartment_IdAndStatus(callerDeptId, vn.acme.paperless_meeting.entity.enums.DepartmentStatus.ACTIVE);
+                activeUnits = departmentRepository.countByParentDepartment_IdAndStatus(callerDeptId, DepartmentStatus.ACTIVE);
             }
         } else {
             totalUnits = departmentRepository.count();
-            activeUnits = departmentRepository.countByStatus(vn.acme.paperless_meeting.entity.enums.DepartmentStatus.ACTIVE);
+            activeUnits = departmentRepository.countByStatus(DepartmentStatus.ACTIVE);
         }
 
         return DepartmentStatsResponse.builder()
@@ -338,7 +340,7 @@ public class DepartmentService {
         }
         
         if (!errors.isEmpty()) {
-            throw new vn.acme.paperless_meeting.exceptions.AppValidationException(errors);
+            throw new AppValidationException(errors);
         }
     }
 
@@ -356,7 +358,7 @@ public class DepartmentService {
         }
 
         if (existed) {
-            throw new vn.acme.paperless_meeting.exceptions.AppValidationException(
+            throw new AppValidationException(
                 Map.of("deptName", parentDepartmentId == null ? "Tên phòng/Đơn vị đã tồn tại" : "Tên phòng ban/bộ phận đã tồn tại")
             );
         }

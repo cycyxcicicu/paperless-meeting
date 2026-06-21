@@ -347,22 +347,46 @@ public class SampleDataInitializer implements CommandLineRunner {
             result.put(seed.code(), saved);
         }
 
-        // 2. Tạo một vài chức vụ mẫu đặc thù cấp Đơn vị (Department != null)
+        // 2. Tạo chức vụ đặc thù cấp Đơn vị (Department != null)
         for (Department department : departmentByPath.values()) {
             boolean isTopLevel = department.getParentDepartment() == null || ROOT_DEPARTMENT.equals(department.getParentDepartment().getDeptName());
             if (isTopLevel && !ROOT_DEPARTMENT.equals(department.getDeptName())) {
                 String deptCode = department.getCode();
-                List<PositionSeed> unitSpecificSeeds = List.of(
-                    new PositionSeed(deptCode + "_ketoan", "Kế toán trưởng (" + deptCode.toUpperCase() + ")", "Kế toán đặc thù", 18, true, PositionRole.SPECIALIST)
-                );
-                for (PositionSeed seed : unitSpecificSeeds) {
-                    Position saved = upsertPosition(seed, department, existingByCode);
-                    result.put(seed.code(), saved);
+                if (deptCode != null) {
+                    String specCode = deptCode + "_spec_custom";
+                    String specName = getCustomPositionName(deptCode);
+                    List<PositionSeed> unitSpecificSeeds = List.of(
+                        new PositionSeed(specCode, specName, "Chức vụ đặc thù cho đơn vị " + department.getDeptName(), 18, false, PositionRole.SPECIALIST)
+                    );
+                    for (PositionSeed seed : unitSpecificSeeds) {
+                        Position saved = upsertPosition(seed, department, existingByCode);
+                        result.put(seed.code(), saved);
+                    }
                 }
             }
         }
         
         return result;
+    }
+
+    private String getCustomPositionName(String slug) {
+        return switch (slug) {
+            case "vpubnd" -> "Chuyên viên Tổng hợp Văn phòng";
+            case "thanhtra" -> "Thanh tra viên";
+            case "bqlkkt" -> "Chuyên viên quản lý đầu tư";
+            case "sonv" -> "Chuyên viên Tổ chức cán bộ";
+            case "sotc" -> "Kiểm soát viên ngân sách";
+            case "soxd" -> "Kỹ sư quy hoạch xây dựng";
+            case "sogddt" -> "Thanh tra viên giáo dục";
+            case "soyt" -> "Bác sĩ chính";
+            case "soct" -> "Chuyên viên quản lý năng lượng";
+            case "sotp" -> "Công chứng viên";
+            case "sovhttdl" -> "Chuyên viên quản lý du lịch";
+            case "sokhcn" -> "Chuyên viên quản lý công nghệ";
+            case "sonnmt" -> "Chuyên viên bảo vệ thực vật";
+            case "songoaivu" -> "Phiên dịch viên đối ngoại";
+            default -> "Chuyên viên chuyên môn đặc thù";
+        };
     }
 
     private Position upsertPosition(PositionSeed seed, Department department, Map<String, Position> existingByCode) {
@@ -557,36 +581,123 @@ public class SampleDataInitializer implements CommandLineRunner {
         return result;
     }
 
+    private static class RealPersonnel {
+        final String adminName;
+        final String pgdName;
+        final String manager0Name;
+        final String manager1Name;
+        final String spec1Name;
+        final String spec2Name;
+        final String spec3Name;
+
+        RealPersonnel(String adminName, String pgdName, String manager0Name, String manager1Name, String spec1Name, String spec2Name, String spec3Name) {
+            this.adminName = adminName;
+            this.pgdName = pgdName;
+            this.manager0Name = manager0Name;
+            this.manager1Name = manager1Name;
+            this.spec1Name = spec1Name;
+            this.spec2Name = spec2Name;
+            this.spec3Name = spec3Name;
+        }
+    }
+
+    private static final Map<String, RealPersonnel> REAL_ROSTER = Map.ofEntries(
+        Map.entry("vpubnd", new RealPersonnel("Đỗ Thành Trung", "Lê Anh Quân", "Nguyễn Hoàng Long", "Trần Văn Thiện", "Nguyễn Thanh Hùng", "Phạm Anh Tuấn", "Phạm Huy Hoàng")),
+        Map.entry("thanhtra", new RealPersonnel("Trần Việt Tuấn", "Bùi Hùng Thiện", "Vũ Anh Thư", "Phạm Văn Hùng", "Lê Văn Sơn", "Nguyễn Thị Mai", "Trần Văn Hải")),
+        Map.entry("bqlkkt", new RealPersonnel("Phạm Văn Thép", "Bùi Ngọc Hải", "Nguyễn Công Hân", "Nguyễn Văn Thành", "Hoàng Văn Dương", "Trịnh Thị Hương", "Vũ Văn Bình")),
+        Map.entry("sonv", new RealPersonnel("Sái Thị Yến", "Nguyễn Thị Thu", "Phạm Minh Huân", "Trần Văn Nam", "Lê Hồng Sơn", "Nguyễn Văn Hợp", "Đỗ Thị Minh")),
+        Map.entry("sotc", new RealPersonnel("Nguyễn Ngọc Tú", "Trần Văn Lâm", "Nguyễn Thị Huệ", "Lê Hoàng Anh", "Phạm Quang Vinh", "Vũ Hồng Dương", "Đỗ Thu Hà")),
+        Map.entry("soxd", new RealPersonnel("Nguyễn Thành Hưng", "Đỗ Quý Tiến", "Vũ Hữu Thành", "Trần Văn Thắng", "Phạm Minh Đức", "Nguyễn Thị Vân", "Lê Hoàng Nam")),
+        Map.entry("sogddt", new RealPersonnel("Lương Văn Việt", "Bùi Văn Kiệm", "Phạm Quốc Hiệu", "Nguyễn Thị Hải", "Vũ Văn Lương", "Trần Tuấn Anh", "Nguyễn Thị Lan")),
+        Map.entry("soyt", new RealPersonnel("Lê Minh Quang", "Trần Anh Cường", "Nguyễn Tiến Sơn", "Phạm Quang Hải", "Hoàng Thị Hoa", "Nguyễn Văn Đạt", "Bùi Thị Mai")),
+        Map.entry("soct", new RealPersonnel("Nguyễn Văn Thành", "Vũ Lạc Huy", "Lê Minh Sơn", "Trần Việt Dũng", "Phạm Văn Nam", "Đỗ Thị Quỳnh", "Vũ Quốc Việt")),
+        Map.entry("sotp", new RealPersonnel("Ngô Quang Giáp", "Bùi Văn Nam", "Lê Anh Tuấn", "Nguyễn Văn Hùng", "Trần Thị Hòa", "Lê Minh Đức", "Nguyễn Thị Thu Hà")),
+        Map.entry("sovhttdl", new RealPersonnel("Nguyễn Thành Trung", "Đỗ Quốc Anh", "Phạm Văn Tuấn", "Vũ Thị Hằng", "Lê Văn Tiến", "Trần Thu Trang", "Nguyễn Văn Hòa")),
+        Map.entry("sokhcn", new RealPersonnel("Nguyễn Cao Thắng", "Phạm Văn Thọ", "Trần Văn Hải", "Lê Thị Lan", "Nguyễn Văn Đạt", "Vũ Hoàng Sơn", "Phạm Thị Thảo")),
+        Map.entry("sonnmt", new RealPersonnel("Bùi Văn Thăng", "Lê Văn Cường", "Phạm Văn Giang", "Nguyễn Thị Hằng", "Trần Văn Đạt", "Vũ Anh Tuấn", "Nguyễn Thị Hương")),
+        Map.entry("songoaivu", new RealPersonnel("Trần Thị Quỳnh Trang", "Nguyễn Hoàng Dương", "Trần Văn Khánh", "Vũ Thị Hồng", "Lê Minh Tuấn", "Nguyễn Thị Dung", "Phạm Văn An"))
+    );
+
     private List<UserSeed> buildRosterSeeds(DepartmentBlueprint blueprint) {
         List<UserSeed> seeds = new ArrayList<>();
         String topCode = blueprint.slug();
         String topPath = blueprint.topLevelPath();
-        
-        seeds.add(new UserSeed(blueprint.adminUsername(), (blueprint.isCentralOffice() ? "Chủ tịch UBND thành phố" : "Thủ trưởng " + blueprint.name()), blueprint.adminUsername() + "@paperless.local", buildPhoneNumber(blueprint.departmentIndex(), 1, 1), topPath, blueprint.isCentralOffice() ? "CHU_TICH" : "GIAM_DOC"));
-        
-        for (int i = 1; i <= 3; i++) {
-            seeds.add(new UserSeed(topCode + ".pgd" + i, (blueprint.isCentralOffice() ? "Phó Chủ tịch " + i : "Phó Thủ trưởng " + i) + " " + blueprint.name(), topCode + ".pgd" + i + "@paperless.local", buildPhoneNumber(blueprint.departmentIndex(), 2, i), topPath, blueprint.isCentralOffice() ? "PHO_CHU_TICH" : "PHO_GIAM_DOC"));
+        RealPersonnel roster = REAL_ROSTER.get(topCode);
+        if (roster == null) {
+            throw new IllegalStateException("Missing real roster for slug: " + topCode);
         }
 
-        int staffCounter = 1;
-        for (int pIdx = 0; pIdx < blueprint.childUnits().size(); pIdx++) {
-            String childUnit = blueprint.childUnits().get(pIdx);
-            String childPath = blueprint.childPath(childUnit);
-            
-            seeds.add(new UserSeed(topCode + ".manager" + pIdx, "Trưởng " + childUnit, topCode + ".manager" + pIdx + "@paperless.local", buildPhoneNumber(blueprint.departmentIndex(), 3, staffCounter++), childPath, "TRUONG_PHONG"));
-            
-            int targetStaffCount = (pIdx == 0) ? 12 : ((pIdx == 1) ? 8 : 16);
-            int deputies = (targetStaffCount >= 15) ? 3 : ((targetStaffCount >= 10) ? 2 : 1);
-            
-            for (int i = 1; i <= deputies; i++) {
-                seeds.add(new UserSeed(topCode + ".deputy" + pIdx + "_" + i, "Phó " + childUnit + " " + i, topCode + ".deputy" + pIdx + "_" + i + "@paperless.local", buildPhoneNumber(blueprint.departmentIndex(), 4, staffCounter++), childPath, "PHO_TRUONG_PHONG"));
-            }
-            
-            int specialists = targetStaffCount - 1 - deputies;
-            for (int i = 1; i <= specialists; i++) {
-                seeds.add(new UserSeed(topCode + ".spec" + pIdx + "_" + i, "Chuyên viên " + childUnit + " " + i, topCode + ".spec" + pIdx + "_" + i + "@paperless.local", buildPhoneNumber(blueprint.departmentIndex(), 5, staffCounter++), childPath, "CHUYEN_VIEN"));
-            }
-        }
+        // 1. Admin/Thủ trưởng
+        seeds.add(new UserSeed(
+                blueprint.adminUsername(),
+                roster.adminName,
+                blueprint.adminUsername() + "@paperless.local",
+                buildPhoneNumber(blueprint.departmentIndex(), 1, 1),
+                topPath,
+                blueprint.isCentralOffice() ? "CHU_TICH" : "GIAM_DOC"
+        ));
+
+        // 2. Phó Thủ trưởng
+        seeds.add(new UserSeed(
+                topCode + ".pgd1",
+                roster.pgdName,
+                topCode + ".pgd1@paperless.local",
+                buildPhoneNumber(blueprint.departmentIndex(), 2, 1),
+                topPath,
+                blueprint.isCentralOffice() ? "PHO_CHU_TICH" : "PHO_GIAM_DOC"
+        ));
+
+        // 3. Trưởng phòng 0 (child unit 0)
+        String childPath0 = blueprint.childPath(blueprint.childUnits().get(0));
+        seeds.add(new UserSeed(
+                topCode + ".manager0",
+                roster.manager0Name,
+                topCode + ".manager0@paperless.local",
+                buildPhoneNumber(blueprint.departmentIndex(), 3, 1),
+                childPath0,
+                "TRUONG_PHONG"
+        ));
+
+        // 4. Trưởng phòng 1 (child unit 1)
+        String childPath1 = blueprint.childPath(blueprint.childUnits().get(1));
+        seeds.add(new UserSeed(
+                topCode + ".manager1",
+                roster.manager1Name,
+                topCode + ".manager1@paperless.local",
+                buildPhoneNumber(blueprint.departmentIndex(), 3, 2),
+                childPath1,
+                "TRUONG_PHONG"
+        ));
+
+        // 5. Chuyên viên 1 - Chức vụ đặc thù (child unit 0)
+        seeds.add(new UserSeed(
+                topCode + ".spec0_1",
+                roster.spec1Name,
+                topCode + ".spec0_1@paperless.local",
+                buildPhoneNumber(blueprint.departmentIndex(), 5, 1),
+                childPath0,
+                topCode + "_spec_custom"
+        ));
+
+        // 6. Chuyên viên 2 (child unit 0)
+        seeds.add(new UserSeed(
+                topCode + ".spec0_2",
+                roster.spec2Name,
+                topCode + ".spec0_2@paperless.local",
+                buildPhoneNumber(blueprint.departmentIndex(), 5, 2),
+                childPath0,
+                "CHUYEN_VIEN"
+        ));
+
+        // 7. Thư ký / Chuyên viên 3 (child unit 0)
+        seeds.add(new UserSeed(
+                topCode + ".spec0_3",
+                roster.spec3Name,
+                topCode + ".spec0_3@paperless.local",
+                buildPhoneNumber(blueprint.departmentIndex(), 5, 3),
+                childPath0,
+                "THU_KY"
+        ));
 
         return seeds;
     }
@@ -940,8 +1051,8 @@ public class SampleDataInitializer implements CommandLineRunner {
                         AttendanceStatus.NOT_CHECKED_IN, "Báo cáo tiến độ 2"),
                 participant(blueprint.staffUsername(3), ParticipantRole.PARTICIPANT, InviteStatus.ACCEPTED,
                         AttendanceStatus.NOT_CHECKED_IN, "Báo cáo tiến độ 3"),
-                participant(blueprint.staffUsername(4), ParticipantRole.PARTICIPANT, InviteStatus.PENDING,
-                        AttendanceStatus.NOT_CHECKED_IN, "Báo cáo tiến độ 4"));
+                participant(blueprint.slug() + ".pgd1", ParticipantRole.PARTICIPANT, InviteStatus.PENDING,
+                        AttendanceStatus.NOT_CHECKED_IN, "Lãnh đạo đơn vị phụ trách"));
     }
 
     private List<ParticipantSeed> buildReviewParticipants(MeetingSeed seed, DepartmentBlueprint blueprint) {

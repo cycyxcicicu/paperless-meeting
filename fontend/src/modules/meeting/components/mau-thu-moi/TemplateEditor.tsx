@@ -2,16 +2,20 @@ import React, { useState, useRef } from 'react';
 import { ArrowLeft, Code, FileDown, Printer, RefreshCw, Save, X } from 'lucide-react';
 import { compileTemplate, defaultTemplate, mockPreviewData, TemplateField, variablesList } from './template.data';
 import { RichTextEditor } from '../RichTextEditor';
+import { templateApi } from '../../services/template.api';
+import { toast } from '@/lib/toast';
 
 interface TemplateEditorProps {
-  templateData: typeof defaultTemplate;
-  setTemplateData: React.Dispatch<React.SetStateAction<typeof defaultTemplate>>;
-  onBack: () => void;
+  templateData: any;
+  setTemplateData: React.Dispatch<React.SetStateAction<any>>;
+  onBack: (shouldRefresh?: boolean) => void;
 }
 
 export const TemplateEditor: React.FC<TemplateEditorProps> = ({ templateData, setTemplateData, onBack }) => {
   const [focusedField, setFocusedField] = useState<TemplateField>("noiDung");
   const [showJsonModal, setShowJsonModal] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [saving, setSaving] = useState(false);
   const inputRefs = useRef<Record<string, HTMLInputElement | HTMLTextAreaElement | null>>({});
   const richTextEditorRef = useRef<any>(null);
 
@@ -19,14 +23,66 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ templateData, se
     setTemplateData({ ...defaultTemplate });
   };
 
-  const handleSaveDemo = () => {
-    console.log("=== LƯU MẪU THƯ MỜI ===");
-    console.log(JSON.stringify(templateData, null, 2));
-    alert("Dữ liệu đã được in ra Console!");
+  const handleSave = async () => {
+    if (!templateData.tenMau || !templateData.tenMau.trim()) {
+      toast.error('Thiếu thông tin', 'Vui lòng nhập tên mẫu');
+      return;
+    }
+    if (!templateData.maMau || !templateData.maMau.trim()) {
+      toast.error('Thiếu thông tin', 'Vui lòng nhập mã mẫu');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const contentJson = JSON.stringify(templateData);
+      const payload = {
+        name: templateData.tenMau,
+        code: templateData.maMau,
+        contentJson,
+        templateType: 'INVITATION' as const,
+        status: 'ACTIVE' as const
+      };
+
+      let response;
+      if (templateData.id) {
+        response = await templateApi.update(templateData.id, payload);
+      } else {
+        response = await templateApi.create(payload);
+      }
+
+      if (response.success) {
+        toast.success(templateData.id ? 'Cập nhật mẫu thành công' : 'Tạo mẫu thành công');
+        onBack(true);
+      } else {
+        toast.error(response.message || 'Lưu mẫu thất bại');
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Có lỗi xảy ra khi lưu mẫu');
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleExportPDF = () => {
-    window.print();
+  const handleExportPDF = async () => {
+    setExporting(true);
+    toast.info('Đang xử lý...', 'Hệ thống đang sinh file PDF từ mẫu thư mời');
+    try {
+      const blob = await templateApi.exportPdf(templateData, mockPreviewData);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${templateData.maMau || 'invitation'}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      toast.success('Thành công', 'Tải file PDF thành công');
+    } catch (e: any) {
+      toast.error('Lỗi xuất PDF', e.message || 'Không thể tạo file PDF');
+    } finally {
+      setExporting(false);
+    }
   };
 
   const handleExportWord = () => {
@@ -43,7 +99,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ templateData, se
     }
 
     // Fallback for regular input/textarea fields
-    setTemplateData(prev => {
+    setTemplateData((prev: any) => {
       let currentVal = String(prev[field] || '');
       const inputEl = inputRefs.current[field];
       if (inputEl) {
@@ -82,13 +138,18 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ templateData, se
   };
 
   return (
-    <div className="h-[calc(100vh-64px)] flex flex-col bg-gray-50 print:h-auto print:bg-white">
+    <div className="template-editor-global-times h-[calc(100vh-64px)] flex flex-col bg-gray-50 print:h-auto print:bg-white">
       <style>{`
         @media print {
-          @page { size: ${templateData.khoGiay === 'A6' ? 'A6 landscape' : 'A4 portrait'}; margin: 0; }
+          @page { size: A4 portrait; margin: 0; }
           body { background: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           /* Hide parent app containers like Sidebar/Topbar if they exist */
           .fixed, header, nav, aside { display: none !important; }
+        }
+        
+        .template-editor-global-times,
+        .template-editor-global-times * {
+          font-family: 'Times New Roman', Times, serif !important;
         }
       `}</style>
       
@@ -96,7 +157,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ templateData, se
       <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between shrink-0 print:hidden">
         <div className="flex items-center gap-4">
           <button 
-            onClick={onBack}
+            onClick={() => onBack()}
             className="p-2 hover:bg-gray-100 rounded-lg text-gray-500 transition-colors"
           >
             <ArrowLeft className="w-5 h-5" />
@@ -107,25 +168,18 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ templateData, se
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => setShowJsonModal(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm text-gray-600 hover:bg-gray-100 transition-colors">
-            <Code className="w-4 h-4" />
-            Xem JSON
-          </button>
-          <button onClick={handleExportWord} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm text-gray-600 hover:bg-gray-100 transition-colors">
-            <FileDown className="w-4 h-4" />
-            Xuất Word
-          </button>
-          <button onClick={handleExportPDF} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm text-[#C8102E] bg-red-50 hover:bg-red-100 transition-colors font-medium">
-            <Printer className="w-4 h-4" />
-            Xuất PDF
-          </button>
+
           <button onClick={handleReset} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm text-gray-600 hover:bg-gray-100 transition-colors">
             <RefreshCw className="w-4 h-4" />
             Reset mẫu
           </button>
-          <button onClick={handleSaveDemo} className="flex items-center gap-1.5 bg-[#C8102E] text-white px-4 py-1.5 rounded-lg text-sm btn-primary hover:bg-[#A90F14] transition-colors shadow-sm">
+          <button 
+            onClick={handleSave} 
+            disabled={saving}
+            className="flex items-center gap-1.5 bg-[#C8102E] text-white px-4 py-1.5 rounded-lg text-sm btn-primary hover:bg-[#A90F14] transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          >
             <Save className="w-4 h-4" />
-            Lưu Demo
+            {saving ? 'Đang lưu...' : 'Lưu mẫu'}
           </button>
         </div>
       </div>
@@ -153,17 +207,6 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ templateData, se
           </div>
           
           <div className="flex-1 overflow-y-auto p-6 space-y-5 custom-scrollbar">
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-gray-700">Khổ giấy</label>
-              <select 
-                value={templateData.khoGiay || "A4"}
-                onChange={e => setTemplateData({...templateData, khoGiay: e.target.value as any})}
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:border-[#C8102E] outline-none bg-white"
-              >
-                <option value="A4">A4 (210 x 297 mm) - Dọc</option>
-                <option value="A6">A6 (148 x 105 mm) - Ngang</option>
-              </select>
-            </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
@@ -236,6 +279,17 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ templateData, se
             </div>
 
             <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-gray-700">{"Trích yếu nội dung (VD: Về việc: Tham dự cuộc họp {{meetingName}})"}</label>
+              <input 
+                value={templateData.trichYeu || ""}
+                onChange={e => setTemplateData({...templateData, trichYeu: e.target.value})}
+                onFocus={() => setFocusedField('trichYeu' as any)}
+                ref={el => { inputRefs.current['trichYeu'] = el; }}
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:border-[#C8102E] outline-none"
+              />
+            </div>
+
+            <div className="space-y-1.5">
               <label className="text-xs font-semibold text-gray-700">Nội dung chính</label>
               <div onClick={() => setFocusedField('noiDung')} className="relative">
                 <RichTextEditor 
@@ -272,12 +326,27 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ templateData, se
             </div>
           </div>
           
-          <div className="bg-white shadow-xl mx-auto rounded-sm overflow-hidden text-black transition-all print:shadow-none print:m-0" 
-               style={{ boxSizing: 'border-box', fontFamily: '"Times New Roman", Times, serif', ...getPaperStyle(templateData.khoGiay) }}>
+          <style>{`
+            .preview-times-new-roman, 
+            .preview-times-new-roman *,
+            .preview-times-new-roman .ql-editor,
+            .preview-times-new-roman .ql-editor * {
+              font-family: 'Times New Roman', Times, serif !important;
+            }
+          `}</style>
+          <div className="preview-times-new-roman bg-white shadow-xl mx-auto rounded-sm overflow-hidden text-black transition-all print:shadow-none print:m-0" 
+               style={{ boxSizing: 'border-box', ...getPaperStyle(templateData.khoGiay) }}>
             
             <div className="flex justify-between items-start mb-6">
-              <div className="w-1/2 text-center">
-                <div className="text-sm font-semibold whitespace-pre-wrap leading-tight">{compileTemplate(templateData.headerTrai)}</div>
+              <div className="w-1/2 text-center text-sm leading-tight">
+                {compileTemplate(templateData.headerTrai).split('\n').map((line, idx, arr) => {
+                  const isLast = idx === arr.length - 1 && arr.length > 1;
+                  return (
+                    <div key={idx} className={isLast ? "font-normal" : "font-semibold"}>
+                      {line}
+                    </div>
+                  );
+                })}
               </div>
               <div className="w-1/2 text-center">
                 <div className="text-sm font-bold whitespace-pre-wrap leading-tight">{compileTemplate(templateData.headerPhai)}</div>
@@ -290,6 +359,9 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ templateData, se
 
             <div className="text-center mb-8">
               <h1 className="text-xl font-bold uppercase">{compileTemplate(templateData.tieuDe)}</h1>
+              {templateData.trichYeu && (
+                <div className="text-[15px] font-normal mt-1 text-gray-800">{compileTemplate(templateData.trichYeu)}</div>
+              )}
             </div>
 
             <div 

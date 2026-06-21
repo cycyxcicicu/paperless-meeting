@@ -63,6 +63,8 @@ class SpeakerServiceTest {
     CurrentUserService currentUserService;
     @Mock
     AuditLogPublisher auditLogPublisher;
+    @Mock
+    vn.acme.paperless_meeting.service.websocket.WebSocketNotificationService webSocketNotificationService;
 
     @InjectMocks
     SpeakerService speakerService;

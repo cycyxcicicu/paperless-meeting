@@ -23,4 +23,9 @@ public interface FileStorageService {
      * Lấy URL public/presigned để download file.
      */
     String getFileUrl(String storageKey);
+
+    /**
+     * Lấy stream file từ storage.
+     */
+    java.io.InputStream getFileStream(String storageKey);
 }

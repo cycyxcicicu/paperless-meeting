@@ -23,4 +23,7 @@ public interface MeetingDocumentRepository extends JpaRepository<MeetingDocument
     Optional<MeetingDocument> findByMeetingIdAndId(UUID meetingId, UUID id);
 
     boolean existsByMeetingIdAndDocumentId(UUID meetingId, UUID documentId);
+
+    @Query("SELECT md.meeting.id FROM MeetingDocument md WHERE md.document.id = :documentId")
+    List<UUID> findMeetingIdsByDocumentId(@Param("documentId") UUID documentId);
 }

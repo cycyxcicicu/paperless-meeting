@@ -2,10 +2,12 @@ import React from 'react';
 import { Upload, FileText, FileSpreadsheet, File as FileIcon, Trash2, Plus, Eye, X, Download } from 'lucide-react';
 import { Label } from './label';
 import { toast } from '@/lib/toast';
+import { viewDocument, downloadDocument } from '@/common/utils/fileHelpers';
+import { TableTooltip } from '@/common/components/table-engine/TableTooltip';
 
 export interface FileUploaderProps {
   files: any[];
-  onChange: (files: File[]) => void;
+  onChange: (files: any[]) => void;
   multiple?: boolean;
   accept?: string;
   maxSizeMB?: number;
@@ -13,6 +15,7 @@ export interface FileUploaderProps {
   placeholder?: string;
   allowedExtensionsText?: string;
   disabled?: boolean;
+  currentUserId?: string;
 }
 
 export const getFileIcon = (fileName: string) => {
@@ -47,42 +50,8 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
   placeholder,
   allowedExtensionsText = 'PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX, PNG, JPG, JPEG, TXT, ZIP',
   disabled = false,
+  currentUserId,
 }) => {
-  const [previewFile, setPreviewFile] = React.useState<any | null>(null);
-  const [previewUrl, setPreviewUrl] = React.useState<string>('');
-  const [textPreviewContent, setTextPreviewContent] = React.useState<string>('');
-
-  React.useEffect(() => {
-    if (!previewFile) {
-      setPreviewUrl('');
-      setTextPreviewContent('');
-      return;
-    }
-
-    const ext = previewFile.name.split('.').pop()?.toLowerCase();
-
-    if (previewFile instanceof File) {
-      const objectUrl = URL.createObjectURL(previewFile);
-      setPreviewUrl(objectUrl);
-
-      if (ext === 'txt') {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          setTextPreviewContent(e.target?.result as string || '');
-        };
-        reader.readAsText(previewFile);
-      }
-
-      return () => {
-        URL.revokeObjectURL(objectUrl);
-      };
-    } else {
-      // Pre-existing file with direct URL
-      const directUrl = previewFile.url || previewFile.fileUrl || '';
-      setPreviewUrl(directUrl);
-    }
-  }, [previewFile]);
-
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files) return;
     const selectedFiles = Array.from(e.target.files);
@@ -138,6 +107,63 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
     onChange(updated);
   };
 
+  /**
+   * Determines if a file is a server-persisted document (has documentId/id)
+   * vs a local File object not yet uploaded.
+   */
+  const getDocumentId = (file: any): string | null => {
+    if (file instanceof File) return null;
+    return file.documentId || file.id || null;
+  };
+
+  const isPdf = (file: any): boolean => {
+    const name = file.name || file.fileName || '';
+    return name.toLowerCase().endsWith('.pdf');
+  };
+
+  const handleView = (file: any) => {
+    const docId = getDocumentId(file);
+    if (docId && isPdf(file)) {
+      // Server-persisted PDF → use secure backend viewer
+      viewDocument(docId);
+    } else if (file instanceof File && isPdf(file)) {
+      // Local File (not yet uploaded) → open blob URL in new tab
+      const objectUrl = URL.createObjectURL(file);
+      window.open(objectUrl, '_blank');
+    }
+  };
+
+  const handleDownload = (file: any) => {
+    const docId = getDocumentId(file);
+    const fileName = file.name || file.fileName || 'document';
+    if (docId) {
+      // Server-persisted file → use secure backend download
+      downloadDocument(docId, fileName);
+    } else if (file instanceof File) {
+      // Local File (not yet uploaded) → trigger browser download
+      const objectUrl = URL.createObjectURL(file);
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.setAttribute('download', fileName);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(objectUrl);
+    }
+  };
+
+  /**
+   * Check if the current user can delete this file.
+   * - If currentUserId is not set, allow delete (legacy behavior).
+   * - If the file has no createdByUserId, allow delete (legacy behavior).
+   * - Otherwise, only the creator can delete.
+   */
+  const canDelete = (file: any): boolean => {
+    if (!currentUserId) return true;
+    if (!file.createdByUserId) return true;
+    return file.createdByUserId === currentUserId;
+  };
+
   return (
     <div className="space-y-2">
       {label && <Label className="text-sm font-medium text-gray-700">{label}</Label>}
@@ -173,56 +199,75 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {/* Map over uploaded files */}
-          {files.map((file, idx) => (
-            <div
-              key={idx}
-              className="flex items-center justify-between p-3 border border-gray-200 rounded-xl bg-white shadow-sm hover:shadow-md transition-all group"
-            >
-              <div className="flex items-center gap-3 min-w-0">
-                {getFileIcon(file.name)}
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-gray-900 truncate max-w-[180px]" title={file.name}>
-                    {file.name}
-                  </p>
-                  <p className="text-xs text-gray-500 mt-0.5">{formatFileSize(file.size)}</p>
+          {files.map((file, idx) => {
+            const docId = getDocumentId(file);
+            const filePdf = isPdf(file);
+
+            return (
+              <div
+                key={idx}
+                className="flex items-center justify-between p-3 border border-gray-200 rounded-xl bg-white shadow-sm hover:shadow-md transition-all group"
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  {getFileIcon(file.name || file.fileName || 'file')}
+                   <div className="min-w-0">
+                    <TableTooltip 
+                      text={file.name || file.fileName} 
+                      maxLength={20} 
+                      className="text-sm font-medium text-gray-900 truncate max-w-[180px] cursor-pointer block" 
+                    />
+                    <div className="flex flex-col gap-0.5 mt-0.5">
+                      <span className="text-xs text-gray-500">{formatFileSize(file.size || file.fileSize || 0)}</span>
+                      {file.createdByFullName && (
+                        <span className="text-[10px] text-gray-400 font-medium">
+                          Tạo bởi: {file.createdByFullName}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Action buttons */}
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  {/* Eye (View) button - only for PDF files */}
+                  {filePdf && (
+                    <button
+                      type="button"
+                      onClick={() => handleView(file)}
+                      className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                      title="Xem trước tài liệu"
+                    >
+                      <Eye className="h-4 w-4" />
+                    </button>
+                  )}
+
+                  {/* Download button - for all server-persisted files or local files */}
+                  {(docId || file instanceof File) && (
+                    <button
+                      type="button"
+                      onClick={() => handleDownload(file)}
+                      className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                      title="Tải tài liệu"
+                    >
+                      <Download className="h-4 w-4" />
+                    </button>
+                  )}
+
+                  {/* Delete button - only if not disabled and user owns the file */}
+                  {!disabled && canDelete(file) && (
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveFile(idx)}
+                      className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                      title="Xóa tài liệu"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
                 </div>
               </div>
-              
-              {/* Flex actions container */}
-              <div className="flex items-center gap-1 flex-shrink-0">
-                <button
-                  type="button"
-                  onClick={() => {
-                    const ext = file.name?.split('.').pop()?.toLowerCase();
-                    if (ext === 'pdf') {
-                      const url = file instanceof File 
-                        ? URL.createObjectURL(file) 
-                        : (file.url || file.fileUrl || '');
-                      if (url) {
-                        window.open(url, '_blank');
-                      }
-                    } else {
-                      setPreviewFile(file);
-                    }
-                  }}
-                  className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                  title="Xem trước tài liệu"
-                >
-                  <Eye className="h-4 w-4" />
-                </button>
-                {!disabled && (
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveFile(idx)}
-                    className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                    title="Xóa tài liệu"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
+            );
+          })}
 
           {/* Elegant plus sign card to add more files if multiple is true */}
           {multiple && !disabled && (
@@ -242,95 +287,6 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
               />
             </label>
           )}
-        </div>
-      )}
-
-      {/* Premium File Preview Modal */}
-      {previewFile && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in transition-all">
-          <div className="relative bg-white rounded-2xl w-full max-w-4xl h-[85vh] flex flex-col shadow-2xl overflow-hidden border border-gray-100 mx-4 transition-all">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between p-4 border-b border-gray-100 bg-gray-50/50">
-              <div className="flex items-center gap-3 min-w-0">
-                {getFileIcon(previewFile.name)}
-                <div className="min-w-0">
-                  <h3 className="text-sm font-semibold text-gray-900 truncate max-w-[400px] sm:max-w-[500px]" title={previewFile.name}>
-                    {previewFile.name}
-                  </h3>
-                  <p className="text-xs text-gray-500 mt-0.5">{formatFileSize(previewFile.size)}</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setPreviewFile(null)}
-                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-all"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            {/* Modal Body */}
-            <div className="flex-1 bg-gray-100/50 p-4 sm:p-6 overflow-auto flex flex-col justify-center items-center">
-              {(() => {
-                const ext = previewFile.name.split('.').pop()?.toLowerCase() || '';
-
-                if (ext === 'pdf') {
-                  return (
-                    <iframe
-                      src={previewUrl}
-                      className="w-full h-full border-0 rounded-xl bg-white shadow-sm"
-                      title={previewFile.name}
-                    />
-                  );
-                }
-
-                if (['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(ext)) {
-                  return (
-                    <div className="relative max-w-full max-h-full flex items-center justify-center bg-white p-4 rounded-xl shadow-sm overflow-hidden">
-                      <img
-                        src={previewUrl}
-                        alt={previewFile.name}
-                        className="max-w-full max-h-[65vh] object-contain rounded-lg"
-                      />
-                    </div>
-                  );
-                }
-
-                if (ext === 'txt') {
-                  return (
-                    <div className="w-full h-full bg-white p-6 rounded-xl border border-gray-200 overflow-auto shadow-sm">
-                      <pre className="text-sm font-mono text-gray-800 whitespace-pre-wrap font-normal leading-relaxed">
-                        {textPreviewContent || 'Đang tải nội dung văn bản...'}
-                      </pre>
-                    </div>
-                  );
-                }
-
-                // Fallback for Word, Excel, PPT etc.
-                return (
-                  <div className="flex flex-col items-center text-center p-8 bg-white rounded-2xl max-w-md shadow-sm border border-gray-100">
-                    <div className="p-4 bg-red-50 rounded-2xl mb-4">
-                      {getFileIcon(previewFile.name)}
-                    </div>
-                    <h4 className="text-base font-semibold text-gray-900 mb-1">
-                      Không thể xem trực tiếp định dạng này
-                    </h4>
-                    <p className="text-sm text-gray-500 mb-6 max-w-xs leading-relaxed">
-                      Trình duyệt không hỗ trợ xem trước tệp <span className="font-semibold text-gray-700">.{ext.toUpperCase()}</span> trực tiếp. Vui lòng tải về máy để xem chi tiết.
-                    </p>
-                    <a
-                      href={previewUrl}
-                      download={previewFile.name}
-                      className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#C8102E] hover:bg-[#a80d26] text-white text-sm font-semibold rounded-xl transition-all shadow-md hover:shadow-lg"
-                    >
-                      <Download className="h-4 w-4" />
-                      Tải tệp xuống
-                    </a>
-                  </div>
-                );
-              })()}
-            </div>
-          </div>
         </div>
       )}
     </div>

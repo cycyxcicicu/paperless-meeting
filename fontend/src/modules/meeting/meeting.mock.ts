@@ -1,18 +1,18 @@
 
 // Interfaces
 export interface Speaker {
-    id: number;
+    id: string | number;
     name: string;
     position: string;
     unit: string;
     note?: string;
     startTime?: string;
-    status: "waiting" | "speaking" | "finished";
+    status: "waiting" | "speaking" | "finished" | "rejected";
     addedTime: string;
 }
 
 export interface Opinion {
-    id: number;
+    id: string | number;
     userName: string;
     userPosition: string;
     documentName?: string;
@@ -22,16 +22,20 @@ export interface Opinion {
 }
 
 export interface VotingIssue {
-    id: number;
+    id: string | number;
     issue: string;
     time: string;
     status: "pending" | "broadcasting" | "voting" | "paused" | "completed";
     broadcastEnabled: boolean;
     votingDuration?: number;
+    options?: { id: string; label: string }[];
+    agendaItemId?: string;
+    agendaItemTitle?: string;
+    agendaItemStatus?: string;
 }
 
 export interface Delegate {
-    id: number;
+    id: string | number;
     unit: string;
     name: string;
     position: string;
@@ -48,9 +52,20 @@ export interface Participant {
 }
 
 export interface MeetingContent {
-    id: number;
+    id: string | number;
     title: string;
     description: string;
+    status?: 'DRAFT' | 'PENDING_PREPARATION' | 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED' | 'IN_PROGRESS' | 'DONE' | 'SKIPPED';
+    durationEst?: number;
+    preparedByFullName?: string;
+    startTime?: string;
+    endTime?: string;
+    documents?: {
+        documentId: string;
+        title: string;
+        fileName: string;
+        fileSize?: number;
+    }[];
 }
 
 export interface VotingResult {
@@ -61,7 +76,7 @@ export interface VotingResult {
 }
 
 export interface VotedDelegate {
-    id: number;
+    id: string | number;
     name: string;
     position: string;
     unit: string;
@@ -70,7 +85,7 @@ export interface VotedDelegate {
 }
 
 export interface NotVotedDelegate {
-    id: number;
+    id: string | number;
     name: string;
     position: string;
     unit: string;

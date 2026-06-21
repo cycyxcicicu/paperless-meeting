@@ -25,6 +25,7 @@ import vn.acme.paperless_meeting.dto.response.department.DepartmentChildResponse
 import vn.acme.paperless_meeting.dto.response.department.DepartmentStatsResponse;
 import vn.acme.paperless_meeting.dto.response.department.DepartmentTreeResponse;
 import vn.acme.paperless_meeting.service.department.DepartmentService;
+import org.springframework.data.domain.Pageable;
 
 @RestController
 @RequestMapping("/departments")
@@ -73,7 +74,7 @@ public class DepartmentController {
     public ApiResponse<PageResponse<DepartmentChildResponse>> getChildrenPage(
             @PathVariable UUID id,
             @RequestParam(required = false) String keyword,
-            org.springframework.data.domain.Pageable pageable) {
+            Pageable pageable) {
         return ApiResponse.<PageResponse<DepartmentChildResponse>>builder()
                 .success(true)
                 .message("Lấy danh sách phòng con thành công")

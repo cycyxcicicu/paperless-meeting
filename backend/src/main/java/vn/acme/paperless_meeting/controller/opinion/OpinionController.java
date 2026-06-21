@@ -28,7 +28,7 @@ public class OpinionController {
 
     @Operation(summary = "Danh sách ý kiến đóng góp của cuộc họp")
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'USER')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DEPARTMENT_ADMIN', 'USER')")
     public ResponseEntity<ApiResponse<List<OpinionResponse>>> getOpinions(@PathVariable UUID meetingId) {
         return ResponseEntity.ok(ApiResponse.<List<OpinionResponse>>builder()
                 .success(true)
@@ -38,7 +38,7 @@ public class OpinionController {
 
     @Operation(summary = "Đại biểu gửi ý kiến đóng góp mới")
     @PostMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'USER')")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DEPARTMENT_ADMIN', 'USER')")
     public ResponseEntity<ApiResponse<OpinionResponse>> createOpinion(
             @PathVariable UUID meetingId,
             @RequestBody @Valid OpinionRequest request) {

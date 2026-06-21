@@ -19,6 +19,18 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
     );
   }
 
+  const searchParams = new URLSearchParams(location.search);
+  const guestToken = searchParams.get('guestToken');
+
+  if (guestToken) {
+    // Chỉ cho phép khách mời truy cập trang chi tiết phiên họp hoặc diễn biến phiên họp
+    const guestPathRegex = /^\/phien-hop\/[a-f0-9-]{36}(\/dien-bien)?$/i;
+    if (!guestPathRegex.test(location.pathname)) {
+      return <Navigate to="/404" replace />;
+    }
+    return <>{children}</>;
+  }
+
   if (!user) {
     return <Navigate to="/login" replace />;
   }

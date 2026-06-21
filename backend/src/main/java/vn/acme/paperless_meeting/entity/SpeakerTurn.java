@@ -51,6 +51,10 @@ public class SpeakerTurn {
     private User user;
 
     @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "guest_id")
+    private MeetingGuest guest;
+
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by")
     private User createdBy;
 }

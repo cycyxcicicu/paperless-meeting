@@ -35,10 +35,34 @@ export const chiTietHopSchema = z.object({
 
 // 3. Zod schema cho form Bước 3 (Thông báo & Giấy mời)
 export const thongBaoGiayMoiSchema = z.object({
+  coGiayMoi: z.boolean().optional(),
   mauGiayMoi: z.string().optional().or(z.literal('')),
-  tieuDe: z.string().min(5, 'Tiêu đề phải từ 5 ký tự trở lên').optional().or(z.literal('')),
-  noiDung: z.string().min(10, 'Nội dung thư mời phải từ 10 ký tự trở lên').optional().or(z.literal('')),
+  tieuDe: z.string().optional().or(z.literal('')),
+  noiDung: z.string().optional().or(z.literal('')),
   trangThaiKy: z.string().optional().or(z.literal('')),
+}).superRefine((data, ctx) => {
+  if (data.coGiayMoi === true) {
+    if (!data.mauGiayMoi || data.mauGiayMoi.trim() === '') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Vui lòng chọn mẫu giấy mời',
+        path: ['mauGiayMoi'],
+      });
+    }
+    if (!data.noiDung || data.noiDung.trim() === '') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Vui lòng nhập nội dung thư mời',
+        path: ['noiDung'],
+      });
+    } else if (data.noiDung.trim().length < 10) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Nội dung thư mời phải từ 10 ký tự trở lên',
+        path: ['noiDung'],
+      });
+    }
+  }
 });
 
 // 4. Zod schema cho Bước 4 (Nội dung họp)

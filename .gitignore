@@ -43,3 +43,13 @@ build/
 docs/
 *.md
 *.log
+
+# Local environment variables
+.env
+.env.local
+.env.*
+application-local.yml
+application-dev.yml
+
+# AI Agent skills
+/agent-skills/

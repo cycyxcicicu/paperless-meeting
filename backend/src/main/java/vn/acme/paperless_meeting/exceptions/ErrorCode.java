@@ -115,6 +115,7 @@ public enum ErrorCode implements BaseErrorCode {
         MEETING_INVALID_RSVP_DEADLINE(1248, "Thời hạn xác nhận tham gia phải trước thời gian bắt đầu",
                         HttpStatus.BAD_REQUEST),
         MEETING_RSVP_DEADLINE_EXPIRED(1249, "Đã hết thời hạn xác nhận tham gia cuộc họp", HttpStatus.BAD_REQUEST),
+        EMAIL_SEND_FAILED(1250, "Gửi email thất bại", HttpStatus.BAD_REQUEST),
         // ROLE
         ROLE_NOT_EXIST(1301, "Vai trò không tồn tại", HttpStatus.NOT_FOUND),
         ROLE_EXISTED(1303, "Vai trò đã tồn tại", HttpStatus.CONFLICT),
@@ -188,7 +189,19 @@ public enum ErrorCode implements BaseErrorCode {
         FILE_UPLOAD_FAILED(2107, "Upload file thất bại", HttpStatus.INTERNAL_SERVER_ERROR),
         FILE_TYPE_NOT_ALLOWED(2108, "Loại file không được hỗ trợ. Chỉ chấp nhận PDF, DOCX, XLSX, PPTX, PNG, JPG, ZIP",
                         HttpStatus.BAD_REQUEST),
-        FILE_SIZE_EXCEEDED(2109, "Kích thước file vượt quá giới hạn 20MB", HttpStatus.BAD_REQUEST);
+        FILE_SIZE_EXCEEDED(2109, "Kích thước file vượt quá giới hạn 20MB", HttpStatus.BAD_REQUEST),
+        
+        // TEMPLATE
+        TEMPLATE_NOT_FOUND(2201, "Mẫu thư mời không tồn tại", HttpStatus.NOT_FOUND),
+        TEMPLATE_CODE_EXISTED(2202, "Mã mẫu thư mời đã tồn tại", HttpStatus.CONFLICT),
+        TEMPLATE_RENDER_FAILED(2203, "Lỗi trong quá trình sinh file PDF từ mẫu", HttpStatus.INTERNAL_SERVER_ERROR),
+
+        // GUEST VALIDATIONS
+        MEETING_NOT_STARTED(1251, "Cuộc họp chưa đến thời điểm diễn ra", HttpStatus.BAD_REQUEST),
+        MEETING_ALREADY_CLOSED(1252, "Cuộc họp đã kết thúc hoặc đã bị hủy", HttpStatus.BAD_REQUEST),
+        MEETING_PARTICIPANT_ALREADY_CONFIRMED(1253, "Yêu cầu xác nhận không hợp lệ: Đồng chí đã xác nhận tham dự cuộc họp này trước đó.", HttpStatus.BAD_REQUEST),
+        MEETING_LOCATION_CAPACITY_EXCEEDED(1254, "Số lượng người tham dự vượt quá sức chứa của phòng họp", HttpStatus.BAD_REQUEST),
+        MEETING_POSTPONE_TIME_INVALID(1255, "Thời gian bắt đầu mới phải sau thời gian bắt đầu hiện tại của phiên họp", HttpStatus.BAD_REQUEST);
 
         int code;
         String message;

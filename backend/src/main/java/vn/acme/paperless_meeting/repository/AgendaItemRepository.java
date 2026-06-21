@@ -28,4 +28,7 @@ public interface AgendaItemRepository extends JpaRepository<AgendaItem, UUID> {
     List<AgendaItem> findByPreparedByUserIdWithMeeting(@Param("preparedByUserId") UUID preparedByUserId);
 
     boolean existsByMeetingIdAndPreparedByUserId(UUID meetingId, UUID preparedByUserId);
+
+    @Query("SELECT DISTINCT a.meeting.id FROM AgendaItem a WHERE a.meeting.id IN :meetingIds AND a.preparedByUser.id = :preparedByUserId")
+    List<UUID> findMeetingIdsByPreparedByUserIdAndMeetingIdIn(@Param("meetingIds") List<UUID> meetingIds, @Param("preparedByUserId") UUID preparedByUserId);
 }

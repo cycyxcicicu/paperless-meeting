@@ -49,6 +49,27 @@ public interface ApprovalRequestRepository extends JpaRepository<ApprovalRequest
             LEFT JOIN FETCH aps.approverRole apr
             WHERE (:resourceType IS NULL OR ar.resourceType = :resourceType)
               AND ar.status = :status
+              AND (
+                (ar.resourceType = 'MEETING' AND EXISTS (
+                    SELECT 1 FROM Meeting m 
+                    WHERE m.id = ar.resourceId 
+                      AND m.isDeleted = false 
+                      AND m.status NOT IN ('CANCELLED', 'DRAFT', 'REJECTED')
+                )) OR
+                (ar.resourceType = 'DOCUMENT' AND EXISTS (
+                    SELECT 1 FROM Document d 
+                    WHERE d.id = ar.resourceId 
+                      AND d.isDeleted = false 
+                      AND d.status <> 'DRAFT'
+                )) OR
+                (ar.resourceType = 'MINUTES' AND EXISTS (
+                    SELECT 1 FROM Minutes min 
+                    WHERE min.id = ar.resourceId 
+                      AND min.isDeleted = false 
+                      AND min.status <> 'DRAFT'
+                )) OR
+                (ar.resourceType NOT IN ('MEETING', 'DOCUMENT', 'MINUTES'))
+              )
             ORDER BY ar.requestedAt ASC
             """)
     java.util.List<ApprovalRequest> findAllPending(

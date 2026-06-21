@@ -7,4 +7,5 @@ import java.util.UUID;
 
 public interface VoteBallotRepository extends JpaRepository<VoteBallot, UUID> {
     boolean existsByVoteSessionIdAndUserId(UUID voteSessionId, UUID userId);
+    boolean existsByVoteSessionIdAndGuestId(UUID voteSessionId, UUID guestId);
 }

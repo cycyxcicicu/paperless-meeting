@@ -9,6 +9,16 @@ import { meetingApi, MeetingResponse } from '@/modules/meeting/services/meeting.
 const calendarCache = new Map<string, { data: MeetingResponse[]; timestamp: number }>();
 const CACHE_TTL = 60000; // 1 phút
 
+const toLocalISOString = (date: Date): string => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const seconds = String(date.getSeconds()).padStart(2, '0');
+  return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`;
+};
+
 const isEventOnDay = (event: CalendarEvent, date: Date) => {
   if (!event.originalStartTime || !event.originalEndTime) return false;
   const meetingStart = new Date(event.originalStartTime);
@@ -47,6 +57,11 @@ const mapToCalendarEvent = (meeting: MeetingResponse): CalendarEvent => {
   } else if (meeting.status === 'CLOSED' || meeting.status === 'EXPIRED') {
     status = 'finished';
   }
+
+  // Kiểm tra xem cuộc họp có kéo dài qua nhiều ngày không
+  const startDay = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+  const endDay = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+  const isMultiDay = startDay.getTime() !== endDay.getTime();
   
   return {
     id: meeting.id,
@@ -59,6 +74,7 @@ const mapToCalendarEvent = (meeting: MeetingResponse): CalendarEvent => {
     chairName: meeting.chairName,
     originalStartTime: meeting.startTime,
     originalEndTime: meeting.endTime,
+    isMultiDay,
   };
 };
 
@@ -105,7 +121,9 @@ const LichHopPage = () => {
   }, [currentDate, viewMode]);
 
   const fetchMeetings = async (from: Date, to: Date, forceRefresh = false) => {
-    const cacheKey = `${from.toISOString()}_${to.toISOString()}`;
+    const fromStr = toLocalISOString(from);
+    const toStr = toLocalISOString(to);
+    const cacheKey = `${fromStr}_${toStr}`;
     
     if (!forceRefresh) {
       const cached = calendarCache.get(cacheKey);
@@ -118,8 +136,8 @@ const LichHopPage = () => {
     try {
       setLoading(true);
       const res = await meetingApi.getCalendarMeetings({
-        fromDate: from.toISOString(),
-        toDate: to.toISOString(),
+        fromDate: fromStr,
+        toDate: toStr,
         statuses: ['UPCOMING', 'IN_PROGRESS', 'CLOSED'],
         onlyMyMeetings: true,
       });

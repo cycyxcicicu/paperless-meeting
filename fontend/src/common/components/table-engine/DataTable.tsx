@@ -115,12 +115,12 @@ export function DataTable<T>({
                   />
                 </th>
               )}
-              <th className="px-6 py-4 text-left text-xs heading text-gray-700 uppercase tracking-wider">STT</th>
+              <th className="px-6 py-4 text-left text-xs heading text-gray-700 uppercase tracking-wider whitespace-nowrap">STT</th>
               
               {config.columns.map((col) => (
                 <th 
                   key={col.key} 
-                  className={`px-6 py-4 text-xs heading text-gray-700 uppercase tracking-wider ${
+                  className={`px-6 py-4 text-xs heading text-gray-700 uppercase tracking-wider whitespace-nowrap ${
                     col.align === 'center' ? 'text-center' : col.align === 'right' ? 'text-right' : 'text-left'
                   } ${col.headerClassName || ''}`}
                   style={{ width: col.width }}
@@ -130,7 +130,7 @@ export function DataTable<T>({
               ))}
 
               {config.rowActions && config.rowActions.length > 0 && (
-                <th className="px-6 py-4 text-center text-xs heading text-gray-700 uppercase tracking-wider">Thao tác</th>
+                <th className="px-6 py-4 text-center text-xs heading text-gray-700 uppercase tracking-wider whitespace-nowrap">Thao tác</th>
               )}
             </tr>
           </thead>

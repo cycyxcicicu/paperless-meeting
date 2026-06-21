@@ -8,7 +8,6 @@ import { FilterBar } from '@/common/components/layout/FilterBar';
 import { PageHeader } from '@/common/components/layout/PageHeader';
 import { Sidebar } from '@/common/components/layout/Sidebar';
 import { ConfirmActionModal } from '@/modules/meeting/components/ConfirmActionModal';
-import { PostponeData, PostponeModal } from '@/modules/meeting/components/PostponeModal';
 import { PollManagement } from '@/modules/poll/components/PollManagement';
 import { Badge } from '@/common/components/ui/badge';
 import { Button } from '@/common/components/ui/button';
@@ -80,8 +79,8 @@ const getTimeRange = (timeFilter: string, customFrom: Date | null, customTo: Dat
       break;
   }
   return {
-    fromDate: from ? from.toISOString() : undefined,
-    toDate: to ? to.toISOString() : undefined,
+    fromDate: from ? format(from, "yyyy-MM-dd'T'HH:mm:ss") : undefined,
+    toDate: to ? format(to, "yyyy-MM-dd'T'HH:mm:ss") : undefined,
   };
 };
 
@@ -112,17 +111,12 @@ const PhienHopPage = () => {
 
     const [confirmModal, setConfirmModal] = useState<{
         isOpen: boolean;
-        actionType: "cancel" | "send" | "postpone";
+        actionType: "cancel" | "send" | "revertToDraft";
         meetingId: string;
         meetingTitle: string;
     } | null>(null);
 
-    const [postponeModal, setPostponeModal] = useState<{
-        isOpen: boolean;
-        meetingId: string;
-        oldStartTime: string;
-        oldEndTime: string;
-    } | null>(null);
+
 
     const mapMeetingResponseToMeeting = (res: MeetingResponse): Meeting => {
       const statusInfo = STATUS_MAP[res.status] || { label: res.status, variant: "default" as const };
@@ -147,7 +141,6 @@ const PhienHopPage = () => {
         canEdit: res.canEdit,
         canCancel: res.canCancel,
         canPublish: res.canPublish,
-        canPostpone: res.canPostpone,
         canDelete: res.canDelete,
         canSubmitApproval: res.canSubmitApproval,
         canUploadDocs: res.canUploadDocs,
@@ -195,12 +188,21 @@ const PhienHopPage = () => {
     }, [currentPage, pageSize, searchQuery, selectedStatus, selectedTime, customFromDate, customToDate]);
 
     useEffect(() => {
+        let debounceTimeout: any = null;
         const unsubscribe = subscribe('/topic/meeting-updates', (message) => {
             console.log("WebSocket meeting update received:", message);
-            fetchMeetings();
+            if (debounceTimeout) {
+                clearTimeout(debounceTimeout);
+            }
+            debounceTimeout = setTimeout(() => {
+                fetchMeetings();
+            }, 300);
         });
         return () => {
             unsubscribe();
+            if (debounceTimeout) {
+                clearTimeout(debounceTimeout);
+            }
         };
     }, [subscribe, currentPage, pageSize, searchQuery, selectedStatus, selectedTime, customFromDate, customToDate]);
 
@@ -221,42 +223,7 @@ const PhienHopPage = () => {
         navigate(`/phien-hop/${id}/up-tai-lieu`);
     };
 
-    const handlePostpone = (id: string) => {
-        const rawMeeting = rawMeetings.find(m => m.id === id);
-        if (!rawMeeting) return;
 
-        setPostponeModal({
-            isOpen: true,
-            meetingId: id,
-            oldStartTime: rawMeeting.startTime,
-            oldEndTime: rawMeeting.endTime,
-        });
-    };
-
-    const handleConfirmPostpone = async (data: PostponeData) => {
-        if (!postponeModal) return;
-        try {
-            const res = await meetingApi.postponeMeeting(postponeModal.meetingId, {
-                newStartTime: data.newStartTime,
-                newEndTime: data.newEndTime,
-                reason: data.reason
-            });
-
-            if (res.success) {
-                toast.success(
-                    "Hoãn phiên họp thành công",
-                    `Phiên họp đã được hoãn sang thời gian mới`
-                );
-                setPostponeModal(null);
-                fetchMeetings();
-            } else {
-                toast.error("Thất bại", res.message || "Không thể hoãn phiên họp.");
-            }
-        } catch (error) {
-            console.error("Error postponing meeting:", error);
-            toast.error("Lỗi", "Đã xảy ra lỗi khi hoãn phiên họp.");
-        }
-    };
 
     const handleCancel = (id: string) => {
         const meeting = meetings.find((m) => m.id === id);
@@ -288,6 +255,7 @@ const PhienHopPage = () => {
         );
         if (!meeting) return;
 
+        let keepModalOpen = false;
         try {
             if (confirmModal.actionType === "cancel") {
                 const res = await meetingApi.cancelMeeting(confirmModal.meetingId, "Hủy phiên họp theo yêu cầu của người tạo");
@@ -300,17 +268,62 @@ const PhienHopPage = () => {
                 } else {
                     toast.error("Thất bại", res.message || "Không thể hủy phiên họp.");
                 }
+            } else if (confirmModal.actionType === "revertToDraft") {
+                const revertRes = await meetingApi.revertToDraft(confirmModal.meetingId);
+                if (revertRes.success) {
+                    toast.success("Đã chuyển phiên họp về trạng thái Bản nháp");
+                    navigate(`/phien-hop/${confirmModal.meetingId}/cap-nhat`);
+                } else {
+                    toast.error("Thất bại", revertRes.message || "Không thể chuyển trạng thái phiên họp.");
+                }
             } else if (confirmModal.actionType === "send") {
+                const rawMeeting = rawMeetings.find(m => m.id === confirmModal.meetingId);
+                let timeExpired = false;
+                if (rawMeeting?.startTime) {
+                    const startTime = new Date(rawMeeting.startTime);
+                    const now = new Date();
+                    const minAllowedTime = new Date(now.getTime() + 30 * 60 * 1000);
+                    if (startTime < minAllowedTime) {
+                        timeExpired = true;
+                    }
+                }
+
+                if (timeExpired) {
+                    setConfirmModal({
+                        isOpen: true,
+                        actionType: "revertToDraft",
+                        meetingId: confirmModal.meetingId,
+                        meetingTitle: meeting.title,
+                    });
+                    keepModalOpen = true;
+                    return;
+                }
+
                 if (meeting.canPublish) {
-                    const res = await meetingApi.publishMeeting(confirmModal.meetingId);
-                    if (res.success) {
-                        toast.success(
-                            "Công bố phiên họp thành công",
-                            `Đã công bố phiên họp "${meeting.title}"`
-                        );
-                        fetchMeetings();
-                    } else {
-                        toast.error("Thất bại", res.message || "Không thể công bố phiên họp.");
+                    try {
+                        const res = await meetingApi.publishMeeting(confirmModal.meetingId);
+                        if (res.success) {
+                            toast.success(
+                                "Công bố phiên họp thành công",
+                                `Đã công bố phiên họp "${meeting.title}"`
+                            );
+                            fetchMeetings();
+                        } else {
+                            toast.error("Thất bại", res.message || "Không thể công bố phiên họp.");
+                        }
+                    } catch (error: any) {
+                        const isTimeError = error && error.response && error.response.data && error.response.data.code === 1222;
+                        if (isTimeError) {
+                            setConfirmModal({
+                                isOpen: true,
+                                actionType: "revertToDraft",
+                                meetingId: confirmModal.meetingId,
+                                meetingTitle: meeting.title,
+                            });
+                            keepModalOpen = true;
+                        } else {
+                            toast.error("Thất bại", error?.response?.data?.message || error?.message || "Không thể công bố phiên họp.");
+                        }
                     }
                 } else {
                     const res = await meetingApi.submitApproval(confirmModal.meetingId);
@@ -329,7 +342,9 @@ const PhienHopPage = () => {
             console.error("Error executing action:", error);
             toast.error("Lỗi", "Đã xảy ra lỗi khi thực hiện hành động.");
         } finally {
-            setConfirmModal(null);
+            if (!keepModalOpen) {
+                setConfirmModal(null);
+            }
         }
     };
 
@@ -338,7 +353,6 @@ const PhienHopPage = () => {
         onView: handleViewDetail,
         onUpdate: handleUpdate,
         onCopy: handleCopy,
-        onPostpone: handlePostpone,
         onCancel: handleCancel,
         onSend: handleSend,
     }), [meetings, rawMeetings]);
@@ -347,7 +361,6 @@ const PhienHopPage = () => {
         onView: handleViewDetail,
         onUpdate: handleUpdate,
         onCopy: handleCopy,
-        onPostpone: handlePostpone,
         onCancel: handleCancel,
         onSend: handleSend,
     }), [meetings, rawMeetings]);
@@ -364,7 +377,6 @@ const PhienHopPage = () => {
             onViewDetail={handleViewDetail}
             onUpdate={handleUpdate}
             onCopy={handleCopy}
-            onPostpone={handlePostpone}
             onCancel={handleCancel}
             onSend={handleSend}
             onUploadDocs={handleUploadDocs}
@@ -387,7 +399,6 @@ const PhienHopPage = () => {
                 <div className="p-8">
                         <PageHeader
                             title="Quản lý phiên họp"
-                            description="Danh sách các phiên họp và cuộc họp sắp tới"
                             breadcrumbs={[
                                 { name: "Trang chủ", path: "/" },
                                 { name: "Phiên họp" },
@@ -539,17 +550,7 @@ const PhienHopPage = () => {
                 />
             )}
 
-            {/* Postpone Modal */}
-            {postponeModal && (
-                <PostponeModal
-                    isOpen={postponeModal.isOpen}
-                    onClose={() => setPostponeModal(null)}
-                    onConfirm={handleConfirmPostpone}
-                    meetingId={postponeModal.meetingId}
-                    oldStartTime={postponeModal.oldStartTime}
-                    oldEndTime={postponeModal.oldEndTime}
-                />
-            )}
+
         </>
     );
 };

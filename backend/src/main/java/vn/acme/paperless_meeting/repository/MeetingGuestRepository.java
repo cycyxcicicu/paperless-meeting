@@ -11,6 +11,9 @@ import org.springframework.stereotype.Repository;
 
 import vn.acme.paperless_meeting.entity.MeetingGuest;
 import vn.acme.paperless_meeting.entity.enums.InviteStatus;
+import vn.acme.paperless_meeting.entity.enums.MeetingStatus;
+import org.springframework.data.jpa.repository.Query;
+import java.time.LocalDateTime;
 
 @Repository
 public interface MeetingGuestRepository extends JpaRepository<MeetingGuest, UUID> {
@@ -29,9 +32,11 @@ public interface MeetingGuestRepository extends JpaRepository<MeetingGuest, UUID
     @EntityGraph(attributePaths = {"meeting"})
     Optional<MeetingGuest> findByGuestToken(UUID guestToken);
 
+    List<MeetingGuest> findBySubstituteForParticipantId(UUID substituteForParticipantId);
+
     void deleteByMeetingIdAndId(UUID meetingId, UUID guestId);
 
-    @org.springframework.data.jpa.repository.Query("SELECT COUNT(mg) > 0 FROM MeetingGuest mg " +
+    @Query("SELECT COUNT(mg) > 0 FROM MeetingGuest mg " +
            "WHERE mg.email = :email " +
            "AND mg.inviteStatus = :status " +
            "AND mg.meeting.id != :currentMeetingId " +
@@ -42,8 +47,8 @@ public interface MeetingGuestRepository extends JpaRepository<MeetingGuest, UUID
         @Param("email") String email,
         @Param("status") InviteStatus status,
         @Param("currentMeetingId") UUID currentMeetingId,
-        @Param("activeStatuses") List<vn.acme.paperless_meeting.entity.enums.MeetingStatus> activeStatuses,
-        @Param("startTime") java.time.LocalDateTime startTime,
-        @Param("endTime") java.time.LocalDateTime endTime
+        @Param("activeStatuses") List<MeetingStatus> activeStatuses,
+        @Param("startTime") LocalDateTime startTime,
+        @Param("endTime") LocalDateTime endTime
     );
 }

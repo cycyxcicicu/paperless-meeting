@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <title th:text="${templateData.tenMau}">Thư mời</title>
+    <style>
+        @page {
+            size: A4 portrait;
+            margin-top: 20mm;
+            margin-right: 15mm;
+            margin-bottom: 20mm;
+            margin-left: 30mm;
+        }
+        body {
+            font-family: "Times New Roman", Times, "DejaVu Sans", Georgia, serif;
+            font-size: 14px;
+            line-height: 1.5;
+            color: #000000;
+            margin: 0;
+            padding: 0;
+        }
+        .header-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        .header-table td:first-child {
+            vertical-align: top;
+            width: 35%;
+        }
+        .header-table td:last-child {
+            vertical-align: top;
+            width: 65%;
+        }
+        .header-left {
+            text-align: center;
+            font-size: 13px;
+            line-height: 1.35;
+        }
+        .header-right {
+            text-align: center;
+            font-size: 13px;
+            line-height: 1.35;
+        }
+        .header-bold {
+            font-weight: bold;
+        }
+        .header-regular {
+            font-weight: normal;
+        }
+        .date-location {
+            text-align: right;
+            font-style: italic;
+            font-size: 14px;
+            margin-bottom: 25px;
+            padding-right: 15px;
+            white-space: pre-wrap;
+        }
+        .title-block {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .main-title {
+            font-size: 20px;
+            font-weight: bold;
+            text-transform: uppercase;
+            margin: 0;
+        }
+        .trich-yeu {
+            font-size: 15px;
+            font-weight: normal;
+            margin-top: 6px;
+            white-space: pre-wrap;
+        }
+        .main-content {
+            font-size: 14px;
+            text-align: justify;
+            margin-bottom: 35px;
+            line-height: 1.6;
+        }
+        .main-content p {
+            margin: 0;
+            padding: 0;
+        }
+        .main-content ul, .main-content ol {
+            margin: 0;
+            padding-left: 20px;
+        }
+        .main-content li {
+            margin: 0;
+            padding: 0;
+        }
+        .footer-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 40px;
+        }
+        .footer-table td {
+            vertical-align: top;
+        }
+        .recipients-box {
+            width: 40%;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+        .recipients-header {
+            font-weight: bold;
+            font-style: italic;
+        }
+        .signature-box {
+            width: 60%;
+            text-align: center;
+            font-size: 14px;
+            line-height: 1.4;
+        }
+        .signature-title {
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        .signature-space {
+            height: 75px;
+        }
+        .signature-name {
+            font-weight: bold;
+        }
+        @media screen {
+            html {
+                background: #f0f2f5;
+                margin: 0;
+                padding: 0;
+            }
+            body {
+                width: 210mm;
+                height: 297mm;
+                margin: 40px auto;
+                padding: 20mm 15mm 20mm 30mm;
+                background: #ffffff;
+                box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+                box-sizing: border-box;
+                border: 1px solid #d3d3d3;
+                border-radius: 4px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Header table -->
+    <table class="header-table">
+        <tr>
+            <td>
+                <div class="header-left">
+                    <div th:each="line : ${templateData.headerTraiLines}"
+                         th:text="${line}"
+                         class="header-bold">
+                         ỦY BAN NHÂN DÂN QUẬN A
+                    </div>
+                    <div class="header-bold" th:remove="all">PHÒNG NỘI VỤ</div>
+                </div>
+            </td>
+            <td>
+                <div class="header-right">
+                    <div th:each="line : ${templateData.headerPhaiLines}"
+                         th:text="${line}"
+                         class="header-bold">
+                         CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM
+                    </div>
+                    <div class="header-bold" th:remove="all">Độc lập - Tự do - Hạnh phúc</div>
+                </div>
+            </td>
+        </tr>
+    </table>
+
+    <!-- Date location -->
+    <div class="date-location" th:utext="${templateData.ngayThang}">Hải Phòng, ngày 17 tháng 05 năm 2026</div>
+
+    <!-- Title and trich yeu -->
+    <div class="title-block">
+        <h1 class="main-title" th:utext="${templateData.tieuDe}">THƯ MỜI</h1>
+        <div class="trich-yeu" th:utext="${templateData.trichYeu}">Về việc: Tham dự cuộc họp Họp xét duyệt hồ sơ</div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content" th:utext="${templateData.noiDung}">
+        <p>Trân trọng kính mời ông/bà <strong>Nguyễn Văn A</strong>, Trưởng phòng - Phòng Kế hoạch tham dự cuộc họp <strong>Họp xét duyệt hồ sơ</strong>.</p>
+        <p><br/></p>
+        <p><strong>Thời gian:</strong> 08:30 ngày 20/05/2026<br/><strong>Địa điểm:</strong> Phòng họp tầng 3</p>
+        <p><br/></p>
+        <p><strong>Nội dung cuộc họp:</strong><br/>Xét duyệt danh sách hồ sơ đăng ký</p>
+        <p><br/></p>
+        <p>Rất mong ông/bà tham dự đầy đủ, đúng giờ.</p>
+    </div>
+
+    <!-- Footer signature & recipients -->
+    <table class="footer-table">
+        <tr>
+            <td class="recipients-box">
+            </td>
+                        <td class="signature-box">
+                <div class="signature-title" th:text="${templateData.chuKyChucVu}">CHỦ TỊCH HỘI ĐỒNG</div>
+                <div class="signature-space"></div>
+                <div class="signature-name" th:text="${templateData.chuKyHoTen}">Nguyễn Văn B</div>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>

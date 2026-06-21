@@ -63,4 +63,8 @@ public class SpeakerQueue {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id")
     private User user;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "guest_id")
+    private MeetingGuest guest;
 }

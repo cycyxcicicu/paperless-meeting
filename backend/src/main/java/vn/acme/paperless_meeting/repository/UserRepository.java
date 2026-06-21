@@ -12,6 +12,7 @@ import org.springframework.data.repository.query.Param;
 
 import vn.acme.paperless_meeting.entity.User;
 import vn.acme.paperless_meeting.entity.enums.UserStatus;
+import vn.acme.paperless_meeting.entity.enums.PositionRole;
 
 public interface UserRepository extends JpaRepository<User, UUID>, JpaSpecificationExecutor<User> {
         long countByRoleIsNull();
@@ -88,4 +89,13 @@ public interface UserRepository extends JpaRepository<User, UUID>, JpaSpecificat
 
         @Query("SELECT u FROM User u WHERE u.department.id = :deptId AND u.position IS NOT NULL AND (u.position.positionCode = 'CHU_TICH' OR u.position.positionCode = 'GIAM_DOC') AND u.status = vn.acme.paperless_meeting.entity.enums.UserStatus.ACTIVE")
         List<User> findActiveLeadersByDepartmentId(@Param("deptId") UUID deptId);
+
+        @EntityGraph(attributePaths = { "position", "department" })
+        List<User> findByDepartmentIdAndStatus(UUID departmentId, UserStatus status);
+
+        @EntityGraph(attributePaths = { "position", "department" })
+        List<User> findByDepartmentIdInAndStatus(List<UUID> departmentIds, UserStatus status);
+
+        long countByDepartmentIdAndPositionPositionRoleAndIdNot(UUID departmentId, PositionRole positionRole, UUID id);
+        long countByDepartmentIdAndPositionPositionRole(UUID departmentId, PositionRole positionRole);
 }

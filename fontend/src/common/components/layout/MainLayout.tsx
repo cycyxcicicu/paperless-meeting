@@ -43,13 +43,17 @@ const MainLayout: React.FC = () => {
         return item;
     });
 
-    // Một số trang đặc biệt không hiện sidebar nếu cần (ví dụ HomePage)
-    const showSidebar = pathname !== '/';
+    const searchParams = new URLSearchParams(location.search);
+    const guestToken = searchParams.get('guestToken');
+    const isGuest = !!guestToken;
+
+    // Một số trang đặc biệt không hiện sidebar nếu cần (ví dụ HomePage hoặc Khách mời)
+    const showSidebar = pathname !== '/' && !isGuest;
 
     return (
         <div className="min-h-screen bg-[#F8FAFC]">
-            <TopBar />
-            <div className="flex pt-16">
+            {!isGuest && <TopBar />}
+            <div className={`flex ${isGuest ? '' : 'pt-16'}`}>
                 {showSidebar && (
                     <div className="fixed left-0 top-16 bottom-0 w-64 z-20">
                         <Sidebar items={filteredSidebarItems} />

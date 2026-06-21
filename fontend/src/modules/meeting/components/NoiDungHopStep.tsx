@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Plus, X, Trash2, CalendarIcon, Send, Check, AlertCircle } from 'lucide-react';
 import { FileUploader } from '@/common/components/ui/FileUploader';
+import { useAuth } from '@/app/context/AuthContext';
 import { toast } from '@/lib/toast';
 import { useWebSocket } from '@/app/context/WebSocketContext';
 import { Button } from '@/common/components/ui/button';
@@ -87,6 +88,7 @@ const NoiDungHopStep: React.FC<NoiDungHopStepProps> = ({
   isReadOnly = false,
 }) => {
   const { subscribe } = useWebSocket();
+  const { user } = useAuth();
 
   const [activeContentId, setActiveContentId] = useState(data.contents[0]?.id || '');
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
@@ -733,7 +735,9 @@ const NoiDungHopStep: React.FC<NoiDungHopStepProps> = ({
                               id: res.data.id,
                               name: version?.fileName || res.data.title || file.name,
                               url: version?.fileUrl || (res.data as any).fileUrl,
-                              size: version?.fileSize || file.size
+                              size: version?.fileSize || file.size,
+                              createdByUserId: user?.id,
+                              createdByFullName: user?.fullName
                             });
                           } else {
                             toast.error(`Tải file ${file.name} thất bại: ${res.message || ''}`);
@@ -758,6 +762,7 @@ const NoiDungHopStep: React.FC<NoiDungHopStepProps> = ({
                   allowedExtensionsText="PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX, PNG, JPG, JPEG, TXT, ZIP"
                   label="Tài liệu đính kèm"
                   disabled={isReadOnly}
+                  currentUserId={user?.id}
                 />
               )}
             </div>

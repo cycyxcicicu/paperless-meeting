@@ -94,6 +94,5 @@ public class Department extends SoftDeletable {
         @OneToMany(mappedBy = "ownerDepartment")
         private List<DocTemplate> docTemplateList = new ArrayList<>();
 
-        @OneToMany(mappedBy = "department")
-        private List<AclPrincipal> aclPrincipalList = new ArrayList<>();
+
 }

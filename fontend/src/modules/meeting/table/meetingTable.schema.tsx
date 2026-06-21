@@ -15,7 +15,6 @@ export interface Meeting {
     canEdit?: boolean;
     canCancel?: boolean;
     canPublish?: boolean;
-    canPostpone?: boolean;
     canDelete?: boolean;
     canSubmitApproval?: boolean;
     canUploadDocs?: boolean;
@@ -27,7 +26,6 @@ export const createMeetingColumns = (handlers: {
     onView: (id: string) => void;
     onUpdate: (id: string) => void;
     onCopy: (id: string) => void;
-    onPostpone: (id: string) => void;
     onCancel: (id: string) => void;
     onSend: (id: string) => void;
 }): ColumnDef<Meeting>[] => [
@@ -53,7 +51,6 @@ export const createMeetingRowActions = (handlers: {
     onView: (id: string) => void;
     onUpdate: (id: string) => void;
     onCopy: (id: string) => void;
-    onPostpone: (id: string) => void;
     onCancel: (id: string) => void;
     onSend: (id: string) => void;
 }) => [

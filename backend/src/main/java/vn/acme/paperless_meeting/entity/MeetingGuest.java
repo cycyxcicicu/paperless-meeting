@@ -29,6 +29,7 @@ import lombok.Setter;
 import vn.acme.paperless_meeting.entity.base.SoftDeletable;
 import vn.acme.paperless_meeting.entity.enums.AttendanceStatus;
 import vn.acme.paperless_meeting.entity.enums.InviteStatus;
+import vn.acme.paperless_meeting.entity.enums.SendStatus;
 
 @Getter
 @Setter
@@ -83,7 +84,17 @@ public class MeetingGuest extends SoftDeletable {
     @Column(name = "attendance_status")
     private AttendanceStatus attendanceStatus;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "send_status")
+    private SendStatus sendStatus;
+
     private String note;
+
+    @Column(name = "is_substitute")
+    private Boolean isSubstitute = false;
+
+    @Column(name = "substitute_for_participant_id")
+    private UUID substituteForParticipantId;
 
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)

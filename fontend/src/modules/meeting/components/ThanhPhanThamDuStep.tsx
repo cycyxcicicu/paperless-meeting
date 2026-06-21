@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Trash2, Users as UsersIcon, Edit2 } from 'lucide-react';
+import { Plus, Trash2, Users as UsersIcon, Edit2, Send } from 'lucide-react';
 import { Button } from '@/common/components/ui/button';
 import { SelectUnitModal, Member } from './SelectUnitModal';
 import { AddGuestModal, GuestData } from './AddGuestModal';
@@ -7,6 +7,9 @@ import { DataTable } from '@/common/components/table-engine/DataTable';
 import { TableEngineConfig } from '@/common/components/table-engine/table.types';
 import { cn } from '@/common/utils/cn';
 import { toast } from '@/lib/toast';
+import { useAuth } from '@/app/context/AuthContext';
+import { meetingApi } from '../services/meeting.api';
+import { PositionCode } from '@/common/types/position';
 
 interface ThanhPhanThamDuData {
   donVi: Member[];
@@ -20,11 +23,41 @@ interface ThanhPhanThamDuStepProps {
   data: ThanhPhanThamDuData;
   onChange?: (data: ThanhPhanThamDuData) => void;
   readOnly?: boolean;
+  meetingId?: string;
+  creatorId?: string | null;
 }
 
 type TabType = 'donvi' | 'khachmoi';
 
-const ThanhPhanThamDuStep: React.FC<ThanhPhanThamDuStepProps> = ({ data, onChange, readOnly = false }) => {
+const ThanhPhanThamDuStep: React.FC<ThanhPhanThamDuStepProps> = ({
+  data,
+  onChange,
+  readOnly = false,
+  meetingId,
+  creatorId = null,
+}) => {
+  const { user } = useAuth();
+  const effectiveCreatorId = creatorId || (user ? String(user.id) : null);
+
+  const hasPrivilege = React.useMemo(() => {
+    if (!user) return false;
+    const role = user.role?.roleCode;
+    if (role === 'SUPER_ADMIN' || role === 'DEPARTMENT_ADMIN') return true;
+    
+    // Check if user is a secretary by position
+    const posCode = (user.position as any)?.positionCode || (user as any).positionCode;
+    if (posCode === 'THU_KY' || posCode === PositionCode.THU_KY) return true;
+    
+    // Check if user is the creator of the meeting
+    if (effectiveCreatorId && String(user.id) === effectiveCreatorId) return true;
+    
+    // Check if user is designated as secretary in this meeting
+    const isMeetingSecretary = data.donVi?.some(m => m.id === String(user.id) && m.isSecretary);
+    if (isMeetingSecretary) return true;
+
+    return false;
+  }, [user, effectiveCreatorId, data.donVi]);
+
   const [activeTab, setActiveTab] = useState<TabType>('donvi');
   const [showUnitModal, setShowUnitModal] = useState(false);
   const [showGuestModal, setShowGuestModal] = useState(false);
@@ -32,19 +65,71 @@ const ThanhPhanThamDuStep: React.FC<ThanhPhanThamDuStepProps> = ({ data, onChang
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 10;
 
+  React.useEffect(() => {
+    if (!readOnly && effectiveCreatorId && user && String(user.id) === effectiveCreatorId) {
+      const hasCreator = data.donVi?.some(m => m.id === effectiveCreatorId);
+      if (!hasCreator) {
+        const creatorMember: Member = {
+          id: String(user.id),
+          name: user.fullName || user.username,
+          position: (user.position as any)?.name || (user as any).positionName || '',
+          unit: (user.department as any)?.deptName || (user.department as any)?.name || '',
+          unitId: (user.department as any)?.id ? String((user.department as any).id) : '',
+          email: user.email || '',
+          isChair: false,
+          isSecretary: true,
+          sendStatus: 'PENDING' as const,
+        };
+        if (onChange) {
+          onChange({
+            ...data,
+            donVi: [creatorMember, ...(data.donVi || [])],
+          });
+        }
+      }
+    }
+  }, [effectiveCreatorId, user, data, onChange, readOnly]);
+
   const tabs = [
     { id: 'donvi' as TabType, label: 'Đơn vị', count: data.donVi?.length || 0 },
     { id: 'khachmoi' as TabType, label: 'Khách mời', count: data.khachMoi?.length || 0 },
   ];
 
+  const renderSendStatus = (status?: 'PENDING' | 'SENT' | 'FAILED') => {
+    switch (status) {
+      case 'SENT':
+        return (
+          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+            Đã gửi
+          </span>
+        );
+      case 'FAILED':
+        return (
+          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+            Gửi lỗi
+          </span>
+        );
+      case 'PENDING':
+      default:
+        return (
+          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+            Chưa gửi
+          </span>
+        );
+    }
+  };
+
   const handleConfirmUnitSelection = (selectedMembers: Member[]) => {
     const chairMap = new Map((data.donVi || []).map(m => [m.id, m.isChair]));
     const secretaryMap = new Map((data.donVi || []).map(m => [m.id, m.isSecretary]));
-    const updatedMembers = selectedMembers.map(m => ({
-      ...m,
-      isChair: chairMap.get(m.id) || false,
-      isSecretary: secretaryMap.get(m.id) || false
-    }));
+    const updatedMembers = selectedMembers.map(m => {
+      const isCreator = effectiveCreatorId && m.id === effectiveCreatorId;
+      return {
+        ...m,
+        isChair: isCreator ? false : (chairMap.get(m.id) || false),
+        isSecretary: isCreator ? true : (secretaryMap.get(m.id) || false)
+      };
+    });
 
     if (onChange) {
       onChange({
@@ -90,6 +175,8 @@ const ThanhPhanThamDuStep: React.FC<ThanhPhanThamDuStepProps> = ({ data, onChang
   };
 
   const handleToggleChair = (memberId: string, checked: boolean) => {
+    if (effectiveCreatorId && memberId === effectiveCreatorId) return; // Người tạo mặc định là Thư ký, không được làm Chủ trì
+
     if (checked) {
       const currentChairs = (data.donVi || []).filter(m => m.isChair).length;
       if (currentChairs >= 3) {
@@ -114,6 +201,16 @@ const ThanhPhanThamDuStep: React.FC<ThanhPhanThamDuStepProps> = ({ data, onChang
   };
 
   const handleToggleSecretary = (memberId: string, checked: boolean) => {
+    if (effectiveCreatorId && memberId === effectiveCreatorId) return; // Người tạo mặc định là Thư ký, không thể thay đổi
+
+    if (checked) {
+      const currentSecretaries = (data.donVi || []).filter(m => m.isSecretary || (effectiveCreatorId && m.id === effectiveCreatorId)).length;
+      if (currentSecretaries >= 2) {
+        toast.error('Tối đa 2 thư ký');
+        return;
+      }
+    }
+
     const updatedDonVi = (data.donVi || []).map(m => {
       if (m.id === memberId) {
         return { ...m, isSecretary: checked, isChair: checked ? false : m.isChair };
@@ -131,10 +228,29 @@ const ThanhPhanThamDuStep: React.FC<ThanhPhanThamDuStepProps> = ({ data, onChang
 
   const donViTableConfig: TableEngineConfig<Member> = {
     columns: [
-      { key: 'name', header: 'Họ và tên' },
+      { 
+        key: 'name', 
+        header: 'Họ và tên',
+        render: (row) => (
+          <div>
+            <div className="font-medium text-gray-900">{row.name}</div>
+            {row.substitutedForUserName && (
+              <div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200/60 rounded px-1.5 py-0.5 mt-1 inline-flex items-center gap-1 font-normal">
+                Đi thay cho: <span className="font-semibold">{row.substitutedForUserName}</span>
+                {row.substitutedForUserPosition ? ` (${row.substitutedForUserPosition})` : ''}
+              </div>
+            )}
+          </div>
+        )
+      },
       { key: 'position', header: 'Chức vụ' },
       { key: 'unit', header: 'Đơn vị' },
       { key: 'email', header: 'Email' },
+      ...(hasPrivilege ? [{
+        key: 'sendStatus',
+        header: 'Trạng thái gửi thư',
+        render: (row: Member) => renderSendStatus(row.sendStatus)
+      }] : []),
       {
         key: 'isChair',
         header: 'Chủ trì',
@@ -154,7 +270,8 @@ const ThanhPhanThamDuStep: React.FC<ThanhPhanThamDuStepProps> = ({ data, onChang
           const currentChairs = (data.donVi || []).filter(m => m.isChair).length;
           const isMaxReached = currentChairs >= 3;
           const isChecked = !!row.isChair;
-          const isDisabled = isMaxReached && !isChecked;
+          const isCreator = effectiveCreatorId && row.id === effectiveCreatorId;
+          const isDisabled = !!isCreator || (isMaxReached && !isChecked);
 
           return (
             <div className="flex justify-center">
@@ -187,59 +304,138 @@ const ThanhPhanThamDuStep: React.FC<ThanhPhanThamDuStepProps> = ({ data, onChang
             );
           }
 
-          const isChecked = !!row.isSecretary;
+          const isCreator = effectiveCreatorId && row.id === effectiveCreatorId;
+          const isChecked = !!isCreator || !!row.isSecretary;
+          const isDisabled = !!isCreator;
 
           return (
             <div className="flex justify-center">
               <input
                 type="checkbox"
                 checked={isChecked}
+                disabled={isDisabled}
                 onChange={(e) => handleToggleSecretary(row.id, e.target.checked)}
-                className="w-4 h-4 rounded border-gray-300 text-[#C8102E] focus:ring-[#C8102E] transition-all cursor-pointer hover:scale-105"
+                className={`w-4 h-4 rounded border-gray-300 text-[#C8102E] focus:ring-[#C8102E] transition-all ${
+                  isDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:scale-105'
+                }`}
               />
             </div>
           );
         }
       }
     ],
-    rowActions: readOnly ? [] : [
+    rowActions: hasPrivilege ? [
       {
-        key: 'delete',
-        label: 'Xóa',
-        icon: <Trash2 className="h-4 w-4" />,
-        variant: 'danger',
-        onClick: (row) => handleRemoveFromDonVi(row.id),
+        key: 'resend-email',
+        label: 'Gửi lại email',
+        icon: <Send className="h-4 w-4" />,
+        variant: 'primary',
+        show: (row) => row.sendStatus === 'FAILED',
+        onClick: async (row) => {
+          if (!meetingId) {
+            toast.error('Không tìm thấy thông tin cuộc họp');
+            return;
+          }
+          try {
+            await meetingApi.resendEmail(meetingId, row.id, 'INTERNAL');
+            toast.success('Gửi lại email thành công');
+            if (onChange) {
+              const updatedDonVi = (data.donVi || []).map(m =>
+                m.id === row.id ? { ...m, sendStatus: 'SENT' as const } : m
+              );
+              onChange({ ...data, donVi: updatedDonVi });
+            }
+          } catch (error: any) {
+            toast.error(error?.response?.data?.message || 'Gửi lại email thất bại');
+          }
+        }
       },
-    ],
+      ...(!readOnly ? [
+        {
+          key: 'delete',
+          label: 'Xóa',
+          icon: <Trash2 className="h-4 w-4" />,
+          variant: 'danger' as const,
+          show: (row: Member) => !(effectiveCreatorId && row.id === effectiveCreatorId),
+          onClick: (row: Member) => handleRemoveFromDonVi(row.id),
+        }
+      ] : [])
+    ] : [],
   };
 
   const guestTableConfig: TableEngineConfig<any> = {
     columns: [
-      { key: 'name', header: 'Họ và tên' },
+      { 
+        key: 'name', 
+        header: 'Họ và tên',
+        render: (row: any) => (
+          <div>
+            <div className="font-medium text-gray-900">{row.name}</div>
+            {row.substitutedForUserName && (
+              <div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200/60 rounded px-1.5 py-0.5 mt-1 inline-flex items-center gap-1 font-normal">
+                Đi thay cho: <span className="font-semibold">{row.substitutedForUserName}</span>
+                {row.substitutedForUserPosition ? ` (${row.substitutedForUserPosition})` : ''}
+              </div>
+            )}
+          </div>
+        )
+      },
       { key: 'position', header: 'Chức vụ' },
       { key: 'unit', header: 'Đơn vị' },
       { key: 'email', header: 'Email' },
-      { key: 'phone', header: 'Số điện thoại', render: (row) => row.phone || '-' },
+      ...(hasPrivilege ? [{
+        key: 'sendStatus',
+        header: 'Trạng thái gửi thư',
+        render: (row: any) => renderSendStatus(row.sendStatus)
+      }] : []),
+      { key: 'phone', header: 'Số điện thoại', render: (row: any) => row.phone || '-' },
     ],
-    rowActions: readOnly ? [] : [
+    rowActions: hasPrivilege ? [
       {
-        key: 'edit',
-        label: 'Sửa',
-        icon: <Edit2 className="h-4 w-4" />,
+        key: 'resend-email',
+        label: 'Gửi lại email',
+        icon: <Send className="h-4 w-4" />,
         variant: 'primary',
-        onClick: (row) => {
-          setEditingGuest(row);
-          setShowGuestModal(true);
+        show: (row: any) => row.sendStatus === 'FAILED',
+        onClick: async (row: any) => {
+          if (!meetingId) {
+            toast.error('Không tìm thấy thông tin cuộc họp');
+            return;
+          }
+          try {
+            await meetingApi.resendEmail(meetingId, row.id, 'GUEST');
+            toast.success('Gửi lại email thành công');
+            if (onChange) {
+              const updatedGuests = (data.khachMoi || []).map(m =>
+                m.id === row.id ? { ...m, sendStatus: 'SENT' as const } : m
+              );
+              onChange({ ...data, khachMoi: updatedGuests });
+            }
+          } catch (error: any) {
+            toast.error(error?.response?.data?.message || 'Gửi lại email thất bại');
+          }
+        }
+      },
+      ...(!readOnly ? [
+        {
+          key: 'edit',
+          label: 'Sửa',
+          icon: <Edit2 className="h-4 w-4" />,
+          variant: 'primary' as const,
+          onClick: (row: any) => {
+            setEditingGuest(row);
+            setShowGuestModal(true);
+          },
         },
-      },
-      {
-        key: 'delete',
-        label: 'Xóa',
-        icon: <Trash2 className="h-4 w-4" />,
-        variant: 'danger',
-        onClick: (row) => handleRemoveGuest(row.id),
-      },
-    ],
+        {
+          key: 'delete',
+          label: 'Xóa',
+          icon: <Trash2 className="h-4 w-4" />,
+          variant: 'danger' as const,
+          onClick: (row: any) => handleRemoveGuest(row.id),
+        }
+      ] : [])
+    ] : [],
   };
 
   const EmptyState: React.FC<{ message: string; onAdd?: () => void }> = ({ message, onAdd }) => (
@@ -321,7 +517,7 @@ const ThanhPhanThamDuStep: React.FC<ThanhPhanThamDuStepProps> = ({ data, onChang
               {!data.donVi || data.donVi.length === 0 ? (
                 <EmptyState
                   message="Chưa có nhân viên nào được thêm từ đơn vị"
-                  onAdd={() => setShowUnitModal(true)}
+                  onAdd={readOnly ? undefined : () => setShowUnitModal(true)}
                 />
               ) : (
                 <div className="border border-gray-200 rounded-xl overflow-hidden">
@@ -356,7 +552,7 @@ const ThanhPhanThamDuStep: React.FC<ThanhPhanThamDuStepProps> = ({ data, onChang
               {!data.khachMoi || data.khachMoi.length === 0 ? (
                 <EmptyState 
                   message="Chưa có khách mời nào được thêm" 
-                  onAdd={() => { setEditingGuest(null); setShowGuestModal(true); }}
+                  onAdd={readOnly ? undefined : () => { setEditingGuest(null); setShowGuestModal(true); }}
                 />
               ) : (
                 <div className="border border-gray-200 rounded-xl overflow-hidden">
@@ -385,6 +581,7 @@ const ThanhPhanThamDuStep: React.FC<ThanhPhanThamDuStepProps> = ({ data, onChang
         mode="unit"
         title="Chọn từ đơn vị"
         initialSelectedMembers={data.donVi}
+        creatorId={effectiveCreatorId}
       />
 
       <AddGuestModal

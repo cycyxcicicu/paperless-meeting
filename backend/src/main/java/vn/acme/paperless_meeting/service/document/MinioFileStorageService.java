@@ -5,6 +5,7 @@ import io.minio.MakeBucketArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
 import io.minio.RemoveObjectArgs;
+import io.minio.GetObjectArgs;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -66,12 +67,12 @@ public class MinioFileStorageService implements FileStorageService {
             boolean exists = minioClient.bucketExists(BucketExistsArgs.builder().bucket(bucket).build());
             if (!exists) {
                 minioClient.makeBucket(MakeBucketArgs.builder().bucket(bucket).build());
-                log.info("Created MinIO bucket: {}", bucket);
+                log.info("Đã tạo bucket MinIO: {}", bucket);
             } else {
-                log.info("MinIO bucket '{}' already exists.", bucket);
+                log.info("Bucket MinIO '{}' đã tồn tại.", bucket);
             }
         } catch (Exception e) {
-            log.error("Failed to initialize MinIO bucket '{}': {}", bucket, e.getMessage(), e);
+            log.error("Khởi tạo bucket MinIO '{}' thất bại: {}", bucket, e.getMessage(), e);
             // Không throw để tránh block app start; lỗi sẽ xuất hiện khi upload thực sự
         }
     }
@@ -114,7 +115,7 @@ public class MinioFileStorageService implements FileStorageService {
             );
 
             String fileUrl = buildFileUrl(storageKey);
-            log.info("Uploaded file '{}' → storageKey='{}', size={} bytes", originalFilename, storageKey, file.getSize());
+            log.info("Đã tải file lên thành công '{}' → storageKey='{}', dung lượng={} bytes", originalFilename, storageKey, file.getSize());
 
             return StorageResult.builder()
                     .storageKey(storageKey)
@@ -127,7 +128,7 @@ public class MinioFileStorageService implements FileStorageService {
         } catch (AppException e) {
             throw e;
         } catch (Exception e) {
-            log.error("Failed to upload file '{}' to MinIO: {}", originalFilename, e.getMessage(), e);
+            log.error("Tải file '{}' lên MinIO thất bại: {}", originalFilename, e.getMessage(), e);
             throw new AppException(ErrorCode.FILE_UPLOAD_FAILED);
         }
     }
@@ -141,9 +142,9 @@ public class MinioFileStorageService implements FileStorageService {
                             .object(storageKey)
                             .build()
             );
-            log.info("Deleted file storageKey='{}' from MinIO", storageKey);
+            log.info("Đã xóa file storageKey='{}' khỏi MinIO", storageKey);
         } catch (Exception e) {
-            log.warn("Failed to delete file storageKey='{}' from MinIO: {}", storageKey, e.getMessage());
+            log.warn("Xóa file storageKey='{}' khỏi MinIO thất bại: {}", storageKey, e.getMessage());
             // Không throw — lỗi xóa file không được block flow chính
         }
     }
@@ -151,6 +152,21 @@ public class MinioFileStorageService implements FileStorageService {
     @Override
     public String getFileUrl(String storageKey) {
         return buildFileUrl(storageKey);
+    }
+
+    @Override
+    public InputStream getFileStream(String storageKey) {
+        try {
+            return minioClient.getObject(
+                    GetObjectArgs.builder()
+                            .bucket(bucket)
+                            .object(storageKey)
+                            .build()
+            );
+        } catch (Exception e) {
+            log.error("Đọc luồng dữ liệu file từ MinIO thất bại: {}", e.getMessage(), e);
+            throw new AppException(ErrorCode.FILE_UPLOAD_FAILED);
+        }
     }
 
     // --- Private helpers ---

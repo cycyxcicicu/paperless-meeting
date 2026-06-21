@@ -54,6 +54,10 @@ public class VoteBallot {
         @JoinColumn(name = "user_id")
         private User user;
 
+        @ManyToOne(fetch = FetchType.LAZY)
+        @JoinColumn(name = "guest_id")
+        private MeetingGuest guest;
+
         @OneToMany(mappedBy = "ballot", orphanRemoval = false)
         private List<VoteBallotChoice> voteBallotChoiceList = new ArrayList<>();
 }

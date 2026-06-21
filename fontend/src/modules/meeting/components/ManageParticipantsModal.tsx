@@ -9,6 +9,7 @@ interface ManageParticipantsModalProps {
   onConfirm?: (data: ThanhPhanThamDuData) => void;
   initialData: ThanhPhanThamDuData;
   readOnly?: boolean;
+  creatorId?: string | null;
 }
 
 export const ManageParticipantsModal: React.FC<ManageParticipantsModalProps> = ({
@@ -17,6 +18,7 @@ export const ManageParticipantsModal: React.FC<ManageParticipantsModalProps> = (
   onConfirm,
   initialData,
   readOnly = false,
+  creatorId = null,
 }) => {
   const [data, setData] = useState<ThanhPhanThamDuData>(initialData);
 
@@ -39,7 +41,7 @@ export const ManageParticipantsModal: React.FC<ManageParticipantsModalProps> = (
         className="absolute inset-0 bg-black/50 backdrop-blur-sm"
         onClick={onClose}
       />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-5xl mx-4 animate-in fade-in-0 zoom-in-95 max-h-[90vh] flex flex-col overflow-hidden">
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-7xl md:max-w-[85vw] mx-4 animate-in fade-in-0 zoom-in-95 max-h-[90vh] flex flex-col overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-white">
           <h3 className="text-lg btn-primary text-gray-900">
@@ -55,7 +57,7 @@ export const ManageParticipantsModal: React.FC<ManageParticipantsModalProps> = (
 
         {/* Body */}
         <div className="p-6 overflow-y-auto flex-1">
-          <ThanhPhanThamDuStep data={data} onChange={readOnly ? undefined : setData} readOnly={readOnly} />
+          <ThanhPhanThamDuStep data={data} onChange={readOnly ? undefined : setData} readOnly={readOnly} creatorId={creatorId} />
         </div>
 
         {/* Footer */}

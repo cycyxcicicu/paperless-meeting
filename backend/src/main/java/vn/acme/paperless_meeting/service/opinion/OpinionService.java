@@ -81,8 +81,17 @@ public class OpinionService {
 
     private OpinionResponse mapToResponse(Opinion opinion) {
         String positionName = "";
-        if (opinion.getUser() != null && opinion.getUser().getPosition() != null) {
-            positionName = opinion.getUser().getPosition().getPositionName();
+        String delegateName = "";
+        String avatar = "";
+
+        if (opinion.getUser() != null) {
+            delegateName = opinion.getUser().getFullName();
+            avatar = opinion.getUser().getAvatar();
+            if (opinion.getUser().getPosition() != null) {
+                positionName = opinion.getUser().getPosition().getPositionName();
+            }
+        } else if (opinion.getGuestName() != null) {
+            delegateName = opinion.getGuestName() + " (Khách mời)";
         }
 
         List<OpinionAttachmentResponse> attachments = new ArrayList<>();
@@ -106,13 +115,31 @@ public class OpinionService {
 
         return OpinionResponse.builder()
                 .id(opinion.getId())
-                .delegateName(opinion.getUser() != null ? opinion.getUser().getFullName() : "")
+                .delegateName(delegateName)
                 .position(positionName)
-                .avatar(opinion.getUser() != null ? opinion.getUser().getAvatar() : "")
+                .avatar(avatar)
                 .content(opinion.getOpinionDetail())
                 .time(opinion.getCreatedAt())
                 .documentName(opinion.getDocumentName())
                 .attachments(attachments)
                 .build();
+    }
+
+    @Transactional
+    public OpinionResponse publicCreateOpinion(UUID meetingId, String guestName, OpinionRequest request) {
+        Meeting meeting = meetingRepository.findById(meetingId)
+                .orElseThrow(() -> new AppException(ErrorCode.MEETING_NOT_EXIST));
+
+        Opinion opinion = Opinion.builder()
+                .meeting(meeting)
+                .user(null)
+                .guestName(guestName)
+                .opinionDetail(request.getOpinionDetail())
+                .documentName(request.getDocumentName())
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        Opinion saved = opinionRepository.save(opinion);
+        return mapToResponse(saved);
     }
 }

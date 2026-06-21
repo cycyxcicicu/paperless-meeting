@@ -15,6 +15,12 @@ import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBr
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
 import org.springframework.web.socket.server.support.HttpSessionHandshakeInterceptor;
+import org.springframework.http.server.ServerHttpRequest;
+import org.springframework.http.server.ServerHttpResponse;
+import org.springframework.http.server.ServletServerHttpRequest;
+import org.springframework.web.socket.WebSocketHandler;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.Cookie;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -43,19 +49,19 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     public void registerStompEndpoints(StompEndpointRegistry registry) {
         HttpSessionHandshakeInterceptor cookieInterceptor = new HttpSessionHandshakeInterceptor() {
             @Override
-            public boolean beforeHandshake(org.springframework.http.server.ServerHttpRequest request,
-                                           org.springframework.http.server.ServerHttpResponse response,
-                                           org.springframework.web.socket.WebSocketHandler wsHandler,
+            public boolean beforeHandshake(ServerHttpRequest request,
+                                           ServerHttpResponse response,
+                                           WebSocketHandler wsHandler,
                                            Map<String, Object> attributes) throws Exception {
-                if (request instanceof org.springframework.http.server.ServletServerHttpRequest) {
-                    jakarta.servlet.http.HttpServletRequest servletRequest =
-                            ((org.springframework.http.server.ServletServerHttpRequest) request).getServletRequest();
-                    jakarta.servlet.http.Cookie[] cookies = servletRequest.getCookies();
+                if (request instanceof ServletServerHttpRequest) {
+                    HttpServletRequest servletRequest =
+                            ((ServletServerHttpRequest) request).getServletRequest();
+                    Cookie[] cookies = servletRequest.getCookies();
                     if (cookies != null) {
-                        for (jakarta.servlet.http.Cookie cookie : cookies) {
+                        for (Cookie cookie : cookies) {
                             if ("ACCESS_TOKEN".equals(cookie.getName())) {
                                 attributes.put("token", cookie.getValue());
-                                log.info("Extracted ACCESS_TOKEN from cookie during WebSocket handshake");
+                                log.info("Đã trích xuất ACCESS_TOKEN từ cookie trong quá trình bắt tay WebSocket");
                                 break;
                             }
                         }
@@ -102,13 +108,13 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
                                 UsernamePasswordAuthenticationToken authentication =
                                         new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
                                 accessor.setUser(authentication);
-                                log.info("WebSocket authentication successful for user: {}", username);
+                                log.info("Xác thực WebSocket thành công cho người dùng: {}", username);
                             }
                         } catch (Exception e) {
-                            log.error("Failed to authenticate WebSocket connection", e);
+                            log.error("Xác thực kết nối WebSocket thất bại", e);
                         }
                     } else {
-                        log.warn("No token found for WebSocket CONNECT");
+                        log.warn("Không tìm thấy token cho kết nối WebSocket CONNECT");
                     }
                 }
                 return message;

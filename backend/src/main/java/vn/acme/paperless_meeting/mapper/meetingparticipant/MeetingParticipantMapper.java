@@ -20,6 +20,7 @@ public interface MeetingParticipantMapper {
     @Mapping(target = "userId", source = "user.id")
     @Mapping(target = "username", source = "user.username")
     @Mapping(target = "fullName", source = "user.fullName")
+    @Mapping(target = "email", source = "user.email")
     @Mapping(target = "deptName", source = "user.department.deptName")
     @Mapping(target = "positionName", source = "user.position.positionName")
     @Mapping(target = "substituteUserId", source = "substituteUser.id")

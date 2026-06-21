@@ -21,6 +21,7 @@ interface WizardFooterProps {
   canApprove?: boolean;
   onApprove?: () => void;
   onReject?: () => void;
+  onCancelMeeting?: () => void;
 }
 
 const WizardFooter: React.FC<WizardFooterProps> = ({
@@ -39,6 +40,7 @@ const WizardFooter: React.FC<WizardFooterProps> = ({
   canApprove = false,
   onApprove,
   onReject,
+  onCancelMeeting,
 }) => {
   const isApproved = approvalStatus === 'approved';
   const isPending = approvalStatus === 'pending';
@@ -99,7 +101,7 @@ const WizardFooter: React.FC<WizardFooterProps> = ({
                     </button>
                     <button
                       onClick={onApprove}
-                      className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-green-600 text-white hover:bg-green-700 btn-primary text-sm hover:shadow-lg transition-all"
+                      className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#C8102E] to-[#A90F14] text-white btn-primary text-sm hover:shadow-lg hover:shadow-red-500/25 transition-all"
                     >
                       <CheckCircle className="h-4 w-4" />
                       Phê duyệt
@@ -128,10 +130,10 @@ const WizardFooter: React.FC<WizardFooterProps> = ({
                         onClick={onSubmitForApproval}
                         disabled={isPending || isReadOnly}
                         className={cn(
-                          'inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-gray-300 text-gray-700 btn-primary text-sm transition-all',
+                          'inline-flex items-center gap-2 px-5 py-2.5 rounded-xl btn-primary text-sm transition-all',
                           (isPending || isReadOnly)
-                            ? 'opacity-50 cursor-not-allowed bg-gray-100 text-gray-400'
-                            : 'hover:bg-gray-50'
+                            ? 'opacity-50 cursor-not-allowed bg-gray-100 text-gray-400 border border-gray-200'
+                            : 'bg-gradient-to-r from-[#C8102E] to-[#A90F14] text-white hover:shadow-lg hover:shadow-red-500/25'
                         )}
                       >
                         <Send className="h-4 w-4" />
@@ -162,6 +164,16 @@ const WizardFooter: React.FC<WizardFooterProps> = ({
                           </div>
                         )}
                       </div>
+                    )}
+
+                    {onCancelMeeting && (
+                      <button
+                        onClick={onCancelMeeting}
+                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-red-300 text-red-700 bg-red-50 hover:bg-red-100 btn-primary text-sm transition-all"
+                      >
+                        <X className="h-4 w-4" />
+                        Hủy phiên họp
+                      </button>
                     )}
                   </>
                 )}

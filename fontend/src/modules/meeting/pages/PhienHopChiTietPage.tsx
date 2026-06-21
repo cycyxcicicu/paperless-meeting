@@ -1,57 +1,89 @@
-import { ArrowLeft, Check, Clock, Download, Eye, FileText, MapPin, Upload, AlertCircle } from "lucide-react";
-import { useState, useEffect } from "react";
-import { useNavigate, useParams } from "react-router";
-import { PageHeader } from '@/common/components/layout/PageHeader';
-import { CollapsibleSection } from '@/modules/meeting/components/CollapsibleSection';
-import { ConfirmActionModal } from '@/modules/meeting/components/ConfirmActionModal';
-import { PostponeData, PostponeModal } from '@/modules/meeting/components/PostponeModal';
-import { Badge } from '@/common/components/ui/badge';
-import { Button } from '@/common/components/ui/button';
-import { Card } from '@/common/components/ui/card';
-import { ManageParticipantsModal } from '@/modules/meeting/components/ManageParticipantsModal';
-import { ConfirmAttendanceModal } from '@/modules/meeting/components/ConfirmAttendanceModal';
-import { ThanhPhanThamDuData } from '@/modules/meeting/components/ThanhPhanThamDuStep';
-import { DataTable } from '@/common/components/table-engine/DataTable';
-import { TableEngineConfig } from '@/common/components/table-engine/table.types';
-import { getMeetingStatus, MOCK_VOTING_ISSUES, MOCK_PARTICIPANTS, VotingIssue, Speaker, Participant, Opinion } from '../meeting.mock';
-import { cn } from '@/common/utils/cn';
-import { meetingApi, MeetingResponse } from '../services/meeting.api';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/common/components/ui/dialog';
+import { useAuth } from "@/app/context/AuthContext";
+import { PageHeader } from "@/common/components/layout/PageHeader";
+import { Badge } from "@/common/components/ui/badge";
+import { Button } from "@/common/components/ui/button";
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+} from "@/common/components/ui/dialog";
+import { cn } from "@/common/utils/cn";
+import { viewDocument, downloadDocument } from "@/common/utils/fileHelpers";
+import { ConfirmActionModal } from "@/modules/meeting/components/ConfirmActionModal";
+import { ConfirmAttendanceModal } from "@/modules/meeting/components/ConfirmAttendanceModal";
+import { ManageParticipantsModal } from "@/modules/meeting/components/ManageParticipantsModal";
+import { ThanhPhanThamDuData } from "@/modules/meeting/components/ThanhPhanThamDuStep";
+import {
+    ArrowLeft,
+    Check,
+    CalendarClock,
+    CalendarX,
+} from "lucide-react";
+import { useCallback, useEffect, useState, useMemo } from "react";
+import { useNavigate, useParams, useLocation } from "react-router";
+import { toast } from "sonner";
+import { meetingApi } from "../services/meeting.api";
 
-const mapMeetingStatusVi = (statusStr: string): string => {
-    switch (statusStr) {
-        case 'DRAFT': return 'Nháp';
-        case 'PENDING_APPROVAL': return 'Chờ phê duyệt';
-        case 'APPROVED': return 'Đã phê duyệt';
-        case 'UPCOMING': return 'Sắp diễn ra';
-        case 'IN_PROGRESS': return 'Đang diễn ra';
-        case 'CLOSED': return 'Đã kết thúc';
-        case 'CANCELLED': return 'Đã hủy';
-        case 'REJECTED': return 'Bị từ chối';
-        case 'EXPIRED': return 'Đã hết hạn';
-        default: return statusStr;
-    }
-};
+// Import sub-components and hooks
+import { MeetingInfoSection } from "../components/chi-tiet/MeetingInfoSection";
+import { MeetingDocumentSection } from "../components/chi-tiet/MeetingDocumentSection";
+import { MeetingMotionSection } from "../components/chi-tiet/MeetingMotionSection";
+import { MeetingSpeakerRegistrationSection } from "../components/chi-tiet/MeetingSpeakerRegistrationSection";
+import { MeetingOpinionSection } from "../components/chi-tiet/MeetingOpinionSection";
+import { MeetingFooterActions } from "../components/chi-tiet/MeetingFooterActions";
+import { useMeetingState } from "../hooks/useMeetingState";
+import { mapMeetingStatusVi } from "../utils/meetingHelpers";
+import { getRemainingTimeVi } from "@/common/utils/timeHelpers";
+import { LoadingOverlay } from "@/common/components/ui/LoadingOverlay";
 
 export default function PhienHopChiTietPage() {
     const navigate = useNavigate();
-    const { id } = useParams();
+    const location = useLocation();
+    const { id } = useParams<{ id: string }>();
+    const { user } = useAuth();
 
-    const [meetingDetail, setMeetingDetail] = useState<MeetingResponse | null>(null);
-    const [documents, setDocuments] = useState<any[]>([]);
-    const [opinions, setOpinions] = useState<any[]>([]);
-    const [motions, setMotions] = useState<any[]>([]);
-    const [waitingSpeakers, setWaitingSpeakers] = useState<any[]>([]);
-    const [rejectedSpeakers, setRejectedSpeakers] = useState<any[]>([]);
+    const searchParams = new URLSearchParams(location.search);
+    const guestToken = searchParams.get('guestToken');
+    const isGuest = !!guestToken;
 
+    // Consolidated meeting state and automatic WebSocket synchronization
+    const {
+        meeting: meetingDetail,
+        agendaItems,
+        opinions,
+        motions,
+        speakersQueue,
+        attendees: rawAttendees,
+        refreshAll: loadData,
+        refreshMeetingOnly,
+        loading,
+        error,
+    } = useMeetingState(id, guestToken);
 
+    const errorCode = error?.response?.data?.code;
 
+    useEffect(() => {
+        if (errorCode === 1003) {
+            toast.error("Phiên họp đã được chuyển về Bản nháp hoặc bạn không có quyền truy cập.");
+            navigate(isGuest ? "/" : "/phien-hop");
+        }
+    }, [errorCode, navigate, isGuest]);
 
-    // Tab cho Danh sách đăng ký phát biểu
-    const [activeTab, setActiveTab] = useState<"cho" | "bac-bo">("cho");
+    // Tab and modal states
     const [isConfirmOpen, setIsConfirmOpen] = useState(false);
-    const [status, setStatus] = useState(getMeetingStatus(id));
-    const [isPostponeOpen, setIsPostponeOpen] = useState(false);
+    const [isCancelConfirmOpen, setIsCancelConfirmOpen] = useState(false);
+    const [isRevertConfirmOpen, setIsRevertConfirmOpen] = useState(false);
+    const [isRejectOpen, setIsRejectOpen] = useState(false);
+    const [rejectReason, setRejectReason] = useState("");
+    const [selectedMotionForStats, setSelectedMotionForStats] = useState<any | null>(null);
+    const [voteStats, setVoteStats] = useState<any | null>(null);
+    const [isVoteStatsOpen, setIsVoteStatsOpen] = useState(false);
+
+    const [timeLeftStr, setTimeLeftStr] = useState<string>("");
+    const [opinionDetail, setOpinionDetail] = useState("");
+    const [selectedAgendaItemId, setSelectedAgendaItemId] = useState("");
+    const [isOpinionModalOpen, setIsOpinionModalOpen] = useState(false);
     const [isManageParticipantsOpen, setIsManageParticipantsOpen] = useState(false);
     const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false);
     const [participantsData, setParticipantsData] = useState<ThanhPhanThamDuData>({
@@ -59,586 +91,678 @@ export default function PhienHopChiTietPage() {
         caNhan: [],
         nhomThanhVien: [],
         khachMoi: [],
-        chuTriId: null
+        chuTriId: null,
     });
 
-    // Table configs
-    const votingTableConfig: TableEngineConfig<any> = {
-        columns: [
-            { key: 'title', header: 'Vấn đề' },
-            { 
-                key: 'status', 
-                header: 'Trạng thái', 
-                width: '160px',
-                render: (row: any) => {
-                    const isPending = row.status === 'DRAFT';
-                    return (
-                        <Badge className={cn(
-                            "px-3 py-1 text-xs rounded-full border-none",
-                            isPending ? "bg-amber-100 text-amber-700" : "bg-green-100 text-green-700"
-                        )}>
-                            {isPending ? 'Chưa biểu quyết' : 'Đã hoàn thành'}
-                        </Badge>
-                    );
-                }
-            }
-        ]
-    };
+    const status = useMemo(() => {
+        return meetingDetail ? mapMeetingStatusVi(meetingDetail.status) : "";
+    }, [meetingDetail]);
 
-    const speakerTableConfig: TableEngineConfig<any> = {
-        columns: [
-            { key: 'userName', header: 'Tên đại biểu' },
-            { key: 'position', header: 'Chức vụ', render: () => '-' },
-            { key: 'priority', header: 'Độ ưu tiên', render: (row: any) => row.priority || '-' },
-            { key: 'requestedAt', header: 'Thời gian yêu cầu', render: (row: any) => row.requestedAt ? new Date(row.requestedAt).toLocaleTimeString("vi-VN") : '-' },
-            { 
-                key: 'queueStatus', 
-                header: 'Trạng thái',
-                render: (row: any) => (
-                    <Badge className={cn(
-                        "px-3 py-1 text-xs rounded-full border-none",
-                        row.queueStatus === 'QUEUED' ? "bg-amber-100 text-amber-700" :
-                        row.queueStatus === 'REJECTED' ? "bg-red-100 text-red-700" : "bg-gray-100 text-gray-700"
-                    )}>
-                        {row.queueStatus === 'QUEUED' ? 'Chờ phát biểu' : row.queueStatus === 'REJECTED' ? 'Bác bỏ' : row.queueStatus}
-                    </Badge>
-                )
-            }
-        ]
-    };
+    // Computed speaker lists based on queueStatus
+    const waitingSpeakers = useMemo(() => {
+        return speakersQueue.filter((s: any) => s.queueStatus === "QUEUED");
+    }, [speakersQueue]);
 
-    // Cập nhật dữ liệu khi ID thay đổi
+    const rejectedSpeakers = useMemo(() => {
+        return speakersQueue.filter((s: any) => s.queueStatus === "REJECTED");
+    }, [speakersQueue]);
+
+    // Track active speaker states for current user
+    const isCurrentUserQueued = useMemo(() => {
+        return waitingSpeakers.some((s: any) => s.userId === user?.id);
+    }, [waitingSpeakers, user]);
+
+    const currentUserQueueItem = useMemo(() => {
+        return waitingSpeakers.find((s: any) => s.userId === user?.id);
+    }, [waitingSpeakers, user]);
+
+    // Auto calculate time remaining for active meetings
     useEffect(() => {
-        if (id) {
-            // 1. Fetch meeting info
-            meetingApi.getMeetingById(id).then(res => {
-                if (res.success && res.data) {
-                    setMeetingDetail(res.data);
-                    setStatus(mapMeetingStatusVi(res.data.status));
-                }
-            });
-            // 2. Fetch documents
-            meetingApi.getMeetingDocuments(id).then(res => {
-                if (res.success && res.data) {
-                    setDocuments(res.data);
-                }
-            });
-            // 3. Fetch opinions
-            meetingApi.getOpinions(id).then(res => {
-                if (res.success && res.data) {
-                    setOpinions(res.data);
-                }
-            });
-            // 4. Fetch motions
-            meetingApi.getMeetingMotions(id).then(res => {
-                if (res.success && res.data) {
-                    setMotions(res.data);
-                }
-            });
-            // 5. Fetch waiting speakers
-            meetingApi.getSpeakersQueue(id, 'QUEUED').then(res => {
-                if (res.success && res.data) {
-                    setWaitingSpeakers(res.data);
-                }
-            });
-            // 6. Fetch rejected speakers
-            meetingApi.getSpeakersQueue(id, 'REJECTED').then(res => {
-                if (res.success && res.data) {
-                    setRejectedSpeakers(res.data);
-                }
-            });
-
-            // Giả lập dữ liệu thành viên dựa trên ID
-            setParticipantsData({
-                donVi: [
-                    { id: 'u1', name: 'Nguyễn Văn A', position: 'Trưởng phòng', unit: 'Phòng Hành chính', unitId: 'unit1', email: 'a@hcm.gov.vn' }
-                ],
-                caNhan: [],
-                nhomThanhVien: [],
-                khachMoi: [
-                    { id: 'k1', name: 'Ông Nguyễn Văn X', position: 'Giám đốc', unit: 'Công ty ABC', email: 'x@abc.com', phone: '0987654321' },
-                    { id: 'k2', name: 'Bà Trần Thị Y', position: 'Phó Giám đốc', unit: 'Công ty XYZ', email: 'y@xyz.com', phone: '0987654322' }
-                ],
-                chuTriId: 'u1'
-            });
+        if (
+            !meetingDetail ||
+            meetingDetail.status !== "IN_PROGRESS" ||
+            !meetingDetail.endTime
+        ) {
+            setTimeLeftStr("");
+            return;
         }
-    }, [id]);
 
-    // Xử lý nút Kết thúc
-    const handleConfirmEnd = () => {
-        // Đổi trạng thái phiên họp thành "Đã kết thúc"
-        setStatus("Đã kết thúc");
+        const calculateTimeLeft = () => {
+            setTimeLeftStr(getRemainingTimeVi(meetingDetail.endTime));
+        };
+
+        calculateTimeLeft();
+        const interval = setInterval(calculateTimeLeft, 1000);
+        return () => clearInterval(interval);
+    }, [meetingDetail]);
+
+    if (errorCode === 1251) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC] p-4">
+                <div className="max-w-md w-full bg-white rounded-3xl shadow-xl border border-gray-100 p-8 text-center transition-all duration-300 hover:shadow-2xl">
+                    <div className="w-20 h-20 bg-amber-50 rounded-full flex items-center justify-center mx-auto mb-6 text-amber-500 animate-pulse">
+                        <CalendarClock className="h-10 w-10" />
+                    </div>
+                    <h2 className="text-2xl font-bold text-gray-900 mb-3 tracking-tight">Phiên họp chưa bắt đầu</h2>
+                    <p className="text-gray-600 mb-8 leading-relaxed">
+                        Thời gian diễn ra phiên họp chưa đến. Vui lòng kiểm tra lại thời gian bắt đầu trong thư mời và truy cập lại sau.
+                    </p>
+                    <div className="bg-amber-50/50 rounded-2xl p-4 mb-8 border border-amber-100/50 text-left">
+                        <span className="text-xs font-semibold uppercase tracking-wider text-amber-800 block mb-1">Lưu ý cho khách mời</span>
+                        <span className="text-xs text-amber-700 leading-relaxed">
+                            Liên kết truy cập phòng họp chỉ khả dụng từ thời điểm bắt đầu cuộc họp. Vui lòng không truy cập sớm trước giờ quy định.
+                        </span>
+                    </div>
+                    <Button
+                        variant="primary"
+                        className="w-full bg-[#C8102E] hover:bg-[#a80d26] rounded-full py-6 text-base font-semibold shadow-lg shadow-red-500/20 transition-all duration-200"
+                        onClick={() => loadData()}
+                    >
+                        Tải lại trang
+                    </Button>
+                </div>
+            </div>
+        );
+    }
+
+    if (errorCode === 1252) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC] p-4">
+                <div className="max-w-md w-full bg-white rounded-3xl shadow-xl border border-gray-100 p-8 text-center transition-all duration-300 hover:shadow-2xl">
+                    <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-6 text-gray-400">
+                        <CalendarX className="h-10 w-10" />
+                    </div>
+                    <h2 className="text-2xl font-bold text-gray-900 mb-3 tracking-tight">Phiên họp đã kết thúc</h2>
+                    <p className="text-gray-600 mb-8 leading-relaxed">
+                        Phiên họp này đã hoàn thành hoặc đã bị hủy bỏ bởi Ban tổ chức. Liên kết truy cập của bạn đã hết hạn khả dụng.
+                    </p>
+                    <div className="bg-gray-50 rounded-2xl p-4 mb-8 border border-gray-100 text-left">
+                        <span className="text-xs font-semibold uppercase tracking-wider text-gray-500 block mb-1">Trạng thái liên kết</span>
+                        <span className="text-xs text-gray-500 leading-relaxed">
+                            Quyền truy cập phòng họp dành cho khách mời tự động đóng lại sau khi phiên họp kết thúc để đảm bảo an toàn thông tin.
+                        </span>
+                    </div>
+                    {isGuest ? (
+                        <div className="text-center text-sm text-gray-500 font-medium py-3">
+                            Cảm ơn quý khách đã tham dự phiên họp.
+                        </div>
+                    ) : (
+                        <Button
+                            variant="outline"
+                            className="w-full rounded-full py-6 text-base font-semibold border-gray-200 text-gray-750 hover:bg-gray-50"
+                            onClick={() => navigate('/')}
+                        >
+                            Quay lại Trang chủ
+                        </Button>
+                    )}
+                </div>
+            </div>
+        );
+    }
+
+    // Action Handlers
+    const handleConfirmEnd = async () => {
+        if (!id) return;
+        try {
+            const res = await meetingApi.closeMeeting(id);
+            if (res.success) {
+                toast.success("Đã kết thúc phiên họp thành công");
+                refreshMeetingOnly();
+            } else {
+                toast.error(res.message || "Không thể kết thúc phiên họp");
+            }
+        } catch (error) {
+            console.error("Error closing meeting:", error);
+            toast.error("Đã xảy ra lỗi khi kết thúc phiên họp");
+        }
         setIsConfirmOpen(false);
     };
 
-    // Xử lý nút Hoãn
-    const handleConfirmPostpone = (data: PostponeData) => {
-        console.log("Postpone meeting:", id, data);
-
-        // Gọi API hoãn phiên họp
-        // API sẽ nhận:
-        // - meetingId: id
-        // - newStartTime: data.newStartTime
-        // - newEndTime: data.newEndTime
-        // - reason: data.reason
-
-        alert(
-            `Đã hoãn phiên họp thành công!\nThời gian mới: ${data.newStartTime} - ${data.newEndTime}\nLý do: ${data.reason}`,
-        );
-
-        // Đóng modal
-        setIsPostponeOpen(false);
-
-        // TODO: Reload meeting detail sau khi hoãn thành công
-        // hoặc cập nhật lại UI với thông tin mới
+    const handleConfirmCancel = async () => {
+        if (!id) return;
+        try {
+            const res = await meetingApi.cancelMeeting(id, "Hủy phiên họp theo yêu cầu");
+            if (res.success) {
+                toast.success("Đã hủy phiên họp thành công");
+                refreshMeetingOnly();
+            } else {
+                toast.error(res.message || "Không thể hủy phiên họp");
+            }
+        } catch (error) {
+            console.error("Error cancelling meeting:", error);
+            toast.error("Đã xảy ra lỗi khi hủy phiên họp");
+        }
+        setIsCancelConfirmOpen(false);
     };
 
-    // Xử lý xác nhận tham gia
-    const handleConfirmAttendance = (
+    const handleConfirmRevert = async () => {
+        if (!id) return;
+        try {
+            const revertRes = await meetingApi.revertToDraft(id);
+            if (revertRes.success) {
+                toast.success("Đã chuyển phiên họp về trạng thái Bản nháp");
+                navigate(`/phien-hop/${id}/cap-nhat`);
+            } else {
+                toast.error(revertRes.message || "Không thể chuyển trạng thái phiên họp.");
+            }
+        } catch (revertErr: any) {
+            toast.error(revertErr?.response?.data?.message || revertErr?.message || "Đã xảy ra lỗi.");
+        }
+        setIsRevertConfirmOpen(false);
+    };
+    const handleConfirmAttendance = async (
         attendance: "attend" | "absent",
         data?: {
             isFullSession: boolean;
             reason: string;
             contentIds: string[];
             substituteId?: string;
+            subName?: string;
+            subPosition?: string;
+            subAgency?: string;
+            subEmail?: string;
+            subPhone?: string;
         },
     ) => {
-        if (attendance === "attend") {
-            alert("Đã xác nhận tham gia phiên họp");
-        } else {
-            if (data?.isFullSession) {
-                alert(`Đã gửi thông báo vắng toàn phiên\nLý do: ${data.reason}`);
-            } else {
-                alert(`Đã gửi thông báo vắng mặt\nLý do: ${data?.reason}`);
+        if (!id || !user?.id) {
+            toast.error("Không tìm thấy thông tin phiên họp hoặc người dùng.");
+            return;
+        }
+        try {
+            const statusStr = attendance === "attend" ? "ACCEPTED" : "DECLINED";
+            const payload: any = {
+                inviteStatus: statusStr,
+            };
+
+            if (attendance === "absent" && data) {
+                payload.declineReason = data.reason;
+                payload.isFullSession = data.isFullSession;
+                if (!data.isFullSession) {
+                    payload.absentAgendaItemIds = data.contentIds;
+                }
+                if (data.substituteId && data.substituteId !== "other") {
+                    payload.substituteUserId = data.substituteId;
+                } else if (data.substituteId === "other") {
+                    payload.substituteUserId = null;
+                    payload.substituteName = data.subName;
+                    payload.substitutePosition = data.subPosition;
+                    payload.substituteCompany = data.subAgency;
+                    payload.substituteDepartment = data.subAgency;
+                    payload.substituteEmail = data.subEmail;
+                    payload.substitutePhone = data.subPhone;
+                }
             }
+            const res = await meetingApi.updateInviteStatus(
+                id,
+                user.id,
+                payload
+            );
+            if (res.success) {
+                toast.success(
+                    attendance === "attend"
+                        ? "Đã xác nhận tham gia phiên họp thành công"
+                        : "Đã từ chối tham gia phiên họp thành công",
+                );
+                loadData();
+            } else {
+                toast.error(res.message || "Không thể gửi phản hồi tham dự");
+            }
+        } catch (error) {
+            console.error("Error confirming attendance:", error);
+            toast.error("Đã xảy ra lỗi khi gửi phản hồi tham dự");
         }
         setIsAttendanceModalOpen(false);
     };
 
+    const handleDeleteMeeting = async () => {
+        if (!id) return;
+        try {
+            const res = await meetingApi.deleteMeeting(id);
+            if (res.success) {
+                toast.success("Đã xóa phiên họp thành công");
+                navigate("/phien-hop");
+            } else {
+                toast.error(res.message || "Không thể xóa phiên họp");
+            }
+        } catch (error) {
+            console.error("Error deleting meeting:", error);
+            toast.error("Đã xảy ra lỗi khi xóa phiên họp");
+        }
+    };
+
+    const handleCreateOpinion = async () => {
+        if (!id) return;
+        if (!opinionDetail.trim()) {
+            toast.error("Vui lòng nhập chi tiết góp ý");
+            return;
+        }
+        try {
+            let docName = "";
+            let docIds: string[] = [];
+            if (selectedAgendaItemId) {
+                const selectedItem = agendaItems.find(
+                    (item: any) => item.id === selectedAgendaItemId,
+                );
+                if (selectedItem) {
+                    docName = selectedItem.title || "";
+                    if (selectedItem.documents) {
+                        docIds = selectedItem.documents
+                            .map((doc: any) => doc.documentId || doc.id)
+                            .filter(Boolean);
+                    }
+                }
+            }
+
+            const res = await meetingApi.createOpinion(id, {
+                opinionDetail,
+                documentName: docName || undefined,
+                documentIds: docIds.length > 0 ? docIds : undefined,
+            });
+
+            if (res.success) {
+                toast.success("Đã gửi ý kiến góp ý thành công");
+                setIsOpinionModalOpen(false);
+                setOpinionDetail("");
+                setSelectedAgendaItemId("");
+                loadData();
+            } else {
+                toast.error(res.message || "Không thể gửi ý kiến góp ý");
+            }
+        } catch (error) {
+            console.error("Error creating opinion:", error);
+            toast.error("Đã xảy ra lỗi khi gửi ý kiến góp ý");
+        }
+    };
+
+    const handleSubmitApproval = async () => {
+        if (!id) return;
+        if (meetingDetail?.startTime) {
+            const startTime = new Date(meetingDetail.startTime);
+            const now = new Date();
+            const minAllowedTime = new Date(now.getTime() + 30 * 60 * 1000); // Now + 30 mins
+            if (startTime < minAllowedTime) {
+                toast.error("Thời gian bắt đầu phiên họp phải lớn hơn thời gian hiện tại ít nhất 30 phút.");
+                return;
+            }
+        }
+        try {
+            const res = await meetingApi.submitApproval(id);
+            if (res.success) {
+                toast.success("Đã trình duyệt phiên họp thành công");
+                refreshMeetingOnly();
+            } else {
+                toast.error(res.message || "Không thể trình duyệt phiên họp");
+            }
+        } catch (error) {
+            console.error("Error submitting approval:", error);
+            toast.error("Đã xảy ra lỗi khi trình duyệt phiên họp");
+        }
+    };
+
+    const handleApproveMeeting = async () => {
+        if (!id) return;
+        try {
+            const res = await meetingApi.approveMeeting(id);
+            if (res.success) {
+                toast.success("Đã phê duyệt phiên họp thành công");
+                refreshMeetingOnly();
+            } else {
+                toast.error(res.message || "Không thể phê duyệt phiên họp");
+            }
+        } catch (error) {
+            console.error("Error approving meeting:", error);
+            toast.error("Đã xảy ra lỗi khi phê duyệt phiên họp");
+        }
+    };
+
+    const handleConfirmReject = async () => {
+        if (!id) return;
+        if (!rejectReason.trim()) {
+            toast.error("Vui lòng nhập lý do từ chối");
+            return;
+        }
+        try {
+            const res = await meetingApi.rejectMeeting(id, rejectReason);
+            if (res.success) {
+                toast.success("Đã từ chối phiên họp thành công");
+                setIsRejectOpen(false);
+                setRejectReason("");
+                refreshMeetingOnly();
+            } else {
+                toast.error(res.message || "Không thể từ chối phiên họp");
+            }
+        } catch (error) {
+            console.error("Error rejecting meeting:", error);
+            toast.error("Đã xảy ra lỗi khi từ chối phiên họp");
+        }
+    };
+
+    const handlePublishMeeting = async () => {
+        if (!id) return;
+        if (meetingDetail?.startTime) {
+            const startTime = new Date(meetingDetail.startTime);
+            const now = new Date();
+            const minAllowedTime = new Date(now.getTime() + 30 * 60 * 1000);
+            if (startTime < minAllowedTime) {
+                setIsRevertConfirmOpen(true);
+                return;
+            }
+        }
+
+        try {
+            const res = await meetingApi.publishMeeting(id);
+            if (res.success) {
+                toast.success("Đã công bố phiên họp thành công");
+                refreshMeetingOnly();
+            } else {
+                toast.error(res.message || "Không thể công bố phiên họp");
+            }
+        } catch (error: any) {
+            console.error("Error publishing meeting:", error);
+            const isTimeError = error && error.response && error.response.data && error.response.data.code === 1222;
+            if (isTimeError) {
+                setIsRevertConfirmOpen(true);
+            } else {
+                toast.error("Đã xảy ra lỗi khi công bố phiên họp");
+            }
+        }
+    };
+
+    const handleRequestToSpeak = async () => {
+        if (!id) return;
+        try {
+            const res = await meetingApi.requestToSpeak(id);
+            if (res.success) {
+                toast.success("Đã đăng ký phát biểu thành công");
+                loadData();
+            } else {
+                toast.error(res.message || "Không thể đăng ký phát biểu");
+            }
+        } catch (error) {
+            console.error("Error requesting to speak:", error);
+            toast.error("Đã xảy ra lỗi khi đăng ký phát biểu");
+        }
+    };
+
+    const handleCancelSpeakRequest = async () => {
+        if (!id || !currentUserQueueItem) return;
+        try {
+            const res = await meetingApi.cancelSpeakRequest(id, currentUserQueueItem.id);
+            if (res.success) {
+                toast.success("Đã hủy đăng ký phát biểu thành công");
+                loadData();
+            } else {
+                toast.error(res.message || "Không thể hủy đăng ký phát biểu");
+            }
+        } catch (error) {
+            console.error("Error cancelling speak request:", error);
+            toast.error("Đã xảy ra lỗi khi hủy đăng ký phát biểu");
+        }
+    };
+
+    const handleStartSpeakerTurn = async (queueId: string | number) => {
+        if (!id) return;
+        try {
+            const res = await meetingApi.startSpeakerTurn(id, queueId.toString());
+            if (res.success) {
+                toast.success("Đã bắt đầu lượt phát biểu");
+                loadData();
+            } else {
+                toast.error(res.message || "Không thể cho phát biểu");
+            }
+        } catch (error) {
+            console.error("Error starting speaker turn:", error);
+            toast.error("Đã xảy ra lỗi khi cho đại biểu phát biểu");
+        }
+    };
+
+    const handleRejectSpeakRequest = async (queueId: string | number) => {
+        if (!id) return;
+        try {
+            const res = await meetingApi.rejectSpeakRequest(id, queueId.toString());
+            if (res.success) {
+                toast.success("Đã bác bỏ yêu cầu phát biểu");
+                loadData();
+            } else {
+                toast.error(res.message || "Không thể bác bỏ yêu cầu");
+            }
+        } catch (error) {
+            console.error("Error rejecting speak request:", error);
+            toast.error("Đã xảy ra lỗi khi bác bỏ yêu cầu");
+        }
+    };
+
+    const handleViewVoteStats = async (motion: any) => {
+        try {
+            const res = await meetingApi.getVoteStatistics(motion.id);
+            if (res.success && res.data) {
+                const stats = res.data;
+                const total = stats.yesCount + stats.noCount;
+                const yesPercentage = total > 0 ? Math.round((stats.yesCount / total) * 100) : 0;
+                setVoteStats({
+                    ...stats,
+                    yesVotes: stats.yesCount,
+                    noVotes: stats.noCount,
+                    yesPercentage: yesPercentage
+                });
+                setSelectedMotionForStats(motion);
+                setIsVoteStatsOpen(true);
+            } else {
+                toast.error("Không thể lấy thống kê biểu quyết.");
+            }
+        } catch (error) {
+            console.error("Error fetching vote stats:", error);
+            toast.error("Đã xảy ra lỗi khi lấy thống kê biểu quyết");
+        }
+    };
+
+    const handleOpenParticipants = async () => {
+        if (!id) return;
+        const toastId = toast.loading("Đang tải danh sách thành phần tham gia...");
+        try {
+            const res = await meetingApi.getAttendees(id);
+            if (res.success && res.data) {
+                const parts = res.data.participants || [];
+                const guests = res.data.guests || [];
+
+                const donViMapped = parts.map((p: any) => ({
+                    id: p.userId,
+                    name: p.fullName || p.username,
+                    position: p.positionName || "-",
+                    unit: p.deptName || "-",
+                    email: p.email || "-",
+                    isChair: p.participantRole === "CHAIR" || p.participantRole === "CHAIRPERSON",
+                    isSecretary: p.participantRole === "SECRETARY",
+                    sendStatus: p.sendStatus || "PENDING",
+                    substitutedForUserName: p.substitutedForUserName,
+                    substitutedForUserPosition: p.substitutedForUserPosition,
+                }));
+
+                const khachMoiMapped = guests.map((g: any) => ({
+                    id: g.guestId || g.id,
+                    name: g.fullName,
+                    position: g.position || "-",
+                    unit: g.company || "-",
+                    email: g.email || "-",
+                    phone: g.phone || "-",
+                    sendStatus: g.sendStatus || "PENDING",
+                    substitutedForUserName: g.substitutedForUserName,
+                    substitutedForUserPosition: g.substitutedForUserPosition,
+                }));
+
+                const chair = parts.find(
+                    (p: any) => p.participantRole === "CHAIR" || p.participantRole === "CHAIRPERSON",
+                );
+
+                setParticipantsData({
+                    donVi: donViMapped,
+                    caNhan: [],
+                    nhomThanhVien: [],
+                    khachMoi: khachMoiMapped,
+                    chuTriId: chair ? chair.userId : null,
+                });
+                toast.dismiss(toastId);
+                setIsManageParticipantsOpen(true);
+            } else {
+                toast.error(res.message || "Không thể tải danh sách thành phần tham gia");
+                toast.dismiss(toastId);
+            }
+        } catch (error) {
+            console.error("Error fetching attendees:", error);
+            toast.error("Đã xảy ra lỗi khi tải danh sách thành phần tham gia");
+            toast.dismiss(toastId);
+        }
+    };
+
     return (
         <>
+            {loading && <LoadingOverlay message="Đang tải chi tiết phiên họp..." />}
             <ManageParticipantsModal
                 isOpen={isManageParticipantsOpen}
                 onClose={() => setIsManageParticipantsOpen(false)}
                 initialData={participantsData}
                 readOnly={true}
+                creatorId={meetingDetail?.createdById}
             />
             <div className="p-8">
                 <PageHeader
                     title={
-                        <button
-                            onClick={() => navigate("/phien-hop")}
-                            className="inline-flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors"
-                        >
-                            <ArrowLeft className="h-4 w-4" />
-                            <span className="text-sm body">
-                                Quay lại
-                            </span>
-                        </button>
+                        isGuest ? (
+                            <span className="text-lg font-semibold text-gray-900">Chi tiết phiên họp</span>
+                        ) : (
+                            <button
+                                onClick={() => navigate("/phien-hop")}
+                                className="inline-flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors"
+                            >
+                                <ArrowLeft className="h-4 w-4" />
+                                <span className="text-sm body">Quay lại</span>
+                            </button>
+                        )
                     }
-                    breadcrumbs={[
+                    breadcrumbs={isGuest ? [] : [
                         { name: "Trang chủ", path: "/" },
                         { name: "Phiên họp", path: "/phien-hop" },
                         { name: "Chi tiết phiên họp" },
                     ]}
                     actions={
-                        <div className="flex items-center gap-3">
-                            {status === "Sắp diễn ra" && (
-                                <Button
-                                    variant="primary"
-                                    className="bg-[#C8102E] hover:bg-[#a80d26]"
-                                    onClick={() => setIsAttendanceModalOpen(true)}
-                                >
-                                    <Check className="h-4 w-4 mr-2" />
-                                    Xác nhận tham gia
-                                </Button>
-                            )}
-                            {status !== "Đã kết thúc" && status !== "Đang diễn ra" && (
-                                <Button
-                                    variant="outline"
-                                    className="border-[#C8102E] text-[#C8102E] hover:bg-red-50"
-                                    onClick={() =>
-                                        navigate(`/phien-hop/${id}/cap-nhat`)
-                                    }
-                                >
-                                    Cập nhật
-                                </Button>
-                            )}
-                            {status !== "Đã kết thúc" && status !== "Nháp" && (
-                                <Button
-                                    variant="primary"
-                                    className="bg-[#C8102E] hover:bg-[#a80d26]"
-                                    onClick={() =>
-                                        navigate(`/phien-hop/${id}/dien-bien`)
-                                    }
-                                >
-                                    Xem diễn biến
-                                </Button>
-                            )}
-                        </div>
+                        isGuest ? (
+                            <div className="flex items-center gap-3">
+                                {meetingDetail?.status !== "DRAFT" &&
+                                    meetingDetail?.status !== "CLOSED" &&
+                                    meetingDetail?.status !== "CANCELLED" &&
+                                    meetingDetail?.status !== "REJECTED" &&
+                                    meetingDetail?.status !== "PENDING_APPROVAL" && (
+                                        <Button
+                                            variant="primary"
+                                            className="bg-[#C8102E] hover:bg-[#a80d26]"
+                                            onClick={() => navigate(`/phien-hop/${id}/dien-bien?guestToken=${guestToken}`)}
+                                        >
+                                            Xem diễn biến
+                                        </Button>
+                                    )}
+                            </div>
+                        ) : (
+                            <div className="flex items-center gap-3">
+                                {meetingDetail?.callerInviteStatus === "PENDING" &&
+                                    meetingDetail?.status === "UPCOMING" && (
+                                        <Button
+                                            variant="primary"
+                                            className="bg-[#C8102E] hover:bg-[#a80d26]"
+                                            onClick={() => setIsAttendanceModalOpen(true)}
+                                        >
+                                            <Check className="h-4 w-4 mr-2" />
+                                            Xác nhận tham gia
+                                        </Button>
+                                    )}
+                                {meetingDetail?.canEdit && 
+                                 (meetingDetail?.callerRole === "CREATOR" || meetingDetail?.callerRole === "SECRETARY") && (
+                                    <Button
+                                        variant="outline"
+                                        className="border-[#C8102E] text-[#C8102E] hover:bg-red-50"
+                                        onClick={() => navigate(`/phien-hop/${id}/cap-nhat`)}
+                                    >
+                                        Cập nhật
+                                    </Button>
+                                )}
+                                {meetingDetail?.status !== "DRAFT" &&
+                                    meetingDetail?.status !== "CLOSED" &&
+                                    meetingDetail?.status !== "CANCELLED" &&
+                                    meetingDetail?.status !== "REJECTED" &&
+                                    meetingDetail?.status !== "PENDING_APPROVAL" && (
+                                        <Button
+                                            variant="primary"
+                                            className="bg-[#C8102E] hover:bg-[#a80d26]"
+                                            onClick={() => navigate(`/phien-hop/${id}/dien-bien`)}
+                                        >
+                                            Xem diễn biến
+                                        </Button>
+                                    )}
+                            </div>
+                        )
                     }
                 />
 
                 <div className="space-y-6">
-                    {meetingDetail?.status === 'REJECTED' && meetingDetail?.rejectReason && (
-                        <div className="p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3">
-                            <AlertCircle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
-                            <div>
-                                <h4 className="text-sm font-semibold text-red-800">Phiên họp bị từ chối duyệt</h4>
-                                <p className="text-sm text-red-700 mt-1"><span className="font-medium">Lý do:</span> {meetingDetail.rejectReason}</p>
-                            </div>
-                        </div>
-                    )}
-                    <Card className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-                        {/* 1. Thông tin tổng quan (Tiêu đề + Meta + Collapse cho Section 2) */}
-                        <CollapsibleSection
-                            title={
-                                <div className="w-full text-center py-2">
-                                    <h2 className="text-xl md:text-2xl heading text-gray-900 mb-2 uppercase">
-                                        {meetingDetail?.title || "CHI TIẾT PHIÊN HỌP"}
-                                    </h2>
-                                    <div className="flex items-center justify-center gap-6 text-gray-600 text-[14px]">
-                                        <div className="flex items-center gap-1.5">
-                                            <Clock className="w-4 h-4 text-gray-400" />
-                                            <span>
-                                                {meetingDetail ? `${new Date(meetingDetail.startTime).toLocaleString("vi-VN")} - ${new Date(meetingDetail.endTime).toLocaleString("vi-VN")}` : ""}
-                                            </span>
-                                        </div>
-                                        <div className="flex items-center gap-1.5">
-                                            <MapPin className="w-4 h-4 text-gray-400" />
-                                            <span>{meetingDetail?.locationName || "-"}</span>
-                                        </div>
-                                    </div>
-                                </div>
-                            }
-                            className="border-b border-gray-100"
-                            headerClassName="px-4 md:px-6 py-4 bg-white"
-                        >
-                            <div className="px-2 md:px-6 pt-2 pb-6">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-y-4 gap-x-12">
-                                    {/* Cột trái */}
-                                    <div className="space-y-4">
-                                        <div className="flex items-start justify-between">
-                                            <span className="text-gray-500 text-[14px] body w-1/2">
-                                                Chủ trì:
-                                            </span>
-                                            <span className="text-gray-900 body w-1/2">
-                                                {meetingDetail?.chairName || "-"}
-                                            </span>
-                                        </div>
-                                        <div className="flex items-start justify-between">
-                                            <span className="text-gray-500 text-[14px] body w-1/2">
-                                                Địa điểm họp:
-                                            </span>
-                                            <span className="text-gray-900 body w-1/2">
-                                                {meetingDetail?.locationName || "-"}
-                                            </span>
-                                        </div>
-                                        <div className="flex items-start justify-between">
-                                            <span className="text-gray-500 text-[14px] body w-1/2">
-                                                Giấy mời họp:
-                                            </span>
-                                            <span className="text-gray-900 w-1/2">
-                                                {meetingDetail?.agendaFile ? (
-                                                    <a href={meetingDetail.agendaFile.url} className="text-blue-600 hover:underline" target="_blank" rel="noopener noreferrer">
-                                                        {meetingDetail.agendaFile.name}
-                                                    </a>
-                                                ) : "-"}
-                                            </span>
-                                        </div>
-                                        <div className="flex items-start justify-between">
-                                            <span className="text-gray-500 text-[14px] body w-1/2">
-                                                Kết luận phiên họp:
-                                            </span>
-                                            <span className="text-gray-900 w-1/2">
-                                                -
-                                            </span>
-                                        </div>
-                                        <div className="flex items-start justify-between">
-                                            <span className="text-gray-500 text-[14px] body w-1/2">
-                                                Người chuẩn bị tài liệu:
-                                            </span>
-                                            <span className="text-gray-900 body w-1/2">
-                                                {meetingDetail?.createdByName || "-"}
-                                            </span>
-                                        </div>
-                                    </div>
+                    {/* 1. Meeting Overview Info Section */}
+                    <MeetingInfoSection
+                        meetingDetail={meetingDetail}
+                        status={status}
+                        timeLeftStr={timeLeftStr}
+                        handleOpenParticipants={handleOpenParticipants}
+                        isGuest={isGuest}
+                    />
 
-                                    {/* Cột phải */}
-                                    <div className="space-y-4">
-                                        {status !== "Đã kết thúc" &&
-                                            status !== "Nháp" && (
-                                                <div className="flex items-start justify-between">
-                                                    <span className="text-gray-500 text-[14px] body w-1/2">
-                                                        Thời gian còn lại:
-                                                    </span>
-                                                    <span className="text-[#C8102E] heading w-1/2">
-                                                        45 phút 12 giây
-                                                    </span>
-                                                </div>
-                                            )}
-                                        <div className="flex items-start justify-between">
-                                            <span className="text-gray-500 text-[14px] body w-1/2">
-                                                Thành phần tham gia:
-                                            </span>
-                                            <div className="flex flex-col gap-2 w-1/2">
-                                                <div 
-                                                    onClick={() => {
-                                                        console.log("CLICKED PARTICIPANTS BUTTON");
-                                                        setIsManageParticipantsOpen(true);
-                                                    }}
-                                                    className="text-blue-600 hover:text-blue-800 underline text-left text-[14px] body cursor-pointer py-1 inline-block"
-                                                >
-                                                    Xem thành phần tham gia
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div className="flex items-start justify-between">
-                                            <span className="text-gray-500 text-[14px] body w-1/2">
-                                                Chương trình họp:
-                                            </span>
-                                            <span className="text-gray-900 w-1/2">
-                                                -
-                                            </span>
-                                        </div>
-                                        <div className="flex items-start justify-between">
-                                            <span className="text-gray-500 text-[14px] body w-1/2">
-                                                Trạng thái phiên họp:
-                                            </span>
-                                            <div className="w-1/2">
-                                                <Badge
-                                                    className={
-                                                        status === "Đang diễn ra"
-                                                            ? "bg-green-100 text-green-700 hover:bg-green-100 px-3 py-1 text-xs rounded-full border-none"
-                                                            : status === "Nháp"
-                                                              ? "bg-yellow-100 text-yellow-700 hover:bg-yellow-100 px-3 py-1 text-xs rounded-full border-none"
-                                                              : status === "Sắp diễn ra"
-                                                                ? "bg-amber-100 text-amber-700 hover:bg-amber-100 px-3 py-1 text-xs rounded-full border-none"
-                                                                : "bg-gray-100 text-gray-700 hover:bg-gray-100 px-3 py-1 text-xs rounded-full border-none"
-                                                    }
-                                                >
-                                                    {status}
-                                                </Badge>
-                                            </div>
-                                        </div>
-                                        <div className="flex items-start justify-between">
-                                            <span className="text-gray-500 text-[14px] body w-1/2">
-                                                Đơn vị tổ chức:
-                                            </span>
-                                            <span className="text-gray-900 body w-1/2">
-                                                {meetingDetail?.departmentName || "-"}
-                                            </span>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </CollapsibleSection>
+                    <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                        {/* 2. Documents Section grouped by Agenda Items */}
+                        <MeetingDocumentSection
+                            agendaItems={agendaItems}
+                            viewDocument={(docId) => viewDocument(docId, guestToken)}
+                            downloadDocument={(docId, title) => downloadDocument(docId, title, guestToken)}
+                        />
 
-                        {/* 3. Danh sách tài liệu */}
-                        <CollapsibleSection title={`Danh sách tài liệu (${documents.length})`} defaultExpanded={false}>
-                            <div className="space-y-3 px-2">
-                                {documents.length === 0 ? (
-                                    <p className="text-sm text-gray-500 text-center py-4">Chưa có tài liệu nào.</p>
-                                ) : (
-                                    documents.map((doc: any) => {
-                                        const isPdf = doc.fileName?.toLowerCase().endsWith(".pdf") || doc.title?.toLowerCase().endsWith(".pdf") || doc.fileUrl?.toLowerCase().endsWith(".pdf");
-                                        return (
-                                            <div key={doc.id || doc.documentId} className="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:bg-gray-50 transition-colors">
-                                                <div className="flex items-center gap-3">
-                                                    <div className="w-10 h-10 rounded-lg bg-red-50 flex items-center justify-center text-[#C8102E]">
-                                                        <FileText className="w-5 h-5" />
-                                                    </div>
-                                                    <div>
-                                                        <p className="body text-gray-900 text-sm">
-                                                            {doc.title || doc.fileName || "Tài liệu"}
-                                                        </p>
-                                                        <p className="text-xs text-gray-500">
-                                                            {doc.fileSize ? `${(doc.fileSize / 1024 / 1024).toFixed(2)} MB` : "Chưa rõ kích thước"}
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                                <div className="flex items-center gap-2">
-                                                    {isPdf && (
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="icon"
-                                                            className="text-gray-500 hover:text-[#C8102E]"
-                                                            onClick={() => {
-                                                                if (doc.fileUrl) {
-                                                                    window.open(doc.fileUrl, "_blank");
-                                                                }
-                                                            }}
-                                                        >
-                                                            <Eye className="w-4 h-4" />
-                                                        </Button>
-                                                    )}
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        className="text-gray-500 hover:text-[#C8102E]"
-                                                        onClick={() => {
-                                                            if (doc.fileUrl) {
-                                                                window.open(doc.fileUrl, "_blank");
-                                                            }
-                                                        }}
-                                                    >
-                                                        <Download className="w-4 h-4" />
-                                                    </Button>
-                                                </div>
-                                            </div>
-                                        );
-                                    })
-                                )}
-                            </div>
-                        </CollapsibleSection>
+                        {/* 3. Voting Items Section */}
+                        {!isGuest && (
+                            <MeetingMotionSection
+                                motions={motions}
+                                agendaItems={agendaItems}
+                                handleViewVoteStats={handleViewVoteStats}
+                            />
+                        )}
 
-                        {/* 4. Danh sách vấn đề cần biểu quyết */}
-                        <CollapsibleSection title={`Danh sách vấn đề cần biểu quyết (${motions.length})`} defaultExpanded={false}>
-                            <div className="min-h-[200px]">
-                                <DataTable 
-                                    data={motions} 
-                                    config={votingTableConfig}
-                                    pageSize={5}
-                                    totalItems={motions.length}
-                                    onPageChange={() => {}}
-                                />
-                            </div>
-                        </CollapsibleSection>
+                        {/* 4. Speaker Queue Registration List Section */}
+                        {!isGuest && (
+                            <MeetingSpeakerRegistrationSection
+                                waitingSpeakers={waitingSpeakers}
+                                rejectedSpeakers={rejectedSpeakers}
+                                meetingDetail={meetingDetail}
+                                handleStartSpeakerTurn={handleStartSpeakerTurn}
+                                handleRejectSpeakRequest={handleRejectSpeakRequest}
+                            />
+                        )}
 
-                        {/* 5. Danh sách đăng ký phát biểu */}
-                        <CollapsibleSection title={`Danh sách đăng ký phát biểu (${waitingSpeakers.length + rejectedSpeakers.length})`} defaultExpanded={false}>
-                            <div className="p-0">
-                                {/* Tabs */}
-                                <div className="flex items-center gap-6 border-b border-gray-200 mb-4 px-6 pt-4">
-                                    <button
-                                        onClick={() => setActiveTab("cho")}
-                                        className={`pb-3 body text-[15px] border-b-2 transition-colors ${
-                                            activeTab === "cho"
-                                                ? "border-[#C8102E] text-[#C8102E]"
-                                                : "border-transparent text-gray-500 hover:text-gray-700"
-                                        }`}
-                                    >
-                                        Chờ phát biểu ({waitingSpeakers.length})
-                                    </button>
-                                    <button
-                                        onClick={() => setActiveTab("bac-bo")}
-                                        className={`pb-3 body text-[15px] border-b-2 transition-colors ${
-                                            activeTab === "bac-bo"
-                                                ? "border-[#C8102E] text-[#C8102E]"
-                                                : "border-transparent text-gray-500 hover:text-gray-700"
-                                        }`}
-                                    >
-                                        Bác bỏ ({rejectedSpeakers.length})
-                                    </button>
-                                </div>
+                        {/* 5. Opinions Feedback Section */}
+                        {!isGuest && (
+                            <MeetingOpinionSection
+                                opinions={opinions}
+                                setIsOpinionModalOpen={setIsOpinionModalOpen}
+                                viewDocument={viewDocument}
+                            />
+                        )}
 
-                                <div className="min-h-[200px]">
-                                    <DataTable 
-                                        data={activeTab === "cho" ? waitingSpeakers : rejectedSpeakers} 
-                                        config={speakerTableConfig}
-                                        pageSize={5}
-                                        totalItems={activeTab === "cho" ? waitingSpeakers.length : rejectedSpeakers.length}
-                                        onPageChange={() => {}}
-                                    />
-                                </div>
-                            </div>
-                        </CollapsibleSection>
-
-                        {/* 6. Danh sách tham gia góp ý */}
-                        <CollapsibleSection
-                            title={`Danh sách tham gia góp ý (${opinions.length})`}
-                            defaultExpanded={false}
-                        >
-                            <div className="min-h-[200px]">
-                                <DataTable 
-                                    data={opinions} 
-                                    config={{
-                                        columns: [
-                                            { key: 'delegateName', header: 'Tên đại biểu' },
-                                            { key: 'positionName', header: 'Chức vụ', render: (row: any) => row.positionName || '-' },
-                                            { key: 'opinionDetail', header: 'Chi tiết góp ý' },
-                                            {
-                                                key: 'documentName',
-                                                header: 'Tài liệu góp ý',
-                                                render: (row: any) => row.documentName || '-'
-                                            },
-                                            { 
-                                                key: 'id', 
-                                                header: 'Hành động', 
-                                                width: '128px', 
-                                                align: 'center',
-                                                render: (row: any) => {
-                                                    const hasAttachments = row.attachments && row.attachments.length > 0;
-                                                    return (
-                                                        <div className="flex justify-center gap-2">
-                                                            {hasAttachments && (
-                                                                <Button 
-                                                                    variant="ghost" 
-                                                                    size="icon" 
-                                                                    className="text-gray-500 hover:text-[#C8102E]"
-                                                                    onClick={() => {
-                                                                        const attachment = row.attachments[0];
-                                                                        if (attachment.fileUrl) {
-                                                                            window.open(attachment.fileUrl, "_blank");
-                                                                        }
-                                                                    }}
-                                                                >
-                                                                    <Eye className="w-4 h-4" />
-                                                                </Button>
-                                                            )}
-                                                        </div>
-                                                    );
-                                                }
-                                            }
-                                        ]
-                                    }}
-                                    pageSize={5}
-                                    totalItems={opinions.length}
-                                    onPageChange={() => {}}
-                                />
-                            </div>
-                        </CollapsibleSection>
-
-                        {/* Footer Actions */}
-                        <div className="p-6 bg-gray-50/50 flex flex-wrap items-center justify-end gap-3 border-t border-gray-100">
-                            <Button
-                                variant="outline"
-                                className="border-[#C8102E] text-[#C8102E] hover:bg-red-50 body rounded-full px-5 h-[42px]"
-                            >
-                                <Upload className="w-4 h-4 mr-2" />
-                                Tải lên kết luận sau phiên họp
-                            </Button>
-
-                            <Button
-                                variant="outline"
-                                className="border-[#C8102E] text-[#C8102E] hover:bg-red-50 body rounded-full px-5 h-[42px]"
-                            >
-                                <Download className="w-4 h-4 mr-2" />
-                                Tải xuống báo cáo tổng hợp phiên họp
-                            </Button>
-
-                            {status === "Sắp diễn ra" && (
-                                <Button
-                                    variant="outline"
-                                    className="border-amber-600 text-amber-600 hover:bg-amber-50 body rounded-full px-6 h-[42px]"
-                                    onClick={() => setIsPostponeOpen(true)}
-                                >
-                                    <Clock className="w-4 h-4 mr-2" />
-                                    Hoãn phiên họp
-                                </Button>
-                            )}
-
-                            {status !== "Đã kết thúc" && status !== "Nháp" && (
-                                <Button
-                                    variant="primary"
-                                    className="bg-[#C8102E] hover:bg-[#a80d26] body rounded-full px-6 h-[42px]"
-                                    onClick={() => setIsConfirmOpen(true)}
-                                >
-                                    Kết thúc phiên họp
-                                </Button>
-                            )}
-                        </div>
-                    </Card>
+                        {/* 6. Footer Actions Panel */}
+                        {!isGuest && (
+                            <MeetingFooterActions
+                                meetingDetail={meetingDetail}
+                                handleDeleteMeeting={handleDeleteMeeting}
+                                handleSubmitApproval={handleSubmitApproval}
+                                handleApproveMeeting={handleApproveMeeting}
+                                setIsRejectOpen={setIsRejectOpen}
+                                setIsCancelConfirmOpen={setIsCancelConfirmOpen}
+                                handlePublishMeeting={handlePublishMeeting}
+                                setIsConfirmOpen={setIsConfirmOpen}
+                            />
+                        )}
+                    </div>
                 </div>
             </div>
 
@@ -649,21 +773,196 @@ export default function PhienHopChiTietPage() {
                 actionType="end"
             />
 
-            <PostponeModal
-                isOpen={isPostponeOpen}
-                onClose={() => setIsPostponeOpen(false)}
-                onConfirm={handleConfirmPostpone}
-                meetingId={id || ""}
-                oldStartTime="2026-04-17T08:30"
-                oldEndTime="2026-04-17T11:00"
+            <ConfirmActionModal
+                isOpen={isCancelConfirmOpen}
+                onClose={() => setIsCancelConfirmOpen(false)}
+                onConfirm={handleConfirmCancel}
+                actionType="cancel"
+                meetingTitle={meetingDetail?.title}
+            />
+
+            <ConfirmActionModal
+                isOpen={isRevertConfirmOpen}
+                onClose={() => setIsRevertConfirmOpen(false)}
+                onConfirm={handleConfirmRevert}
+                actionType="revertToDraft"
+                meetingTitle={meetingDetail?.title}
             />
             <ConfirmAttendanceModal
                 isOpen={isAttendanceModalOpen}
                 onClose={() => setIsAttendanceModalOpen(false)}
                 onConfirm={handleConfirmAttendance}
+                meetingId={id}
             />
+            {/* Vote Statistics Modal */}
+            <Dialog open={isVoteStatsOpen} onOpenChange={setIsVoteStatsOpen}>
+                <DialogContent className="max-w-md rounded-2xl p-6 bg-white">
+                    <DialogHeader>
+                        <DialogTitle className="text-lg font-semibold text-gray-900">
+                            Kết quả biểu quyết
+                        </DialogTitle>
+                    </DialogHeader>
+                    {selectedMotionForStats && voteStats && (
+                        <div className="space-y-6 mt-4">
+                            <div className="p-4 bg-gray-50 rounded-xl">
+                                <h4 className="text-sm font-semibold text-gray-800">
+                                    Vấn đề biểu quyết
+                                </h4>
+                                <p className="text-sm text-gray-600 mt-1">
+                                    {selectedMotionForStats.title || selectedMotionForStats.content}
+                                </p>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="p-4 border border-green-100 bg-green-50/30 rounded-xl text-center">
+                                    <span className="text-sm text-green-700 font-medium">
+                                        Đồng ý
+                                    </span>
+                                    <p className="text-2xl font-bold text-green-600 mt-1">
+                                        {voteStats.yesVotes}
+                                    </p>
+                                </div>
+                                <div className="p-4 border border-red-100 bg-red-50/10 rounded-xl text-center">
+                                    <span className="text-sm text-red-700 font-medium">
+                                        Không đồng ý
+                                    </span>
+                                    <p className="text-2xl font-bold text-red-600 mt-1">
+                                        {voteStats.noVotes}
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="space-y-2">
+                                <div className="flex justify-between text-sm text-gray-600">
+                                    <span>Tỉ lệ đồng ý</span>
+                                    <span className="font-semibold">
+                                        {voteStats.yesPercentage}%
+                                    </span>
+                                </div>
+                                <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
+                                    <div
+                                        className="bg-green-500 h-full transition-all"
+                                        style={{
+                                            width: `${voteStats.yesPercentage}%`,
+                                        }}
+                                    />
+                                </div>
+                            </div>
+                            <div className="flex justify-end pt-2">
+                                <Button
+                                    variant="outline"
+                                    className="rounded-full"
+                                    onClick={() => setIsVoteStatsOpen(false)}
+                                >
+                                    Đóng
+                                </Button>
+                            </div>
+                        </div>
+                    )}
+                </DialogContent>
+            </Dialog>
 
+            {/* Reject Meeting Modal */}
+            <Dialog open={isRejectOpen} onOpenChange={setIsRejectOpen}>
+                <DialogContent className="max-w-md rounded-2xl p-6 bg-white">
+                    <DialogHeader>
+                        <DialogTitle className="text-lg font-semibold text-gray-900">
+                            Từ chối duyệt phiên họp
+                        </DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 mt-4">
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium text-gray-700">
+                                Lý do từ chối <span className="text-red-500">*</span>
+                            </label>
+                            <textarea
+                                className="w-full min-h-[100px] p-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#C8102E]/20 focus:border-[#C8102E] text-sm"
+                                placeholder="Nhập lý do từ chối phê duyệt..."
+                                value={rejectReason}
+                                onChange={(e) => setRejectReason(e.target.value)}
+                            />
+                        </div>
+                        <div className="flex justify-end gap-3 pt-2">
+                            <Button
+                                variant="outline"
+                                className="rounded-full"
+                                onClick={() => {
+                                    setIsRejectOpen(false);
+                                    setRejectReason("");
+                                }}
+                            >
+                                Hủy
+                            </Button>
+                            <Button
+                                variant="primary"
+                                className="bg-[#C8102E] hover:bg-[#a80d26] rounded-full text-white"
+                                onClick={handleConfirmReject}
+                            >
+                                Xác nhận từ chối
+                            </Button>
+                        </div>
+                    </div>
+                </DialogContent>
+            </Dialog>
 
+            {/* Add Opinion Modal */}
+            <Dialog open={isOpinionModalOpen} onOpenChange={setIsOpinionModalOpen}>
+                <DialogContent className="max-w-md rounded-2xl p-6 bg-white">
+                    <DialogHeader>
+                        <DialogTitle className="text-lg font-semibold text-gray-900">
+                            Thêm ý kiến góp ý
+                        </DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 mt-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-750 mb-1">
+                                Nội dung góp ý <span className="text-red-500">*</span>
+                            </label>
+                            <textarea
+                                className="w-full min-h-[100px] p-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-[#C8102E] focus:border-[#C8102E]"
+                                placeholder="Nhập nội dung góp ý của bạn..."
+                                value={opinionDetail}
+                                onChange={(e) => setOpinionDetail(e.target.value)}
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-750 mb-1">
+                                Nội dung góp ý (Tùy chọn)
+                            </label>
+                            <select
+                                className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-[#C8102E] focus:border-[#C8102E] bg-white"
+                                value={selectedAgendaItemId}
+                                onChange={(e) => setSelectedAgendaItemId(e.target.value)}
+                            >
+                                <option value="">-- Chọn nội dung góp ý --</option>
+                                {agendaItems.map((item: any) => (
+                                    <option key={item.id} value={item.id}>
+                                        {item.orderNo ? `${item.orderNo}. ` : ""}{item.title}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+                    <div className="flex justify-end gap-3 mt-6">
+                        <Button
+                            variant="outline"
+                            className="rounded-full px-5"
+                            onClick={() => {
+                                setIsOpinionModalOpen(false);
+                                setOpinionDetail("");
+                                setSelectedAgendaItemId("");
+                            }}
+                        >
+                            Hủy
+                        </Button>
+                        <Button
+                            variant="primary"
+                            className="bg-[#C8102E] hover:bg-[#a80d26] rounded-full px-5 text-white"
+                            onClick={handleCreateOpinion}
+                        >
+                            Gửi góp ý
+                        </Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
         </>
     );
 }

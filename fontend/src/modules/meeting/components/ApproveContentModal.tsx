@@ -6,8 +6,8 @@ interface ApproveContentModalProps {
   isOpen: boolean;
   onClose: () => void;
   contentTitle: string;
-  contentId: number;
-  onConfirm: (contentId: number, isApproved: boolean) => void;
+  contentId: string | number;
+  onConfirm: (contentId: string | number, isApproved: boolean) => void;
 }
 
 export const ApproveContentModal: React.FC<ApproveContentModalProps> = ({

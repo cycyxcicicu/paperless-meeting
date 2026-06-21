@@ -2,6 +2,8 @@ package vn.acme.paperless_meeting.dto.request.meetingparticipant;
 
 import java.util.UUID;
 
+import java.util.List;
+
 import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
 import lombok.Setter;
@@ -23,4 +25,7 @@ public class UpdateInviteStatusRequest {
     private String substituteDepartment;
     private String substituteEmail;
     private String substitutePhone;
+
+    private Boolean isFullSession;
+    private List<UUID> absentAgendaItemIds;
 }

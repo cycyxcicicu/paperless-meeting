@@ -154,7 +154,7 @@ public class ApprovalService {
         );
         webSocketNotificationService.sendToTopic(
             "/topic/meeting/" + approvalRequest.getResourceId(),
-            Map.of("action", "REFRESH_MEETING_DETAIL", "status", "APPROVED", "rejectReason", "")
+            Map.of("action", "REFRESH_MEETING_STATUS", "status", "APPROVED", "rejectReason", "")
         );
 
         return getById(approvalRequest.getId());
@@ -196,7 +196,7 @@ public class ApprovalService {
         );
         webSocketNotificationService.sendToTopic(
             "/topic/meeting/" + approvalRequest.getResourceId(),
-            Map.of("action", "REFRESH_MEETING_DETAIL", "status", "REJECTED", "rejectReason", reason != null ? reason : "")
+            Map.of("action", "REFRESH_MEETING_STATUS", "status", "REJECTED", "rejectReason", reason != null ? reason : "")
         );
 
         return getById(approvalRequest.getId());
@@ -589,6 +589,34 @@ public class ApprovalService {
         if (approvalRequest.getApprovalStepList() != null) {
             approvalRequest.getApprovalStepList().sort(Comparator.comparing(ApprovalStep::getStepNo));
         }
+    }
+
+    @Transactional(readOnly = true)
+    public boolean isApproverOfResource(ResourceType resourceType, UUID resourceId, User user) {
+        if (user == null) return false;
+        List<ApprovalRequest> requests = approvalRequestRepository.findAllByResourceTypeAndResourceIdOrderByRequestedAtDesc(resourceType, resourceId);
+        for (ApprovalRequest req : requests) {
+            if (req.getRequestedBy() != null && req.getRequestedBy().getId().equals(user.getId())) {
+                return true;
+            }
+            if (req.getApprovalStepList() != null) {
+                for (ApprovalStep step : req.getApprovalStepList()) {
+                    if (step.getApproverUser() != null && step.getApproverUser().getId().equals(user.getId())) {
+                        return true;
+                    }
+                    if (step.getApproverRole() != null && user.getRole() != null && step.getApproverRole().getId().equals(user.getRole().getId())) {
+                        UUID resourceDeptId = getResourceDepartmentId(resourceType, resourceId);
+                        if (user.getDepartment() != null && resourceDeptId != null) {
+                            List<UUID> subDeptIds = departmentService.getAllSubDepartmentIds(user.getDepartment().getId());
+                            if (subDeptIds.contains(resourceDeptId)) {
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return false;
     }
 
     @Transactional(readOnly = true)

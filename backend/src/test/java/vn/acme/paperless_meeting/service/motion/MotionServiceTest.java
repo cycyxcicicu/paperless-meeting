@@ -76,6 +76,8 @@ public class MotionServiceTest {
     VoteResultOptionRepository voteResultOptionRepository;
     @Mock
     AuditLogPublisher auditLogPublisher;
+    @Mock
+    vn.acme.paperless_meeting.service.websocket.WebSocketNotificationService webSocketNotificationService;
 
     @InjectMocks
     MotionService motionService;

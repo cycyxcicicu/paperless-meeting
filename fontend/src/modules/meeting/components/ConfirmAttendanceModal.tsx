@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Plus } from 'lucide-react';
 import { Button } from '@/common/components/ui/button';
 import { CustomSelect } from '@/common/components/ui/custom-select';
@@ -6,10 +6,13 @@ import { DynamicFormRenderer } from '@/common/components/form-engine/DynamicForm
 import { FormFieldGroup } from '@/common/components/form-engine/form.types';
 import { useForm, FormProvider } from 'react-hook-form';
 
+import { meetingApi } from '@/modules/meeting/services/meeting.api';
+
 interface ConfirmAttendanceModalProps {
   isOpen: boolean;
   onClose: () => void;
   onConfirm: (attendance: 'attend' | 'absent', data?: AbsentData) => void;
+  meetingId?: string;
 }
 
 interface AbsentData {
@@ -76,7 +79,30 @@ export const ConfirmAttendanceModal: React.FC<ConfirmAttendanceModalProps> = ({
   isOpen,
   onClose,
   onConfirm,
+  meetingId,
 }) => {
+  const [substitutes, setSubstitutes] = useState<any[]>([]);
+  const [agendaItems, setAgendaItems] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (isOpen && meetingId) {
+      meetingApi.getEligibleSubstitutes(meetingId)
+        .then(res => {
+          if (res.success && res.data) {
+            setSubstitutes(res.data);
+          }
+        })
+        .catch(err => console.error("Error fetching substitutes:", err));
+
+      meetingApi.getAgendaItems(meetingId)
+        .then(res => {
+          if (res.success && res.data) {
+            setAgendaItems(res.data);
+          }
+        })
+        .catch(err => console.error("Error fetching agenda items:", err));
+    }
+  }, [isOpen, meetingId]);
   const methods = useForm({
     defaultValues: {
       attendance: 'attend',
@@ -92,7 +118,7 @@ export const ConfirmAttendanceModal: React.FC<ConfirmAttendanceModalProps> = ({
     }
   });
 
-  const { watch, setValue, handleSubmit, reset } = methods;
+  const { watch, setValue, handleSubmit, reset, setError, clearErrors, formState: { errors } } = methods;
   const selectedOption = watch('attendance');
   const isFullSession = watch('isFullSession');
   const substituteId = watch('substituteId');
@@ -108,20 +134,33 @@ export const ConfirmAttendanceModal: React.FC<ConfirmAttendanceModalProps> = ({
       onConfirm('attend');
       handleClose();
     } else {
-      if (!data.reason.trim()) {
-        alert('Vui lòng nhập lý do vắng mặt');
-        return;
+      let hasError = false;
+
+      if (!data.reason?.trim()) {
+        setError('reason', { type: 'manual', message: 'Vui lòng nhập lý do vắng mặt' });
+        hasError = true;
+      } else {
+        clearErrors('reason');
       }
-      if (!data.isFullSession && !data.contentIds[0]) {
-        alert('Vui lòng chọn ít nhất một nội dung vắng mặt');
-        return;
+
+      if (!data.isFullSession && (!data.contentIds || !data.contentIds[0])) {
+        setError('contentIds', { type: 'manual', message: 'Vui lòng chọn ít nhất một nội dung vắng mặt' });
+        hasError = true;
+      } else {
+        clearErrors('contentIds');
       }
 
       if (data.substituteId === 'other') {
-        if (!data.subName || !data.subPosition || !data.subAgency) {
-          alert('Vui lòng nhập đầy đủ thông tin người đi thay');
-          return;
+        if (!data.subName?.trim() || !data.subPosition?.trim() || !data.subAgency?.trim() || !data.subEmail?.trim()) {
+          setError('subName', { type: 'manual', message: 'Vui lòng nhập đầy đủ thông tin người đi thay' });
+          hasError = true;
+        } else {
+          clearErrors('subName');
         }
+      }
+
+      if (hasError) {
+        return;
       }
 
       onConfirm('absent', {
@@ -141,14 +180,18 @@ export const ConfirmAttendanceModal: React.FC<ConfirmAttendanceModalProps> = ({
 
   const handleAddContent = () => {
     setValue('contentIds', [...contentIds, '']);
+    clearErrors('contentIds');
   };
 
   const handleRemoveContent = (index: number) => {
-    setValue('contentIds', contentIds.filter((_, i) => i !== index));
+    const filtered = contentIds.filter((_, i) => i !== index);
+    setValue('contentIds', filtered.length > 0 ? filtered : ['']);
+    clearErrors('contentIds');
   };
 
   const handleOptionChange = (option: 'attend' | 'absent') => {
     setValue('attendance', option);
+    clearErrors();
     if (option === 'attend') {
       reset({
         attendance: 'attend',
@@ -164,6 +207,19 @@ export const ConfirmAttendanceModal: React.FC<ConfirmAttendanceModalProps> = ({
       });
     }
   };
+
+  const substituteOptions = [
+    { value: 'other', label: 'Khác (Nhập thông tin mới)' },
+    ...substitutes.map((s: any) => ({
+      value: s.id,
+      label: `${s.fullName}${s.position?.positionName ? ` - ${s.position.positionName}` : ''}`
+    }))
+  ];
+
+  const agendaOptions = agendaItems.map((item: any) => ({
+    value: item.id,
+    label: `${item.orderNo ? `Nội dung ${item.orderNo}: ` : ''}${item.title}`
+  }));
 
   if (!isOpen) return null;
 
@@ -281,10 +337,21 @@ export const ConfirmAttendanceModal: React.FC<ConfirmAttendanceModalProps> = ({
                   </label>
                   <textarea
                     {...methods.register('reason')}
+                    onChange={(e) => {
+                      methods.register('reason').onChange(e);
+                      if (e.target.value.trim()) clearErrors('reason');
+                    }}
                     rows={3}
-                    className="w-full px-3.5 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#C8102E] focus:border-[#C8102E] resize-none text-sm text-gray-900 placeholder:text-gray-400 transition-all hover:border-gray-400"
+                    className={`w-full px-3.5 py-2.5 border rounded-xl focus:outline-none focus:ring-2 focus:ring-[#C8102E] focus:border-[#C8102E] resize-none text-sm text-gray-900 placeholder:text-gray-400 transition-all hover:border-gray-400 ${
+                      errors.reason ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : 'border-gray-300'
+                    }`}
                     placeholder="Nhập lý do vắng mặt"
                   />
+                  {errors.reason && (
+                    <span className="text-xs text-red-500 mt-1 block">
+                      {errors.reason.message as string}
+                    </span>
+                  )}
                 </div>
 
                 {/* Nội dung vắng mặt */}
@@ -304,39 +371,40 @@ export const ConfirmAttendanceModal: React.FC<ConfirmAttendanceModalProps> = ({
                       </button>
                     </div>
                     {contentIds.map((contentId, index) => (
-                      <div key={index}>
+                      <div key={index} className="space-y-2">
                         {index > 0 && (
-                          <label className="block text-sm body text-gray-700 mb-2">
-                            Nội dung vắng mặt {index + 1}
-                          </label>
-                        )}
-                        <div className="flex gap-2">
-                          <CustomSelect
-                            value={contentId}
-                            onChange={(value) => {
-                              const newIds = [...contentIds];
-                              newIds[index] = value;
-                              setValue('contentIds', newIds);
-                            }}
-                            options={[
-                              { value: '1', label: 'Nội dung 1: Báo cáo tình hình KT-XH' },
-                              { value: '2', label: 'Nội dung 2: Kế hoạch triển khai Quý II' },
-                            ]}
-                            placeholder="Chọn 1/ nhiều nội dung"
-                            className="flex-1"
-                          />
-                          {index > 0 && (
+                          <div className="flex items-center justify-between">
+                            <label className="block text-sm body text-gray-700">
+                              Nội dung vắng mặt {index + 1}
+                            </label>
                             <button
                               type="button"
                               onClick={() => handleRemoveContent(index)}
-                              className="p-2 text-gray-400 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50"
+                              className="text-xs text-red-500 hover:underline font-medium"
                             >
-                              <X className="w-5 h-5" />
+                              Xóa
                             </button>
-                          )}
-                        </div>
+                          </div>
+                        )}
+                        <CustomSelect
+                          value={contentId}
+                          onChange={(value) => {
+                            const newIds = [...contentIds];
+                            newIds[index] = value;
+                            setValue('contentIds', newIds);
+                            if (value) clearErrors('contentIds');
+                          }}
+                          options={agendaOptions}
+                          placeholder="Chọn 1/ nhiều nội dung"
+                          className={`w-full ${errors.contentIds ? 'border-red-500' : ''}`}
+                        />
                       </div>
                     ))}
+                    {errors.contentIds && (
+                      <span className="text-xs text-red-500 mt-1 block">
+                        {errors.contentIds.message as string}
+                      </span>
+                    )}
                   </div>
                 )}
 
@@ -347,32 +415,25 @@ export const ConfirmAttendanceModal: React.FC<ConfirmAttendanceModalProps> = ({
                   </label>
                   <CustomSelect
                     value={substituteId}
-                    onChange={(val) => setValue('substituteId', val)}
+                    onChange={(val) => {
+                      setValue('substituteId', val);
+                      clearErrors('subName');
+                    }}
                     showSearch
-                    options={[
-                      { value: 'other', label: 'Khác (Nhập thông tin mới)' },
-                      { value: '1', label: 'Nguyễn Văn A - Phó Giám đốc' },
-                      { value: '2', label: 'Trần Thị B - Trưởng phòng' },
-                      { value: '3', label: 'Lê Văn C - Chuyên viên' },
-                      { value: '4', label: 'Phạm Văn D - Kế toán trưởng' },
-                      { value: '5', label: 'Hoàng Thị E - Nhân sự' },
-                      { value: '6', label: 'Đặng Văn F - Kỹ thuật' },
-                      { value: '7', label: 'Bùi Thị G - Kinh doanh' },
-                      { value: '8', label: 'Lý Văn H - Bảo vệ' },
-                      { value: '9', label: 'Vũ Thị I - Thư ký' },
-                      { value: '10', label: 'Đỗ Văn K - Giám sát' },
-                      { value: '11', label: 'Hồ Thị L - Tiếp tân' },
-                      { value: '12', label: 'Ngô Văn M - Lái xe' },
-                      { value: '13', label: 'Dương Thị N - Tạp vụ' },
-                      { value: '14', label: 'Lương Văn P - Thủ kho' },
-                      { value: '15', label: 'Trương Thị Q - Truyền thông' },
-                    ]}
+                    options={substituteOptions}
                     placeholder="Chọn người đi thay"
                     allowClear
                   />
 
                   {substituteId === 'other' && (
-                    <DynamicFormRenderer groups={substituteFormGroups} mode="create" />
+                    <div className="space-y-2">
+                      <DynamicFormRenderer groups={substituteFormGroups} mode="create" />
+                      {errors.subName && (
+                        <span className="text-xs text-red-500 mt-1 block">
+                          {errors.subName.message as string}
+                        </span>
+                      )}
+                    </div>
                   )}
                 </div>
               </div>

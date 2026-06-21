@@ -38,6 +38,7 @@ import vn.acme.paperless_meeting.exceptions.ErrorCode;
 import vn.acme.paperless_meeting.mapper.motion.MotionMapper;
 import vn.acme.paperless_meeting.repository.AgendaItemRepository;
 import vn.acme.paperless_meeting.repository.MeetingParticipantRepository;
+import vn.acme.paperless_meeting.repository.MeetingGuestRepository;
 import vn.acme.paperless_meeting.repository.MotionRepository;
 import vn.acme.paperless_meeting.repository.VoteBallotChoiceRepository;
 import vn.acme.paperless_meeting.repository.VoteBallotRepository;
@@ -48,7 +49,10 @@ import vn.acme.paperless_meeting.repository.VoteResultRepository;
 import vn.acme.paperless_meeting.repository.VoteResultOptionRepository;
 import vn.acme.paperless_meeting.entity.VoteResult;
 import vn.acme.paperless_meeting.entity.VoteResultOption;
+import vn.acme.paperless_meeting.entity.MeetingGuest;
+import vn.acme.paperless_meeting.entity.enums.InviteStatus;
 import vn.acme.paperless_meeting.service.auth.CurrentUserService;
+import vn.acme.paperless_meeting.service.websocket.WebSocketNotificationService;
 
 @Service
 @RequiredArgsConstructor
@@ -58,6 +62,7 @@ public class MotionService {
     MotionRepository motionRepository;
     AgendaItemRepository agendaItemRepository;
     MeetingParticipantRepository meetingParticipantRepository;
+    MeetingGuestRepository meetingGuestRepository;
     VoteSessionRepository voteSessionRepository;
     VoteOptionRepository voteOptionRepository;
     VoteBallotRepository voteBallotRepository;
@@ -68,6 +73,7 @@ public class MotionService {
     CurrentUserService currentUserService;
     MotionMapper motionMapper;
     AuditLogPublisher auditLogPublisher;
+    WebSocketNotificationService webSocketNotificationService;
 
     /**
      * Tạo mới một vấn đề biểu quyết
@@ -222,7 +228,11 @@ public class MotionService {
 
         List<Motion> list = motionRepository.findByAgendaItemIdWithCreator(agendaItemId);
         return list.stream()
-                .map(motionMapper::toResponse)
+                .map(m -> {
+                    MotionResponse resp = motionMapper.toResponse(m);
+                    enrichMotionResponse(resp, m);
+                    return resp;
+                })
                 .collect(Collectors.toList());
     }
 
@@ -232,7 +242,61 @@ public class MotionService {
     public List<MotionResponse> getMeetingMotions(UUID meetingId) {
         List<Motion> list = motionRepository.findByMeetingId(meetingId);
         return list.stream()
-                .map(motionMapper::toResponse)
+                .map(m -> {
+                    MotionResponse resp = motionMapper.toResponse(m);
+                    enrichMotionResponse(resp, m);
+                    return resp;
+                })
+                .collect(Collectors.toList());
+    }
+
+    private void enrichMotionResponse(MotionResponse resp, Motion motion) {
+        if (resp == null || motion == null) return;
+        VoteSession activeSession = motion.getVoteSessionList().stream()
+                .filter(s -> s.getStatus() == VoteSessionStatus.OPEN)
+                .findFirst()
+                .orElse(null);
+        if (activeSession == null) {
+            resp.setHasVoted(false);
+            return;
+        }
+
+        User user = null;
+        try {
+            user = currentUserService.getCurrentActiveUser();
+        } catch (Exception ignored) {}
+
+        if (user != null) {
+            boolean hasVoted = voteBallotRepository.existsByVoteSessionIdAndUserId(activeSession.getId(), user.getId());
+            resp.setHasVoted(hasVoted);
+        } else {
+            resp.setHasVoted(false);
+        }
+    }
+
+    private void enrichMotionResponseForGuest(MotionResponse resp, Motion motion, MeetingGuest guest) {
+        if (resp == null || motion == null || guest == null) return;
+        VoteSession activeSession = motion.getVoteSessionList().stream()
+                .filter(s -> s.getStatus() == VoteSessionStatus.OPEN)
+                .findFirst()
+                .orElse(null);
+        if (activeSession == null) {
+            resp.setHasVoted(false);
+            return;
+        }
+        boolean hasVoted = voteBallotRepository.existsByVoteSessionIdAndGuestId(activeSession.getId(), guest.getId());
+        resp.setHasVoted(hasVoted);
+    }
+
+    @Transactional(readOnly = true)
+    public List<MotionResponse> getMeetingMotionsForGuest(UUID meetingId, MeetingGuest guest) {
+        List<Motion> list = motionRepository.findByMeetingId(meetingId);
+        return list.stream()
+                .map(m -> {
+                    MotionResponse resp = motionMapper.toResponse(m);
+                    enrichMotionResponseForGuest(resp, m, guest);
+                    return resp;
+                })
                 .collect(Collectors.toList());
     }
 
@@ -299,6 +363,12 @@ public class MotionService {
                 )
         );
 
+        webSocketNotificationService.sendToTopic("/topic/meeting/" + meeting.getId() + "/motions", Map.of(
+                "action", "START_VOTE",
+                "motionId", savedMotion.getId().toString(),
+                "motionTitle", savedMotion.getTitle() != null ? savedMotion.getTitle() : ""
+        ));
+
         return motionMapper.toResponse(savedMotion);
     }
 
@@ -346,12 +416,31 @@ public class MotionService {
                 )
         );
 
+        webSocketNotificationService.sendToTopic("/topic/meeting/" + meeting.getId() + "/motions", Map.of(
+                "action", "STOP_VOTE",
+                "motionId", motion.getId().toString(),
+                "motionTitle", motion.getTitle() != null ? motion.getTitle() : ""
+        ));
+
         return motionMapper.toResponse(motionRepository.findById(id).orElseThrow());
     }
 
     @Transactional
     public void completeVoteSession(VoteSession session) {
         completeVoteSessionInternal(session, LocalDateTime.now());
+
+        // Gửi WebSocket thông báo cho tất cả client khi job tự động đóng phiên biểu quyết hết hạn
+        Motion motion = session.getMotion();
+        if (motion != null && motion.getMeeting() != null) {
+            webSocketNotificationService.sendToTopic(
+                    "/topic/meeting/" + motion.getMeeting().getId() + "/motions",
+                    Map.of(
+                            "action", "STOP_VOTE",
+                            "motionId", motion.getId().toString(),
+                            "motionTitle", motion.getTitle() != null ? motion.getTitle() : ""
+                    )
+            );
+        }
     }
 
     private void completeVoteSessionInternal(VoteSession activeSession, LocalDateTime closeTime) {
@@ -431,9 +520,43 @@ public class MotionService {
             throw new AppException(ErrorCode.PARTICIPANT_NOT_PRESENT);
         }
 
-        // Chỉ vai trò PARTICIPANT mới được quyền biểu quyết (CHAIR và SECRETARY không vote)
-        if (participant.getParticipantRole() != ParticipantRole.PARTICIPANT) {
+        // Chỉ có SECRETARY bị loại trừ khỏi quyền biểu quyết
+        if (participant.getParticipantRole() == ParticipantRole.SECRETARY) {
             throw new AppException(ErrorCode.VOTE_ROLE_NOT_ALLOWED);
+        }
+
+        // Kiểm tra xem đại biểu có báo vắng cho nội dung này không
+        boolean isAbsent = false;
+        UUID agendaItemId = motion.getAgendaItem() != null ? motion.getAgendaItem().getId() : null;
+        if (participant.getInviteStatus() == InviteStatus.DECLINED) {
+            if (participant.getIsFullSession() == null || participant.getIsFullSession()) {
+                isAbsent = true;
+            } else if (agendaItemId != null && participant.getAbsentAgendaItemIds() != null 
+                    && participant.getAbsentAgendaItemIds().contains(agendaItemId)) {
+                isAbsent = true;
+            }
+        }
+        if (isAbsent) {
+            throw new AppException(ErrorCode.VOTE_ROLE_NOT_ALLOWED);
+        }
+
+        // Nếu đại biểu là người đi thay (isSubstitute), kiểm tra xem đại biểu gốc có báo vắng ở nội dung này không
+        if (Boolean.TRUE.equals(participant.getIsSubstitute()) && participant.getSubstituteForParticipantId() != null) {
+            MeetingParticipant originalParticipant = meetingParticipantRepository.findById(participant.getSubstituteForParticipantId())
+                    .orElseThrow(() -> new AppException(ErrorCode.MEETING_PARTICIPANT_NOT_FOUND));
+
+            boolean originalAbsent = false;
+            if (originalParticipant.getInviteStatus() == InviteStatus.DECLINED) {
+                if (originalParticipant.getIsFullSession() == null || originalParticipant.getIsFullSession()) {
+                    originalAbsent = true;
+                } else if (agendaItemId != null && originalParticipant.getAbsentAgendaItemIds() != null 
+                        && originalParticipant.getAbsentAgendaItemIds().contains(agendaItemId)) {
+                    originalAbsent = true;
+                }
+            }
+            if (!originalAbsent) {
+                throw new AppException(ErrorCode.VOTE_ROLE_NOT_ALLOWED);
+            }
         }
 
         // Kiểm tra Whitelist (VoteEligibility)
@@ -483,7 +606,107 @@ public class MotionService {
                 )
         );
 
+        webSocketNotificationService.sendToTopic("/topic/meeting/" + motion.getMeeting().getId() + "/motions", Map.of(
+                "action", "CAST_VOTE",
+                "motionId", motion.getId().toString()
+        ));
+
         return motionMapper.toResponse(motion);
+    }
+
+    @Transactional
+    public MotionResponse publicCastVote(UUID id, UUID optionId, UUID guestToken) {
+        Motion motion = motionRepository.findById(id)
+                .orElseThrow(() -> new AppException(ErrorCode.MOTION_NOT_FOUND));
+
+        VoteSession activeSession = motion.getVoteSessionList().stream()
+                .filter(s -> s.getStatus() == VoteSessionStatus.OPEN)
+                .findFirst()
+                .orElseThrow(() -> new AppException(ErrorCode.BAD_REQUEST));
+
+        if (activeSession.getOpenedAt() != null && activeSession.getDurationMinutes() != null) {
+            LocalDateTime expireTime = activeSession.getOpenedAt().plusMinutes(activeSession.getDurationMinutes());
+            if (LocalDateTime.now().isAfter(expireTime)) {
+                throw new AppException(ErrorCode.VOTE_SESSION_CLOSED);
+            }
+        }
+
+        MeetingGuest guest = meetingGuestRepository.findByGuestToken(guestToken)
+                .orElseThrow(() -> new AppException(ErrorCode.MEETING_PARTICIPANT_NOT_FOUND));
+
+        if (!guest.getMeeting().getId().equals(motion.getMeeting().getId())) {
+            throw new AppException(ErrorCode.BAD_REQUEST);
+        }
+
+        if (guest.getAttendanceStatus() != AttendanceStatus.PRESENT) {
+            throw new AppException(ErrorCode.PARTICIPANT_NOT_PRESENT);
+        }
+
+        if (!Boolean.TRUE.equals(guest.getIsSubstitute()) || guest.getSubstituteForParticipantId() == null) {
+            throw new AppException(ErrorCode.VOTE_ROLE_NOT_ALLOWED);
+        }
+
+        UUID agendaItemId = motion.getAgendaItem() != null ? motion.getAgendaItem().getId() : null;
+        MeetingParticipant originalParticipant = meetingParticipantRepository.findById(guest.getSubstituteForParticipantId())
+                .orElseThrow(() -> new AppException(ErrorCode.MEETING_PARTICIPANT_NOT_FOUND));
+
+        boolean originalAbsent = false;
+        if (originalParticipant.getInviteStatus() == InviteStatus.DECLINED) {
+            if (originalParticipant.getIsFullSession() == null || originalParticipant.getIsFullSession()) {
+                originalAbsent = true;
+            } else if (agendaItemId != null && originalParticipant.getAbsentAgendaItemIds() != null 
+                    && originalParticipant.getAbsentAgendaItemIds().contains(agendaItemId)) {
+                originalAbsent = true;
+            }
+        }
+
+        if (!originalAbsent) {
+            throw new AppException(ErrorCode.VOTE_ROLE_NOT_ALLOWED);
+        }
+
+        boolean alreadyVoted = voteBallotRepository.existsByVoteSessionIdAndGuestId(activeSession.getId(), guest.getId());
+        if (alreadyVoted) {
+            throw new AppException(ErrorCode.VOTE_ALREADY_CAST);
+        }
+
+        VoteOption option = voteOptionRepository.findById(optionId)
+                .orElseThrow(() -> new AppException(ErrorCode.BAD_REQUEST));
+        if (!option.getVoteSession().getId().equals(activeSession.getId())) {
+            throw new AppException(ErrorCode.BAD_REQUEST);
+        }
+
+        VoteBallot ballot = new VoteBallot();
+        ballot.setVoteSession(activeSession);
+        ballot.setGuest(guest);
+        ballot.setCastAt(LocalDateTime.now());
+        ballot.setWeight(java.math.BigDecimal.ONE);
+        ballot.setIsValid(true);
+        VoteBallot savedBallot = voteBallotRepository.save(ballot);
+
+        VoteBallotChoice choice = new VoteBallotChoice();
+        choice.setBallot(savedBallot);
+        choice.setOption(option);
+        voteBallotChoiceRepository.save(choice);
+
+        auditLogPublisher.publish(
+                null,
+                AuditAction.CAST_VOTE,
+                ResourceType.MOTION,
+                motion.getId(),
+                Map.of(
+                        "guestId", String.valueOf(guest.getId()),
+                        "optionLabel", String.valueOf(option.getLabel())
+                )
+        );
+
+        webSocketNotificationService.sendToTopic("/topic/meeting/" + motion.getMeeting().getId() + "/motions", Map.of(
+                "action", "CAST_VOTE",
+                "motionId", motion.getId().toString()
+        ));
+
+        MotionResponse resp = motionMapper.toResponse(motion);
+        enrichMotionResponseForGuest(resp, motion, guest);
+        return resp;
     }
 
     /**
@@ -522,8 +745,41 @@ public class MotionService {
         if (eligibilityCount > 0) {
             totalVoters = (int) eligibilityCount;
         } else {
-            totalVoters = (int) meetingParticipantRepository.countByMeetingIdAndParticipantRole(
-                    motion.getMeeting().getId(), ParticipantRole.PARTICIPANT);
+            UUID meetingId = motion.getMeeting().getId();
+            List<MeetingParticipant> participants = meetingParticipantRepository.findByMeetingId(meetingId);
+            UUID agendaItemId = motion.getAgendaItem() != null ? motion.getAgendaItem().getId() : null;
+
+            for (MeetingParticipant p : participants) {
+                if (p.getParticipantRole() == ParticipantRole.SECRETARY) {
+                    continue;
+                }
+
+                // Check if they are absent for this specific motion
+                boolean isAbsent = false;
+                if (p.getInviteStatus() == InviteStatus.DECLINED) {
+                    if (p.getIsFullSession() == null || p.getIsFullSession()) {
+                        isAbsent = true;
+                    } else if (agendaItemId != null && p.getAbsentAgendaItemIds() != null && p.getAbsentAgendaItemIds().contains(agendaItemId)) {
+                        isAbsent = true;
+                    }
+                }
+
+                if (isAbsent) {
+                    // Check if they have a substitute registered
+                    boolean hasSubstitute = false;
+                    if (p.getSubstituteUser() != null) {
+                        hasSubstitute = true;
+                    } else if (p.getSubstituteName() != null && !p.getSubstituteName().trim().isEmpty()) {
+                        hasSubstitute = true;
+                    }
+                    
+                    if (hasSubstitute) {
+                        totalVoters++;
+                    }
+                } else {
+                    totalVoters++;
+                }
+            }
         }
 
         // 2. Số lượng người đã bỏ phiếu hợp lệ
@@ -561,5 +817,23 @@ public class MotionService {
         for (VoteSession session : openSessions) {
             completeVoteSessionInternal(session, now);
         }
+    }
+
+    @Transactional(readOnly = true)
+    public VoteStatisticsResponse publicGetVoteStatistics(UUID id) {
+        Motion motion = motionRepository.findById(id)
+                .orElseThrow(() -> new AppException(ErrorCode.MOTION_NOT_FOUND));
+
+        VoteSession session = motion.getVoteSessionList().stream()
+                .filter(s -> s.getStatus() == VoteSessionStatus.OPEN || s.getStatus() == VoteSessionStatus.CLOSED)
+                .findFirst()
+                .orElse(null);
+
+        if (session == null) {
+            return VoteStatisticsResponse.builder()
+                    .totalVoters(0).votedCount(0).notVotedCount(0).yesCount(0).noCount(0).build();
+        }
+
+        return getVoteStatisticsInternal(session, motion);
     }
 }

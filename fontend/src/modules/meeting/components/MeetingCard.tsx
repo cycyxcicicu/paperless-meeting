@@ -10,7 +10,6 @@ interface MeetingCardProps {
     onViewDetail: (id: string) => void;
     onUpdate: (id: string) => void;
     onCopy: (id: string) => void;
-    onPostpone: (id: string) => void;
     onCancel: (id: string) => void;
     onSend: (id: string) => void;
     onUploadDocs: (id: string) => void;
@@ -21,7 +20,6 @@ export const MeetingCard: React.FC<MeetingCardProps> = ({
     onViewDetail,
     onUpdate,
     onCopy,
-    onPostpone,
     onCancel,
     onSend,
     onUploadDocs
@@ -135,8 +133,6 @@ export const MeetingCard: React.FC<MeetingCardProps> = ({
                             const hasActions = 
                                 meeting.canEdit || 
                                 meeting.canCancel || 
-                                meeting.canPublish || 
-                                meeting.canPostpone || 
                                 meeting.canDelete || 
                                 meeting.canSubmitApproval || 
                                 meeting.canUploadDocs || 
@@ -152,7 +148,6 @@ export const MeetingCard: React.FC<MeetingCardProps> = ({
                                         canEdit={meeting.canEdit}
                                         canCancel={meeting.canCancel}
                                         canPublish={meeting.canPublish}
-                                        canPostpone={meeting.canPostpone}
                                         canDelete={meeting.canDelete}
                                         canSubmitApproval={meeting.canSubmitApproval}
                                         canUploadDocs={meeting.canUploadDocs}
@@ -161,7 +156,6 @@ export const MeetingCard: React.FC<MeetingCardProps> = ({
                                         onViewDetail={onViewDetail}
                                         onUpdate={onUpdate}
                                         onCopy={onCopy}
-                                        onPostpone={onPostpone}
                                         onCancel={onCancel}
                                         onSend={onSend}
                                         onUploadDocs={onUploadDocs}

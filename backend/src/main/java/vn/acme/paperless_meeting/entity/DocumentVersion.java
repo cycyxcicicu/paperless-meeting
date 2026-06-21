@@ -65,6 +65,5 @@ public class DocumentVersion {
     @OneToMany(mappedBy = "currentVersion")
     private List<Document> documentList = new ArrayList<>();
 
-    @OneToMany(mappedBy = "version")
-    private List<DocumentAccessLog> documentAccessLogList = new ArrayList<>();
+
 }

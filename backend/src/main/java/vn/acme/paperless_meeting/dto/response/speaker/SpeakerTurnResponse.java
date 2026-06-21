@@ -19,4 +19,6 @@ public class SpeakerTurnResponse {
     private String userName;
     private String avatarUrl;
     private UUID meetingId;
+    private UUID guestId;
+    private Boolean isGuestSubstitute;
 }

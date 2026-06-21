@@ -22,4 +22,6 @@ public class SpeakerQueueResponse {
     private String userName;
     private String avatarUrl;
     private UUID meetingId;
+    private UUID guestId;
+    private Boolean isGuestSubstitute;
 }

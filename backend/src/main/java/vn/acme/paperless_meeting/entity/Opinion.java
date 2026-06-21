@@ -30,8 +30,11 @@ public class Opinion {
     private Meeting meeting;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id", nullable = false)
+    @JoinColumn(name = "user_id")
     private User user;
+
+    @Column(name = "guest_name")
+    private String guestName;
 
     @Column(name = "opinion_detail", length = 4000, nullable = false)
     private String opinionDetail;

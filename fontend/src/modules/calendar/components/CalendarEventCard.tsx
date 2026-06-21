@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router';
 import { cn } from '@/common/utils/cn';
-import { Clock, CheckCircle2, HelpCircle, XCircle } from 'lucide-react';
+import { Clock, CheckCircle2, HelpCircle, XCircle, CalendarRange } from 'lucide-react';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/common/components/ui/tooltip';
 import { meetingApi } from '@/modules/meeting/services/meeting.api';
 
@@ -58,10 +58,25 @@ export const CalendarEventCard: React.FC<CalendarEventCardProps> = ({
     finished: 'bg-red-500',
   };
 
+  // Format ngày bắt đầu-kết thúc cho multi-day badge
+  const getMultiDayLabel = () => {
+    if (!event.isMultiDay || !event.originalStartTime || !event.originalEndTime) return null;
+    const start = new Date(event.originalStartTime);
+    const end = new Date(event.originalEndTime);
+    const fmtDate = (d: Date) => `${d.getDate()}/${d.getMonth() + 1}`;
+    return `${fmtDate(start)} → ${fmtDate(end)}`;
+  };
+
   const renderTooltipContent = () => {
     return (
       <div className="space-y-1.5 text-xs text-gray-700 font-normal">
         <p className="font-semibold text-gray-900 border-b border-gray-100 pb-1 mb-1 text-sm">{event.title}</p>
+        {event.isMultiDay && (
+          <p className="flex items-center gap-1.5 text-indigo-600 font-medium">
+            <CalendarRange className="h-3 w-3" />
+            Cuộc họp nhiều ngày: {getMultiDayLabel()}
+          </p>
+        )}
         <p className="flex items-start gap-1.5">
           <span className="font-medium text-gray-900 shrink-0">📍 Địa điểm:</span>
           <span>{event.location || 'Chưa xác định'}</span>
@@ -88,22 +103,30 @@ export const CalendarEventCard: React.FC<CalendarEventCardProps> = ({
           className={cn(
             'relative px-3 py-2 rounded-xl border-l-2 cursor-pointer transition-all hover:shadow-md',
             statusStyles[event.status],
-            event.status === 'ongoing' && 'animate-pulse-subtle'
+            event.status === 'ongoing' && 'animate-pulse-subtle',
+            // Multi-day styling: viền dashed bao quanh + ring để nổi bật
+            event.isMultiDay && 'border-l-[3px] border-dashed ring-1 ring-inset ring-current/20 bg-gradient-to-r from-current/[0.04] to-transparent'
           )}
         >
           {/* Status dot */}
           <div className={cn(
-            'absolute top-2 left-2 w-2 h-2 rounded-full',
+            'absolute top-2.5 left-2 w-2 h-2 rounded-full',
             dotStyles[event.status]
           )} />
 
           <div className="pl-3">
-            <h4 className="text-sm btn-primary text-gray-900 mb-1 line-clamp-1">
-              {event.title}
+            <div className="flex items-start justify-between gap-2 mb-1">
+              <h4 className="text-sm btn-primary text-gray-900 line-clamp-1 flex-1">
+                {event.title}
+              </h4>
+              {/* Multi-day badge */}
               {event.isMultiDay && (
-                <span className="ml-1 text-xs opacity-60">↔</span>
+                <div className="shrink-0 flex items-center gap-0.5 bg-indigo-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full shadow-sm">
+                  <CalendarRange className="h-2.5 w-2.5" />
+                  <span>{getMultiDayLabel()}</span>
+                </div>
               )}
-            </h4>
+            </div>
             
             <div className="flex items-center gap-1 text-xs text-gray-600 mb-1">
               <Clock className="h-3 w-3 text-gray-400" />

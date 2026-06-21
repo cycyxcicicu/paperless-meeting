@@ -9,9 +9,12 @@ import { Opinion } from '../../meeting.mock';
 interface OpinionSectionProps {
     opinions: Opinion[];
     onAddOpinion: () => void;
+    isGuest?: boolean;
+    meetingStatus?: string;
+    isAttendee?: boolean;
 }
 
-export function OpinionSection({ opinions, onAddOpinion }: OpinionSectionProps) {
+export function OpinionSection({ opinions, onAddOpinion, isGuest, meetingStatus, isAttendee = false }: OpinionSectionProps) {
     const config = {
         columns: [
             { key: 'userName', header: 'Tên đại biểu' },
@@ -36,10 +39,12 @@ export function OpinionSection({ opinions, onAddOpinion }: OpinionSectionProps) 
             <CollapsibleSection
                 title={`Danh sách tham gia góp ý (${opinions.length})`}
                 action={
-                    <Button variant="primary" size="sm" className="bg-[#C8102E] hover:bg-[#a80d26] h-9 gap-1.5" onClick={onAddOpinion}>
-                        <Plus className="w-4 h-4" />
-                        <span className="text-sm body">Thêm</span>
-                    </Button>
+                    isAttendee && !isGuest && meetingStatus === "IN_PROGRESS" && (
+                        <Button variant="primary" size="sm" className="bg-[#C8102E] hover:bg-[#a80d26] h-9 gap-1.5" onClick={onAddOpinion}>
+                            <Plus className="w-4 h-4" />
+                            <span className="text-sm body">Thêm</span>
+                        </Button>
+                    )
                 }
             >
                 <div className="p-0">

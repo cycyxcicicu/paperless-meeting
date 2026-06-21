@@ -50,6 +50,12 @@ public class DocTemplate extends SoftDeletable {
 
     private String name;
 
+    @Column(unique = true, nullable = false)
+    private String code;
+
+    @Column(name = "content_json", columnDefinition = "TEXT")
+    private String contentJson;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "template_type")
     private TemplateType templateType;
@@ -72,9 +78,7 @@ public class DocTemplate extends SoftDeletable {
     @JoinColumn(name = "created_by")
     private User createdBy;
 
-    @OneToMany(mappedBy = "template", cascade = CascadeType.REMOVE, orphanRemoval = true)
-    private List<TemplateField> templateFieldList = new ArrayList<>();
 
-    @OneToMany(mappedBy = "template", cascade = CascadeType.REMOVE, orphanRemoval = true)
-    private List<GeneratedDocument> generatedDocumentList = new ArrayList<>();
+
+
 }

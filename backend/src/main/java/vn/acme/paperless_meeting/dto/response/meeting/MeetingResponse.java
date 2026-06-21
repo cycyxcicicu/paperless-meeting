@@ -50,4 +50,8 @@ public class MeetingResponse {
     private Boolean canSubmitApproval;
     private Boolean canUploadDocs;
     private Boolean canApprove;
+
+    private Boolean requiresInvitation;
+    private UUID invitationTemplateId;
+    private String invitationContent;
 }

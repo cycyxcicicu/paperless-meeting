@@ -17,6 +17,7 @@ import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
 import { useAuth } from '@/app/context/AuthContext';
+import { TableTooltip } from '@/common/components/table-engine/TableTooltip';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -136,9 +137,11 @@ export const LocationTable: React.FC<LocationTableProps> = ({
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2 text-sm text-gray-600">
                       <Building2 className="h-4 w-4 text-gray-400 truncate" />
-                      <span className="body truncate max-w-[200px]" title={location.address}>
-                        {location.address}
-                      </span>
+                      <TableTooltip 
+                        text={location.address} 
+                        maxLength={25} 
+                        className="body truncate max-w-[200px] cursor-pointer" 
+                      />
                     </div>
                   </td>
 

@@ -113,8 +113,7 @@ public class Meeting extends SoftDeletable {
     @OneToMany(mappedBy = "meeting", orphanRemoval = false)
     private List<VoteSession> voteSessionList = new ArrayList<>();
 
-    @OneToMany(mappedBy = "meeting", orphanRemoval = false)
-    private List<GeneratedDocument> generatedDocumentList = new ArrayList<>();
+
 
     @OneToMany(mappedBy = "meeting", cascade = { CascadeType.PERSIST, CascadeType.MERGE }, orphanRemoval = false)
     private List<MeetingParticipant> meetingParticipantList = new ArrayList<>();
@@ -137,5 +136,14 @@ public class Meeting extends SoftDeletable {
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "agenda_file", columnDefinition = "json")
     private MeetingFile agendaFile;
+
+    @Column(name = "requires_invitation")
+    private Boolean requiresInvitation = true;
+
+    @Column(name = "invitation_template_id")
+    private UUID invitationTemplateId;
+
+    @Column(name = "invitation_content", columnDefinition = "TEXT")
+    private String invitationContent;
 
 }

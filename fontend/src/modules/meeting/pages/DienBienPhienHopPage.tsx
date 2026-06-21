@@ -1,6 +1,6 @@
 import React from "react";
-import { useNavigate, useParams } from "react-router";
-import { ArrowLeft, Clock, Users, X } from "lucide-react";
+import { useNavigate, useParams, useLocation } from "react-router";
+import { ArrowLeft, Clock, Users, X, CalendarClock, CalendarX } from "lucide-react";
 import { PageHeader } from '@/common/components/layout/PageHeader';
 import { Button } from '@/common/components/ui/button';
 import { SelectSpeakerModal } from '@/modules/meeting/components/SelectSpeakerModal';
@@ -17,7 +17,6 @@ import { StartContentModal } from '@/modules/meeting/components/StartContentModa
 import { ApproveContentModal } from '@/modules/meeting/components/ApproveContentModal';
 import {
     MeetingContentsPanel,
-    MeetingHistoryPanel,
     MeetingDetailPanel,
     SpeakerTimerPanel,
     VotingSection,
@@ -26,10 +25,15 @@ import {
 } from '@/modules/meeting/components/dien-bien';
 import { useDienBienPhienHop } from '../hooks/useDienBienPhienHop';
 import { MeetingContent } from "../meeting.mock";
+import { LoadingOverlay } from "@/common/components/ui/LoadingOverlay";
 
 export default function DienBienPhienHopPage() {
     const navigate = useNavigate();
+    const location = useLocation();
     const { id } = useParams();
+
+    const searchParams = new URLSearchParams(location.search);
+    const guestToken = searchParams.get('guestToken');
 
     const {
         activeContent, setActiveContent,
@@ -61,18 +65,97 @@ export default function DienBienPhienHopPage() {
         handleRevote, handleViewVotingResult,
         handleStartContent, handleApproveContent,
         handleAddOpinionForContent,
-        handleOpenApproveContent, handleOpenAddOpinionForContent,
-    } = useDienBienPhienHop();
+        handleOpenStartContent, handleOpenApproveContent, handleOpenAddOpinionForContent,
+        meeting,
+        loading,
+        error,
+        isGuest,
+        isSelfCheckedIn,
+        isAbsentOnActiveContent,
+        isWithinCheckInWindow,
+        handleSelfCheckIn,
+        handleRequestToSpeak,
+        isChairOrSecretary,
+        checkAttendance,
+        isAttendee,
+    } = useDienBienPhienHop(guestToken);
+
+    const errorCode = error?.response?.data?.code;
+
+    if (errorCode === 1251) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC] p-4">
+                <div className="max-w-md w-full bg-white rounded-3xl shadow-xl border border-gray-100 p-8 text-center transition-all duration-300 hover:shadow-2xl">
+                    <div className="w-20 h-20 bg-amber-50 rounded-full flex items-center justify-center mx-auto mb-6 text-amber-500 animate-pulse">
+                        <CalendarClock className="h-10 w-10" />
+                    </div>
+                    <h2 className="text-2xl font-bold text-gray-900 mb-3 tracking-tight">Phiên họp chưa bắt đầu</h2>
+                    <p className="text-gray-600 mb-8 leading-relaxed">
+                        Thời gian diễn ra phiên họp chưa đến. Vui lòng kiểm tra lại thời gian bắt đầu trong thư mời và truy cập lại sau.
+                    </p>
+                    <div className="bg-amber-50/50 rounded-2xl p-4 mb-8 border border-amber-100/50 text-left">
+                        <span className="text-xs font-semibold uppercase tracking-wider text-amber-800 block mb-1">Lưu ý cho khách mời</span>
+                        <span className="text-xs text-amber-700 leading-relaxed">
+                            Liên kết truy cập phòng họp chỉ khả dụng từ thời điểm bắt đầu cuộc họp. Vui lòng không truy cập sớm trước giờ quy định.
+                        </span>
+                    </div>
+                    <Button
+                        variant="primary"
+                        className="w-full bg-[#C8102E] hover:bg-[#a80d26] rounded-full py-6 text-base font-semibold shadow-lg shadow-red-500/20 transition-all duration-200"
+                        onClick={() => window.location.reload()}
+                    >
+                        Tải lại trang
+                    </Button>
+                </div>
+            </div>
+        );
+    }
+
+    if (errorCode === 1252) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC] p-4">
+                <div className="max-w-md w-full bg-white rounded-3xl shadow-xl border border-gray-100 p-8 text-center transition-all duration-300 hover:shadow-2xl">
+                    <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-6 text-gray-400">
+                        <CalendarX className="h-10 w-10" />
+                    </div>
+                    <h2 className="text-2xl font-bold text-gray-900 mb-3 tracking-tight">Phiên họp đã kết thúc</h2>
+                    <p className="text-gray-600 mb-8 leading-relaxed">
+                        Phiên họp này đã hoàn thành hoặc đã bị hủy bỏ bởi Ban tổ chức. Liên kết truy cập của bạn đã hết hạn khả dụng.
+                    </p>
+                    <div className="bg-gray-50 rounded-2xl p-4 mb-8 border border-gray-100 text-left">
+                        <span className="text-xs font-semibold uppercase tracking-wider text-gray-500 block mb-1">Trạng thái liên kết</span>
+                        <span className="text-xs text-gray-500 leading-relaxed">
+                            Quyền truy cập phòng họp dành cho khách mời tự động đóng lại sau khi phiên họp kết thúc để đảm bảo an toàn thông tin.
+                        </span>
+                    </div>
+                    {isGuest ? (
+                        <div className="text-center text-sm text-gray-500 font-medium py-3">
+                            Cảm ơn quý khách đã tham dự phiên họp.
+                        </div>
+                    ) : (
+                        <Button
+                            variant="outline"
+                            className="w-full rounded-full py-6 text-base font-semibold border-gray-200 text-gray-750 hover:bg-gray-50"
+                            onClick={() => navigate('/')}
+                        >
+                            Quay lại Trang chủ
+                        </Button>
+                    )}
+                </div>
+            </div>
+        );
+    }
 
     return (
         <>
+            {loading && <LoadingOverlay message="Đang tải diễn biến phiên họp..." />}
             <div className="p-8">
                 <PageHeader
                     title={
                         <div className="flex items-center gap-3">
                             <Button
                                 variant="ghost"
-                                onClick={() => navigate(`/phien-hop/${id}`)}
+                                onClick={() => navigate(`/phien-hop/${id}${isGuest ? `?guestToken=${guestToken}` : ''}`)}
                                 className="text-gray-600 hover:text-[#C8102E] hover:bg-red-50 px-2 py-2 h-auto"
                             >
                                 <ArrowLeft className="h-5 w-5" />
@@ -80,49 +163,64 @@ export default function DienBienPhienHopPage() {
                             <span>Diễn biến phiên họp</span>
                         </div>
                     }
-                    description={
-                        <div className="flex items-center gap-6 text-sm">
-                            <div className="flex items-center gap-2">
-                                <Clock className="h-4 w-4 text-gray-400" />
-                                <span>Thời gian: 17/04/2026 22:31 - 23:20</span>
-                            </div>
-                        </div>
-                    }
-                    breadcrumbs={[
+                    breadcrumbs={isGuest ? [] : [
                         { name: "Trang chủ", path: "/" },
                         { name: "Phiên họp", path: "/phien-hop" },
                         { name: "Chi tiết phiên họp", path: `/phien-hop/${id}` },
                         { name: "Diễn biến phiên họp" },
                     ]}
                     actions={
-                        <Button
-                            variant="primary"
-                            className="bg-[#C8102E] hover:bg-[#a80d26]"
-                            onClick={() => setIsAttendanceModalOpen(true)}
-                        >
-                            <Users className="h-4 w-4 mr-2" />
-                            Điểm danh
-                        </Button>
+                        meeting?.status === "IN_PROGRESS" || isWithinCheckInWindow ? (
+                            <Button
+                                variant="outline"
+                                className="border-gray-200 text-gray-700 hover:bg-gray-50 rounded-full"
+                                onClick={() => setIsAttendanceModalOpen(true)}
+                            >
+                                <Users className="h-4 w-4 mr-2" />
+                                Danh sách điểm danh
+                            </Button>
+                        ) : null
                     }
                 />
+
+                {/* Banner cảnh báo điểm danh */}
+                {!isSelfCheckedIn && isWithinCheckInWindow && (
+                    <div className="mb-6 bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-center justify-between shadow-sm">
+                        <div className="flex items-center gap-3">
+                            <Clock className="h-5 w-5 text-amber-600 flex-shrink-0 animate-pulse" />
+                            <div>
+                                <h4 className="font-semibold text-amber-800 text-sm">Bạn chưa điểm danh tham dự cuộc họp</h4>
+                                <p className="text-xs text-amber-700 mt-0.5">
+                                    Vui lòng điểm danh để có thể tham gia biểu quyết, đăng ký phát biểu và gửi ý kiến đóng góp.
+                                </p>
+                            </div>
+                        </div>
+                        <Button
+                            variant="primary"
+                            className="bg-amber-600 hover:bg-amber-700 text-white rounded-full px-5 py-2 text-xs font-semibold shadow-md shadow-amber-600/10 whitespace-nowrap"
+                            onClick={handleSelfCheckIn}
+                        >
+                            Điểm danh ngay
+                        </Button>
+                    </div>
+                )}
 
                 {/* Tên phiên họp */}
                 <div className="text-center mb-6">
                     <h2 className="text-2xl heading text-gray-900 uppercase mb-1">
-                        HỌP TRIỂN KHAI KẾ HOẠCH QUÝ II/2026
+                        {meeting?.title || "HỌP TRIỂN KHAI KẾ HOẠCH QUÝ II/2026"}
                     </h2>
                 </div>
 
                 {/* Layout 3 cột */}
                 <div className="grid grid-cols-12 gap-5 mb-6">
                     {/* Cột trái */}
-                    <div className="col-span-3 flex flex-col gap-5">
+                    <div className="col-span-3 flex flex-col">
                         <MeetingContentsPanel
                             meetingContents={meetingContents}
                             activeContent={activeContent}
                             onSelectContent={setActiveContent}
                         />
-                        <MeetingHistoryPanel />
                     </div>
 
                     {/* Cột giữa */}
@@ -130,43 +228,52 @@ export default function DienBienPhienHopPage() {
                         <MeetingDetailPanel
                             meetingContents={meetingContents}
                             activeContent={activeContent}
-                            onOpenApprove={handleOpenApproveContent}
-                            onOpenStart={() => {
-                                const content = meetingContents.find((c) => c.id === activeContent);
-                                setSelectedContent(content || null);
-                                setIsStartContentModalOpen(true);
-                            }}
+                            onEndContent={(contentId) => handleApproveContent(contentId, true)}
+                            onOpenStart={handleOpenStartContent}
                             onOpenAddOpinionForContent={handleOpenAddOpinionForContent}
                             setSelectedContent={setSelectedContent}
                             setIsStartContentModalOpen={setIsStartContentModalOpen}
+                            isGuest={isGuest}
+                            meetingStatus={meeting?.status}
+                            isChairOrSecretary={isChairOrSecretary}
+                            isAttendee={isAttendee}
                         />
                     </div>
 
                     {/* Cột phải */}
-                    <div className="col-span-4 flex flex-col gap-5">
-                        <SpeakerTimerPanel currentSpeaker={currentSpeaker} onEndSpeaking={handleEndSpeaking} />
+                    <div className="col-span-4 flex flex-col">
+                        <SpeakerTimerPanel currentSpeaker={currentSpeaker} onEndSpeaking={handleEndSpeaking} isGuest={isGuest} />
                     </div>
                 </div>
 
                 {/* Sections full width */}
                 <div className="space-y-6">
+                    <SpeakerSection
+                        speakers={speakers}
+                        activeTab={activeTab}
+                        onTabChange={setActiveTab}
+                        onAddSpeaker={() => { if (checkAttendance()) setIsAddSpeakerModalOpen(true); }}
+                        onPrepareSpeech={handlePrepareSpeech}
+                        onAssignSpeech={handleAssignSpeech}
+                        onRejectSpeech={handleRejectSpeech}
+                        isGuest={isGuest}
+                        meetingStatus={meeting?.status}
+                        isChairOrSecretary={isChairOrSecretary}
+                        onRequestToSpeak={handleRequestToSpeak}
+                        isAttendee={isAttendee}
+                        isAbsentOnActiveContent={isAbsentOnActiveContent}
+                    />
                     <VotingSection
                         votingIssues={votingIssues}
                         onToggleBroadcast={handleToggleBroadcast}
                         onPauseVoting={handlePauseVoting}
                         onRevote={handleRevote}
                         onViewResult={handleViewVotingResult}
+                        isGuest={isGuest}
+                        meetingStatus={meeting?.status}
+                        isChairOrSecretary={isChairOrSecretary}
                     />
-                    <OpinionSection opinions={opinions} onAddOpinion={() => setIsAddOpinionModalOpen(true)} />
-                    <SpeakerSection
-                        speakers={speakers}
-                        activeTab={activeTab}
-                        onTabChange={setActiveTab}
-                        onAddSpeaker={() => setIsAddSpeakerModalOpen(true)}
-                        onPrepareSpeech={handlePrepareSpeech}
-                        onAssignSpeech={handleAssignSpeech}
-                        onRejectSpeech={handleRejectSpeech}
-                    />
+                    <OpinionSection opinions={opinions} onAddOpinion={() => { if (checkAttendance()) setIsAddOpinionModalOpen(true); }} isGuest={isGuest} meetingStatus={meeting?.status} isAttendee={isAttendee} />
                 </div>
             </div>
 
@@ -183,6 +290,8 @@ export default function DienBienPhienHopPage() {
             <AttendanceModal
                 isOpen={isAttendanceModalOpen}
                 onClose={() => setIsAttendanceModalOpen(false)}
+                meetingId={id || ""}
+                guestToken={guestToken}
             />
 
             <AddOpinionModal

@@ -6,25 +6,36 @@ import { defaultTemplate, compileTemplate } from './template.data';
 
 interface TemplateListProps {
   templates: any[];
-  setTemplates: (templates: any[]) => void;
+  setTemplates?: (templates: any[]) => void;
   onEdit: (row?: any) => void;
+  onDelete?: (id: string) => void;
 }
 
-export const TemplateList: React.FC<TemplateListProps> = ({ templates, setTemplates, onEdit }) => {
+export const TemplateList: React.FC<TemplateListProps> = ({ templates, setTemplates, onEdit, onDelete }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [previewTemplate, setPreviewTemplate] = useState<any>(null);
 
   const filteredTemplates = templates.filter(t => 
-    t.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    t.code.toLowerCase().includes(searchQuery.toLowerCase())
+    (t.name || "").toLowerCase().includes(searchQuery.toLowerCase()) || 
+    (t.code || "").toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const handlePreview = (row: any) => {
-    setPreviewTemplate({
-      ...defaultTemplate,
-      tenMau: row.name,
-      maMau: row.code
-    });
+    try {
+      const data = JSON.parse(row.contentJson);
+      setPreviewTemplate({
+        ...defaultTemplate,
+        ...data,
+        tenMau: row.name,
+        maMau: row.code
+      });
+    } catch (e) {
+      setPreviewTemplate({
+        ...defaultTemplate,
+        tenMau: row.name,
+        maMau: row.code
+      });
+    }
   };
 
   const getPaperStyle = (khoGiay?: string) => {
@@ -37,7 +48,11 @@ export const TemplateList: React.FC<TemplateListProps> = ({ templates, setTempla
 
   const handleDelete = (row: any) => {
     if (confirm(`Bạn có chắc chắn muốn xóa mẫu: ${row.name}?`)) {
-      setTemplates(templates.filter(t => t.id !== row.id));
+      if (onDelete) {
+        onDelete(row.id);
+      } else if (setTemplates) {
+        setTemplates(templates.filter(t => t.id !== row.id));
+      }
     }
   };
 
@@ -52,10 +67,8 @@ export const TemplateList: React.FC<TemplateListProps> = ({ templates, setTempla
       { 
         key: 'name', 
         header: 'Tên mẫu',
-        width: '350px',
         render: (row: any) => <span className="btn-primary text-gray-900">{row.name}</span>
-      },
-      { key: 'desc', header: 'Mô tả' }
+      }
     ],
     rowActions: [
       {
@@ -82,7 +95,13 @@ export const TemplateList: React.FC<TemplateListProps> = ({ templates, setTempla
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-64px)] overflow-hidden bg-gray-50/50">
+    <div className="template-list-global-times flex flex-col h-[calc(100vh-64px)] overflow-hidden bg-gray-50/50">
+      <style>{`
+        .template-list-global-times,
+        .template-list-global-times * {
+          font-family: 'Times New Roman', Times, serif !important;
+        }
+      `}</style>
       <div className="px-8 pt-8 pb-4 shrink-0">
         <PageHeader 
           breadcrumbs={[
@@ -130,12 +149,27 @@ export const TemplateList: React.FC<TemplateListProps> = ({ templates, setTempla
             </div>
             
             <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
-              <div className="bg-white shadow-xl mx-auto rounded-sm overflow-hidden text-black transition-all" 
-                   style={{ boxSizing: 'border-box', fontFamily: '"Times New Roman", Times, serif', ...getPaperStyle(previewTemplate.khoGiay) }}>
+              <style>{`
+                .preview-times-new-roman, 
+                .preview-times-new-roman *,
+                .preview-times-new-roman .ql-editor,
+                .preview-times-new-roman .ql-editor * {
+                  font-family: 'Times New Roman', Times, serif !important;
+                }
+              `}</style>
+              <div className="preview-times-new-roman bg-white shadow-xl mx-auto rounded-sm overflow-hidden text-black transition-all" 
+                   style={{ boxSizing: 'border-box', ...getPaperStyle(previewTemplate.khoGiay) }}>
                 
                 <div className="flex justify-between items-start mb-6">
-                  <div className="w-1/2 text-center">
-                    <div className="text-sm font-semibold whitespace-pre-wrap leading-tight">{compileTemplate(previewTemplate.headerTrai)}</div>
+                  <div className="w-1/2 text-center text-sm leading-tight">
+                    {compileTemplate(previewTemplate.headerTrai).split('\n').map((line, idx, arr) => {
+                      const isLast = idx === arr.length - 1 && arr.length > 1;
+                      return (
+                        <div key={idx} className={isLast ? "font-normal" : "font-semibold"}>
+                          {line}
+                        </div>
+                      );
+                    })}
                   </div>
                   <div className="w-1/2 text-center">
                     <div className="text-sm font-bold whitespace-pre-wrap leading-tight">{compileTemplate(previewTemplate.headerPhai)}</div>
@@ -148,6 +182,9 @@ export const TemplateList: React.FC<TemplateListProps> = ({ templates, setTempla
 
                 <div className="text-center mb-8">
                   <h1 className="text-xl font-bold uppercase">{compileTemplate(previewTemplate.tieuDe)}</h1>
+                  {previewTemplate.trichYeu && (
+                    <div className="text-[15px] font-normal mt-1 text-gray-800">{compileTemplate(previewTemplate.trichYeu)}</div>
+                  )}
                 </div>
 
                 <div 

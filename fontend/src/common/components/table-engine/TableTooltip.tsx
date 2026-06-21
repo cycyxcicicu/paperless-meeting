@@ -1,4 +1,5 @@
 import React from 'react';
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/common/components/ui/tooltip';
 
 interface TableTooltipProps {
   text?: string | null;
@@ -33,8 +34,20 @@ export const TableTooltip: React.FC<TableTooltipProps> = ({
   const truncated = text.substring(0, maxLength) + '...';
 
   return (
-    <span className={`${className} cursor-help`} title={text}>
-      {truncated}
-    </span>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className={`${className} cursor-pointer`}>
+          {truncated}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent 
+        showArrow={true} 
+        sideOffset={6}
+        arrowClassName="fill-white bg-white"
+        className="bg-white text-gray-900 border border-gray-200 px-3 py-2 rounded-lg shadow-md text-xs max-w-xs z-[9999] break-words"
+      >
+        {text}
+      </TooltipContent>
+    </Tooltip>
   );
 };

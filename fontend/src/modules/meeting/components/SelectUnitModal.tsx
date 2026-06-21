@@ -18,6 +18,9 @@ interface Member {
   email: string;
   isChair?: boolean;
   isSecretary?: boolean;
+  sendStatus?: 'PENDING' | 'SENT' | 'FAILED';
+  substitutedForUserName?: string;
+  substitutedForUserPosition?: string;
 }
 
 interface SelectUnitModalProps {
@@ -27,6 +30,7 @@ interface SelectUnitModalProps {
   mode: 'unit' | 'individual';
   title?: string;
   initialSelectedMembers?: Member[];
+  creatorId?: string | null;
 }
 
 import { departmentApi } from '@/modules/organization/services/department.api';
@@ -110,32 +114,38 @@ const SelectUnitModal: React.FC<SelectUnitModalProps> = ({
   mode,
   title = 'Chọn từ cây đơn vị',
   initialSelectedMembers = [],
+  creatorId = null,
 }) => {
   const { user } = useAuth();
-  const creatorId = user ? String(user.id) : null;
+  const effectiveCreatorId = creatorId || (user ? String(user.id) : null);
 
   const creatorMember = useMemo<Member | null>(() => {
-    if (!user) return null;
-    let posName = '';
-    if (user.position) {
-      posName = typeof user.position === 'object' ? (user.position.positionName || user.position.name || '') : user.position;
+    const inInitial = initialSelectedMembers?.find(m => String(m.id) === effectiveCreatorId);
+    if (inInitial) return inInitial;
+
+    if (user && String(user.id) === effectiveCreatorId) {
+      let posName = '';
+      if (user.position) {
+        posName = typeof user.position === 'object' ? (user.position.positionName || user.position.name || '') : user.position;
+      }
+      let deptName = '';
+      let deptId = '';
+      if (user.department) {
+        deptName = typeof user.department === 'object' ? (user.department.deptName || user.department.name || '') : user.department;
+        deptId = typeof user.department === 'object' ? (user.department.id || '') : user.department;
+      }
+      return {
+        id: effectiveCreatorId,
+        name: user.fullName || user.username,
+        position: posName,
+        unit: deptName,
+        unitId: deptId,
+        email: user.email || '',
+        isSecretary: true,
+      };
     }
-    let deptName = '';
-    let deptId = '';
-    if (user.department) {
-      deptName = typeof user.department === 'object' ? (user.department.deptName || user.department.name || '') : user.department;
-      deptId = typeof user.department === 'object' ? (user.department.id || '') : user.department;
-    }
-    return {
-      id: String(user.id),
-      name: user.fullName || user.username,
-      position: posName,
-      unit: deptName,
-      unitId: deptId,
-      email: user.email || '',
-      isSecretary: true,
-    };
-  }, [user]);
+    return null;
+  }, [user, effectiveCreatorId, initialSelectedMembers]);
 
   const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null);
   const [selectedUnitName, setSelectedUnitName] = useState<string>('');
@@ -287,7 +297,7 @@ const SelectUnitModal: React.FC<SelectUnitModalProps> = ({
 
   const handleToggleMember = (memberId: string) => {
     const strId = String(memberId);
-    if (creatorId && strId === creatorId) return; // Prevent toggling the creator!
+    if (effectiveCreatorId && strId === effectiveCreatorId) return; // Prevent toggling the creator!
     setSelectedMembersMap(prev => {
       const next = { ...prev };
       if (next[strId]) {
@@ -306,13 +316,13 @@ const SelectUnitModal: React.FC<SelectUnitModalProps> = ({
   };
 
   const handleToggleAll = () => {
-    const allSelectedOnPage = paginatedMembers.every((m) => !!selectedMembersMap[String(m.id)] || (creatorId && String(m.id) === creatorId));
+    const allSelectedOnPage = paginatedMembers.every((m) => !!selectedMembersMap[String(m.id)] || (effectiveCreatorId && String(m.id) === effectiveCreatorId));
     setSelectedMembersMap(prev => {
       const next = { ...prev };
       if (allSelectedOnPage) {
         paginatedMembers.forEach((m) => {
           const strId = String(m.id);
-          if (!creatorId || strId !== creatorId) {
+          if (!effectiveCreatorId || strId !== effectiveCreatorId) {
             delete next[strId];
           }
         });
@@ -332,8 +342,8 @@ const SelectUnitModal: React.FC<SelectUnitModalProps> = ({
   const handleClearSelection = () => {
     setSelectedMembersMap(prev => {
       const next: Record<string, Member> = {};
-      if (creatorId && prev[creatorId]) {
-        next[creatorId] = prev[creatorId];
+      if (effectiveCreatorId && prev[effectiveCreatorId]) {
+        next[effectiveCreatorId] = prev[effectiveCreatorId];
       } else if (creatorMember) {
         next[creatorMember.id] = creatorMember;
       }
@@ -355,7 +365,7 @@ const SelectUnitModal: React.FC<SelectUnitModalProps> = ({
   };
 
   const allCurrentPageSelected =
-    paginatedMembers.length > 0 && paginatedMembers.every((m) => !!selectedMembersMap[String(m.id)] || (creatorId && String(m.id) === creatorId));
+    paginatedMembers.length > 0 && paginatedMembers.every((m) => !!selectedMembersMap[String(m.id)] || (effectiveCreatorId && String(m.id) === effectiveCreatorId));
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -499,7 +509,7 @@ const SelectUnitModal: React.FC<SelectUnitModalProps> = ({
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {paginatedMembers.map((member) => {
-                      const isCreator = creatorId && String(member.id) === creatorId;
+                      const isCreator = effectiveCreatorId && String(member.id) === effectiveCreatorId;
                       const isSelected = !!selectedMembersMap[String(member.id)] || isCreator;
                       return (
                         <tr
@@ -519,6 +529,7 @@ const SelectUnitModal: React.FC<SelectUnitModalProps> = ({
                             <input
                               type="checkbox"
                               checked={isSelected}
+                              onClick={(e) => e.stopPropagation()}
                               onChange={() => {
                                 if (!isCreator) {
                                   handleToggleMember(String(member.id));

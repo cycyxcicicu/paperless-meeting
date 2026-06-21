@@ -21,7 +21,7 @@ public class MinioConfig {
 
     @Bean
     public MinioClient minioClient() {
-        log.info("Initializing MinIO client at {}", url);
+        log.info("Đang khởi tạo MinIO client tại {}", url);
         return MinioClient.builder()
                 .endpoint(url)
                 .credentials(accessKey, secretKey)

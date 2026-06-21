@@ -56,16 +56,17 @@ const actionConfig = {
 };
 
 const severityConfig = {
-  low: { icon: CheckCircle, color: 'text-gray-400' },
-  medium: { icon: AlertCircle, color: 'text-blue-500' },
-  high: { icon: AlertCircle, color: 'text-amber-500' },
-  critical: { icon: AlertCircle, color: 'text-red-500' }
+  low: { icon: CheckCircle, color: 'text-emerald-500' },       // Màu xanh lá cây thân thiện
+  medium: { icon: AlertCircle, color: 'text-amber-500' },      // Màu vàng/cam cảnh báo tương ứng với box "Hành động quan trọng"
+  high: { icon: AlertCircle, color: 'text-orange-500' },       // Màu cam đậm
+  critical: { icon: AlertCircle, color: 'text-red-500' }       // Màu đỏ nguy hiểm
 };
 
 export const getAuditTableColumns = (): ColumnDef<AuditLog>[] => [
   {
     key: 'username',
     header: 'Người dùng',
+    width: '200px',
     render: (row) => (
       <div className="flex items-center gap-2.5">
         <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-gray-100 to-gray-200 border border-gray-200 flex items-center justify-center shrink-0">
@@ -85,13 +86,16 @@ export const getAuditTableColumns = (): ColumnDef<AuditLog>[] => [
   {
     key: 'action',
     header: 'Hành động',
+    width: '120px',
+    className: 'whitespace-nowrap',
+    headerClassName: 'whitespace-nowrap',
     render: (row) => {
       const actionInfo = actionConfig[row.action];
       const ActionIcon = actionInfo.icon;
       return (
         <span
           className={cn(
-            'inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg border',
+            'inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg border whitespace-nowrap',
             actionInfo.bg,
             actionInfo.color,
             actionInfo.border
@@ -106,18 +110,20 @@ export const getAuditTableColumns = (): ColumnDef<AuditLog>[] => [
   {
     key: 'object',
     header: 'Đối tượng',
+    width: '180px',
     render: (row) => (
       <div className="flex flex-col">
         <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
           {row.objectType}
         </span>
-        <TableTooltip text={row.objectName || ''} maxLength={50} />
+        <TableTooltip text={row.objectName || ''} maxLength={40} />
       </div>
     ),
   },
   {
     key: 'description',
     header: 'Mô tả',
+    // Cột mô tả sẽ linh hoạt chiếm khoảng trống còn lại
     render: (row) => {
       const SeverityIcon = row.severity ? severityConfig[row.severity].icon : null;
       return (
@@ -133,6 +139,7 @@ export const getAuditTableColumns = (): ColumnDef<AuditLog>[] => [
   {
     key: 'timestamp',
     header: 'Thời gian',
+    width: '130px',
     headerClassName: 'text-right',
     render: (row) => (
       <div className="flex flex-col items-end">

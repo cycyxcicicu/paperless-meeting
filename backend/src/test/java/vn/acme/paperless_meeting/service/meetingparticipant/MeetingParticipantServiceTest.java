@@ -48,6 +48,8 @@ class MeetingParticipantServiceTest {
     @Mock
     MeetingGuestMapper meetingGuestMapper;
     @Mock
+    vn.acme.paperless_meeting.mapper.meeting.MeetingMapper meetingMapper;
+    @Mock
     CurrentUserService currentUserService;
     @Mock
     AuditLogPublisher auditLogPublisher;
@@ -59,6 +61,14 @@ class MeetingParticipantServiceTest {
     MeetingInvitationRepository meetingInvitationRepository;
     @Mock
     NotificationRepository notificationRepository;
+    @Mock
+    vn.acme.paperless_meeting.service.email.InvitationMailService invitationMailService;
+    @Mock
+    vn.acme.paperless_meeting.mapper.user.UserMapper userMapper;
+    @Mock
+    DepartmentRepository departmentRepository;
+    @Mock
+    vn.acme.paperless_meeting.service.websocket.WebSocketNotificationService webSocketNotificationService;
 
     @InjectMocks
     MeetingParticipantService meetingParticipantService;
@@ -546,6 +556,7 @@ class MeetingParticipantServiceTest {
     void publicGetMeetingDocumentsByGuestToken_ShouldFilterConfidential() {
         // Kiểm thử RÀNG BUỘC PARTICIPANT-10: Khách mời xem tài liệu thông qua token sẽ không bị trả về các File mật (isConfidential = true)
         // Arrange
+        meeting.setStartTime(LocalDateTime.now().minusMinutes(5));
         UUID guestToken = UUID.randomUUID();
         MeetingGuest guest = new MeetingGuest();
         guest.setMeeting(meeting);
@@ -646,5 +657,209 @@ class MeetingParticipantServiceTest {
         assertEquals(InviteStatus.DECLINED, participant.getInviteStatus());
         verify(notificationRepository, times(1)).save(any(Notification.class));
     }
-}
 
+    @Test
+    void getEligibleSubstitutes_Success() {
+        // Arrange
+        UUID deptId = UUID.randomUUID();
+        Department department = new Department();
+        department.setId(deptId);
+
+        Position posManager = new Position();
+        posManager.setRankOrder(2);
+
+        caller.setDepartment(department);
+        caller.setPosition(posManager);
+
+        when(currentUserService.getCurrentActiveUser()).thenReturn(caller);
+
+        // Candidate 1: Same dept, higher rank (should be excluded)
+        User u1 = new User();
+        u1.setId(UUID.randomUUID());
+        Position p1 = new Position();
+        p1.setRankOrder(1); // Higher rank
+        u1.setDepartment(department);
+        u1.setPosition(p1);
+
+        // Candidate 2: Same dept, equal rank (should be included)
+        User u2 = new User();
+        u2.setId(UUID.randomUUID());
+        Position p2 = new Position();
+        p2.setRankOrder(2); // Equal
+        u2.setDepartment(department);
+        u2.setPosition(p2);
+
+        // Candidate 3: Same dept, lower rank (should be included)
+        User u3 = new User();
+        u3.setId(UUID.randomUUID());
+        Position p3 = new Position();
+        p3.setRankOrder(5); // Lower
+        u3.setDepartment(department);
+        u3.setPosition(p3);
+
+        when(departmentRepository.findIdsByParentDepartmentIdIn(anyList()))
+                .thenReturn(List.of());
+
+        when(userRepository.findByDepartmentIdInAndStatus(List.of(deptId), UserStatus.ACTIVE))
+                .thenReturn(List.of(u1, u2, u3));
+
+        when(meetingParticipantRepository.findByMeetingId(meetingId))
+                .thenReturn(List.of());
+
+        vn.acme.paperless_meeting.dto.response.user.UserResponse resp = vn.acme.paperless_meeting.dto.response.user.UserResponse.builder().build();
+        when(userMapper.toResponse(any(User.class))).thenReturn(resp);
+
+        // Act
+        List<vn.acme.paperless_meeting.dto.response.user.UserResponse> result = meetingParticipantService.getEligibleSubstitutes(meetingId);
+
+        // Assert
+        assertEquals(2, result.size());
+        verify(userMapper, times(2)).toResponse(any(User.class));
+    }
+
+    @Test
+    void updateInviteStatus_DeclineWithPartialAbsence_Successful() {
+        // Arrange
+        UpdateInviteStatusRequest req = new UpdateInviteStatusRequest();
+        req.setInviteStatus(InviteStatus.DECLINED);
+        req.setDeclineReason("Vắng một phần");
+        req.setIsFullSession(false);
+        UUID agendaItemId = UUID.randomUUID();
+        req.setAbsentAgendaItemIds(List.of(agendaItemId));
+
+        when(meetingRepository.findById(meetingId)).thenReturn(Optional.of(meeting));
+        when(currentUserService.getCurrentActiveUser()).thenReturn(user);
+        when(meetingParticipantRepository.findByMeetingIdAndUserId(meetingId, userId)).thenReturn(Optional.of(participant));
+
+        // Act
+        meetingParticipantService.updateInviteStatus(meetingId, userId, req);
+
+        // Assert
+        assertEquals(InviteStatus.DECLINED, participant.getInviteStatus());
+        assertFalse(participant.getIsFullSession());
+        assertTrue(participant.getAbsentAgendaItemIds().contains(agendaItemId));
+        verify(meetingParticipantRepository, times(1)).save(participant);
+    }
+
+    @Test
+    void updateInviteStatus_DeclineAllAgendaItems_TreatsAsFullSession() {
+        // Arrange
+        UpdateInviteStatusRequest req = new UpdateInviteStatusRequest();
+        req.setInviteStatus(InviteStatus.DECLINED);
+        req.setDeclineReason("Vắng toàn bộ nội dung");
+        req.setIsFullSession(false);
+        UUID agendaItemId1 = UUID.randomUUID();
+        UUID agendaItemId2 = UUID.randomUUID();
+        req.setAbsentAgendaItemIds(List.of(agendaItemId1, agendaItemId2));
+
+        // Create agenda items list for the meeting
+        vn.acme.paperless_meeting.entity.AgendaItem item1 = new vn.acme.paperless_meeting.entity.AgendaItem();
+        item1.setId(agendaItemId1);
+        vn.acme.paperless_meeting.entity.AgendaItem item2 = new vn.acme.paperless_meeting.entity.AgendaItem();
+        item2.setId(agendaItemId2);
+        meeting.setAgendaItemList(List.of(item1, item2));
+
+        when(meetingRepository.findById(meetingId)).thenReturn(Optional.of(meeting));
+        when(currentUserService.getCurrentActiveUser()).thenReturn(user);
+        when(meetingParticipantRepository.findByMeetingIdAndUserId(meetingId, userId)).thenReturn(Optional.of(participant));
+
+        // Act
+        meetingParticipantService.updateInviteStatus(meetingId, userId, req);
+
+        // Assert
+        assertEquals(InviteStatus.DECLINED, participant.getInviteStatus());
+        assertTrue(participant.getIsFullSession()); // Automatically promoted to full session
+        assertEquals(2, participant.getAbsentAgendaItemIds().size());
+        verify(meetingParticipantRepository, times(1)).save(participant);
+    }
+
+    @Test
+    void updateAttendanceStatus_SelfCheckIn_Success() {
+        UpdateAttendanceStatusRequest request = new UpdateAttendanceStatusRequest();
+        request.setAttendanceStatus(AttendanceStatus.PRESENT);
+        request.setNote("Self checkin note");
+
+        participant.setInviteStatus(InviteStatus.ACCEPTED);
+
+        when(meetingRepository.findById(meetingId)).thenReturn(Optional.of(meeting));
+        when(currentUserService.getCurrentActiveUser()).thenReturn(user);
+        when(meetingParticipantRepository.findById(participant.getId())).thenReturn(Optional.of(participant));
+        when(attendanceLogRepository.findByMeetingIdAndUserId(meetingId, user.getId())).thenReturn(Optional.empty());
+
+        AttendeeResponse mockResponse = AttendeeResponse.builder()
+                .id(participant.getId())
+                .attendanceStatus(AttendanceStatus.PRESENT)
+                .build();
+        when(meetingParticipantMapper.toAttendeeResponse(participant)).thenReturn(mockResponse);
+
+        AttendeeResponse result = meetingParticipantService.updateAttendanceStatus(meetingId, participant.getId(), "INTERNAL", request);
+
+        assertNotNull(result);
+        assertEquals(AttendanceStatus.PRESENT, participant.getAttendanceStatus());
+        verify(meetingParticipantRepository, times(1)).save(participant);
+        verify(attendanceLogRepository, times(1)).save(any(AttendanceLog.class));
+        verify(webSocketNotificationService, times(1)).sendToTopic(eq("/topic/meeting/" + meetingId), anyMap());
+    }
+
+    @Test
+    void publicUpdateAttendanceStatus_Success() {
+        UUID guestToken = UUID.randomUUID();
+        guest.setGuestToken(guestToken);
+        guest.setInviteStatus(InviteStatus.ACCEPTED);
+        meeting.setStartTime(LocalDateTime.now().plusMinutes(15));
+
+        UpdateAttendanceStatusRequest request = new UpdateAttendanceStatusRequest();
+        request.setAttendanceStatus(AttendanceStatus.PRESENT);
+        request.setNote("Guest checkin");
+
+        when(meetingGuestRepository.findByGuestToken(guestToken)).thenReturn(Optional.of(guest));
+        when(attendanceLogRepository.findByMeetingIdAndGuestId(meetingId, guest.getId())).thenReturn(Optional.empty());
+
+        AttendeeResponse mockResponse = AttendeeResponse.builder()
+                .id(guest.getId())
+                .attendanceStatus(AttendanceStatus.PRESENT)
+                .build();
+        when(meetingGuestMapper.toAttendeeResponse(guest)).thenReturn(mockResponse);
+
+        AttendeeResponse result = meetingParticipantService.publicUpdateAttendanceStatus(guestToken, request);
+
+        assertNotNull(result);
+        assertEquals(AttendanceStatus.PRESENT, guest.getAttendanceStatus());
+        verify(meetingGuestRepository, times(1)).save(guest);
+        verify(attendanceLogRepository, times(1)).save(any(AttendanceLog.class));
+        verify(webSocketNotificationService, times(1)).sendToTopic(eq("/topic/meeting/" + meetingId), anyMap());
+    }
+
+    @Test
+    void publicGetMeetingByGuestToken_Success_30MinsBefore() {
+        UUID guestToken = UUID.randomUUID();
+        guest.setGuestToken(guestToken);
+        guest.setInviteStatus(InviteStatus.ACCEPTED);
+        meeting.setStartTime(LocalDateTime.now().plusMinutes(25)); // starts in 25 mins
+
+        when(meetingGuestRepository.findByGuestToken(guestToken)).thenReturn(Optional.of(guest));
+        vn.acme.paperless_meeting.dto.response.meeting.MeetingResponse mockResp = vn.acme.paperless_meeting.dto.response.meeting.MeetingResponse.builder().build();
+        when(meetingMapper.toResponse(meeting)).thenReturn(mockResp);
+
+        vn.acme.paperless_meeting.dto.response.meeting.MeetingResponse result = meetingParticipantService.publicGetMeetingByGuestToken(guestToken);
+
+        assertNotNull(result);
+        verify(meetingGuestRepository, times(1)).findByGuestToken(guestToken);
+    }
+
+    @Test
+    void publicGetMeetingByGuestToken_Throws_TooEarly() {
+        UUID guestToken = UUID.randomUUID();
+        guest.setGuestToken(guestToken);
+        guest.setInviteStatus(InviteStatus.ACCEPTED);
+        meeting.setStartTime(LocalDateTime.now().plusMinutes(45)); // starts in 45 mins (too early!)
+
+        when(meetingGuestRepository.findByGuestToken(guestToken)).thenReturn(Optional.of(guest));
+
+        AppException ex = assertThrows(AppException.class, () -> {
+            meetingParticipantService.publicGetMeetingByGuestToken(guestToken);
+        });
+
+        assertEquals(ErrorCode.MEETING_NOT_STARTED, ex.getErrorCode());
+    }
+}

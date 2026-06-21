@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/common/utils/cn';
 import { Pagination } from '@/common/components/ui/app-pagination';
+import { TableTooltip } from '@/common/components/table-engine/TableTooltip';
 
 interface ChildUnit {
   id: string;
@@ -109,9 +110,11 @@ export const ChildUnitsTab: React.FC<ChildUnitsTabProps> = ({
                         <Building2 className="h-6 w-6" />
                       </div>
                       <div>
-                        <h4 className="heading text-gray-900 text-lg leading-tight group-hover:text-[#C8102E] transition-colors line-clamp-1" title={unit.name}>
-                          {unit.name}
-                        </h4>
+                        <TableTooltip 
+                          text={unit.name} 
+                          maxLength={30} 
+                          className="heading text-gray-900 text-lg leading-tight group-hover:text-[#C8102E] transition-colors line-clamp-1 cursor-pointer block" 
+                        />
                         <span className="font-mono text-[11px] text-gray-400 uppercase tracking-widest bg-gray-100/50 px-2 py-0.5 rounded-lg mt-1 inline-block">
                           {unit.code}
                         </span>

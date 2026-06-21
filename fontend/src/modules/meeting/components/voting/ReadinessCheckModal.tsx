@@ -5,7 +5,7 @@ import { Badge } from '@/common/components/ui/badge';
 import { Card, CardContent  } from '@/common/components/ui/card';
 
 interface Delegate {
-  id: number;
+  id: string | number;
   unit: string;
   name: string;
   position: string;

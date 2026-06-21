@@ -12,6 +12,8 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.CollectionTable;
+import jakarta.persistence.ElementCollection;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -21,6 +23,8 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
+import java.util.Set;
+import java.util.HashSet;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -29,6 +33,7 @@ import vn.acme.paperless_meeting.entity.base.SoftDeletable;
 import vn.acme.paperless_meeting.entity.enums.AttendanceStatus;
 import vn.acme.paperless_meeting.entity.enums.InviteStatus;
 import vn.acme.paperless_meeting.entity.enums.ParticipantRole;
+import vn.acme.paperless_meeting.entity.enums.SendStatus;
 
 @Getter
 @Setter
@@ -64,6 +69,10 @@ public class MeetingParticipant extends SoftDeletable {
         @Column(name = "attendance_status")
         private AttendanceStatus attendanceStatus;
 
+        @Enumerated(EnumType.STRING)
+        @Column(name = "send_status")
+        private SendStatus sendStatus = SendStatus.PENDING;
+
         private String note;
 
         @Column(name = "decline_reason")
@@ -90,6 +99,23 @@ public class MeetingParticipant extends SoftDeletable {
 
         @Column(name = "substitute_phone")
         private String substitutePhone;
+
+        @Column(name = "is_full_session")
+        private Boolean isFullSession = true;
+
+        @ElementCollection
+        @CollectionTable(
+                name = "participant_absent_agenda_items",
+                joinColumns = @JoinColumn(name = "participant_id")
+        )
+        @Column(name = "agenda_item_id")
+        private Set<UUID> absentAgendaItemIds = new HashSet<>();
+
+        @Column(name = "is_substitute")
+        private Boolean isSubstitute = false;
+
+        @Column(name = "substitute_for_participant_id")
+        private UUID substituteForParticipantId;
 
         @CreationTimestamp
         @Column(name = "created_at", updatable = false)

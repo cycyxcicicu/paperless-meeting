@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Thư mời họp</title>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 5px; }
+        .header { background-color: #0f172a; color: #fff; padding: 15px; text-align: center; border-radius: 5px 5px 0 0; }
+        .content { padding: 20px; }
+        .details { background-color: #f8fafc; padding: 15px; border-radius: 5px; margin: 15px 0; }
+        .footer { text-align: center; color: #64748b; font-size: 12px; margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h2>THƯ MỜI HỌP</h2>
+        </div>
+        <div class="content">
+            <p>Kính gửi: <strong th:text="${inviteeName}">[Tên đại biểu]</strong> - <span th:text="${inviteePosition}">[Chức vụ]</span>,</p>
+            
+            <p th:utext="${invitationContent}">[Nội dung thư mời]</p>
+            
+            <div class="details">
+                <p><strong>Phiên họp:</strong> <span th:text="${meetingTitle}">[Tiêu đề họp]</span></p>
+                <p><strong>Thời gian:</strong> <span th:text="${meetingTime}">[Thời gian]</span></p>
+                <p><strong>Địa điểm:</strong> <span th:text="${meetingLocation}">[Địa điểm]</span></p>
+            </div>
+            
+            <div th:if="${confirmUrl != null && !confirmUrl.isEmpty()}" style="text-align: center; margin: 30px 0;">
+                <a th:href="${confirmUrl}" style="background-color: #0f172a; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);">
+                    Xác Nhận Tham Dự Cuộc Họp
+                </a>
+            </div>
+            
+            <p>Trân trọng kính mời đồng chí tham dự đầy đủ và đúng giờ.</p>
+        </div>
+        <div class="footer">
+            <p>Đây là email tự động từ hệ thống Paperless Meeting. Vui lòng không trả lời email này.</p>
+        </div>
+    </div>
+</body>
+</html>

@@ -5,6 +5,7 @@ import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
 import { useAuth } from '@/app/context/AuthContext';
 import { useWebSocket } from '@/app/context/WebSocketContext';
+import { TableTooltip } from '@/common/components/table-engine/TableTooltip';
 import { meetingApi, MeetingResponse, AgendaItemResponse } from '../services/meeting.api';
 import { FileUploader } from '@/common/components/ui/FileUploader';
 import { Button } from '@/common/components/ui/button';
@@ -30,9 +31,10 @@ export default function PrepareDocumentsPage() {
   const [agendaItems, setAgendaItems] = useState<AgendaItemResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState<Record<string, boolean>>({});
+  const [uploadingMap, setUploadingMap] = useState<Record<string, boolean>>({});
   
-  // Track files for each agenda item: agendaItemId -> array of File objects
-  const [agendaFiles, setAgendaFiles] = useState<Record<string, File[]>>({});
+  // Track files for each agenda item: agendaItemId -> array of uploaded file objects
+  const [agendaFiles, setAgendaFiles] = useState<Record<string, any[]>>({});
 
   const loadData = async (silent = false) => {
     if (!meetingId) return;
@@ -57,19 +59,27 @@ export default function PrepareDocumentsPage() {
         // Initialize files state for each agenda item
         setAgendaFiles(prev => {
           const updatedFiles = { ...prev };
+          const isMeetingActive = meetingRes.data ? (
+            meetingRes.data.status === 'UPCOMING' ||
+            meetingRes.data.status === 'IN_PROGRESS' ||
+            meetingRes.data.status === 'CLOSED'
+          ) : false;
+
           agendaRes.data.forEach(item => {
-            // Check if there are unsaved files (files without documentId) in the local state
-            const hasUnsavedFiles = (prev[item.id] || []).some(f => !(f as any).documentId);
-            
-            // Only overwrite from server if the user doesn't have unsaved files
-            if (!hasUnsavedFiles) {
-              updatedFiles[item.id] = (item.documents || []).map(doc => {
-                const mockFile = new File([], doc.fileName || doc.title || "Tài liệu", { type: "application/octet-stream" });
-                Object.defineProperty(mockFile, 'size', { value: doc.fileSize || 0 });
-                Object.defineProperty(mockFile, 'documentId', { value: doc.documentId, writable: true });
-                return mockFile;
-              });
+            let docs = item.documents || [];
+            if (!isMeetingActive) {
+              // Only see files created by the current user
+              docs = docs.filter(doc => doc.createdByUserId === user?.id);
             }
+
+            updatedFiles[item.id] = docs.map(doc => ({
+              id: doc.documentId,
+              name: doc.fileName || doc.title || "Tài liệu",
+              url: doc.fileUrl,
+              size: doc.fileSize || 0,
+              createdByUserId: doc.createdByUserId,
+              createdByFullName: doc.createdByFullName
+            }));
           });
           return updatedFiles;
         });
@@ -95,14 +105,24 @@ export default function PrepareDocumentsPage() {
   useEffect(() => {
     if (!meetingId) return;
 
+    let debounceTimeout: any = null;
+
     const unsubscribe = subscribe(`/topic/meeting/${meetingId}`, (message: any) => {
-      if (message.action === "REFRESH_MEETING_DETAIL") {
-        loadData(true);
+      if (message.action === "REFRESH_MEETING_DETAIL" || message.action === "REFRESH_MEETING_STATUS") {
+        if (debounceTimeout) {
+          clearTimeout(debounceTimeout);
+        }
+        debounceTimeout = setTimeout(() => {
+          loadData(true);
+        }, 300);
       }
     });
 
     return () => {
       unsubscribe();
+      if (debounceTimeout) {
+        clearTimeout(debounceTimeout);
+      }
     };
   }, [subscribe, meetingId]);
 
@@ -128,45 +148,65 @@ export default function PrepareDocumentsPage() {
   // Filter agenda items that are assigned to the current user
   const assignedItems = agendaItems.filter(item => item.preparedByUserId === user?.id);
 
-  const handleFileChange = (agendaItemId: string, files: File[]) => {
-    setAgendaFiles(prev => ({
-      ...prev,
-      [agendaItemId]: files
-    }));
+  const handleFileChange = async (agendaItemId: string, files: any[]) => {
+    const newFiles = files.filter(f => f instanceof File);
+    const existingFiles = files.filter(f => !(f instanceof File));
+
+    if (newFiles.length > 0) {
+      setUploadingMap(prev => ({ ...prev, [agendaItemId]: true }));
+      try {
+        const uploadedList: any[] = [];
+        for (const file of newFiles) {
+          const res = await meetingApi.uploadDocument(file, file.name, 'AGENDA_ITEM', 'Tải lên bởi người chuẩn bị');
+          if (res.success && res.data) {
+            const version = (res.data as any).currentVersion;
+            uploadedList.push({
+              id: res.data.id,
+              name: version?.fileName || res.data.title || file.name,
+              url: version?.fileUrl || (res.data as any).fileUrl,
+              size: version?.fileSize || file.size,
+              createdByUserId: user?.id,
+              createdByFullName: user?.fullName
+            });
+          } else {
+            toast.error(`Tải file ${file.name} thất bại: ${res.message || ''}`);
+          }
+        }
+        setAgendaFiles(prev => ({
+          ...prev,
+          [agendaItemId]: [...existingFiles, ...uploadedList]
+        }));
+        toast.success("Tải tài liệu lên thành công");
+      } catch (error: any) {
+        console.error("Upload failed", error);
+        toast.error(error?.response?.data?.message || error?.message || "Lỗi khi tải file lên");
+      } finally {
+        setUploadingMap(prev => ({ ...prev, [agendaItemId]: false }));
+      }
+    } else {
+      setAgendaFiles(prev => ({
+        ...prev,
+        [agendaItemId]: files
+      }));
+    }
   };
 
   const handleSubmitDocs = async (agendaItemId: string) => {
     const files = agendaFiles[agendaItemId] || [];
-    if (files.length === 0) {
+    // Only submit files that belong to the current user (or are newly uploaded by them)
+    const myFiles = files.filter(f => !f.createdByUserId || f.createdByUserId === user?.id);
+    const documentIds = myFiles.map(f => f.id);
+
+    if (documentIds.length === 0) {
       toast.warning("Chưa có tài liệu", "Vui lòng chọn hoặc kéo thả ít nhất 1 tài liệu để gửi.");
       return;
     }
 
     setSubmitting(prev => ({ ...prev, [agendaItemId]: true }));
     try {
-      const documentIds: string[] = [];
-
-      // Upload new files and keep existing ones
-      for (const file of files) {
-        const docId = (file as any).documentId;
-        if (docId) {
-          documentIds.push(docId);
-        } else {
-          // Upload new file to server
-          const uploadRes = await meetingApi.uploadDocument(file, file.name, "AGENDA_ITEM", "Tải lên bởi người chuẩn bị");
-          if (uploadRes.success && uploadRes.data?.id) {
-            documentIds.push(uploadRes.data.id);
-          } else {
-            throw new Error(`Không thể tải lên file ${file.name}: ${uploadRes.message || 'Lỗi không xác định'}`);
-          }
-        }
-      }
-
-      // Submit the list of document IDs to the agenda item
       const submitRes = await meetingApi.submitDocs(agendaItemId, documentIds);
       if (submitRes.success) {
         toast.success("Nộp tài liệu thành công", "Tài liệu của bạn đã được gửi đi phê duyệt.");
-        // Refresh local data to show updated statuses and documents
         await loadData(true);
       } else {
         toast.error("Nộp tài liệu thất bại", submitRes.message || "Đã xảy ra lỗi.");
@@ -288,9 +328,11 @@ export default function PrepareDocumentsPage() {
                         {index + 1}
                       </span>
                       <div className="min-w-0">
-                        <h4 className="font-bold text-gray-900 truncate pr-4 text-base" title={item.title}>
-                          {item.title}
-                        </h4>
+                        <TableTooltip 
+                          text={item.title} 
+                          maxLength={40} 
+                          className="font-bold text-gray-900 truncate pr-4 text-base cursor-pointer block" 
+                        />
                         {item.prepDeadline && (
                           <div className="flex items-center gap-1.5 text-xs text-gray-500 mt-1">
                             <Clock className="h-3.5 w-3.5" />
@@ -329,17 +371,25 @@ export default function PrepareDocumentsPage() {
                     />
 
                     {/* File Uploader */}
-                    <div className="space-y-2">
-                      <FileUploader
-                        files={files}
-                        onChange={(updatedFiles) => handleFileChange(item.id, updatedFiles)}
-                        multiple={true}
-                        accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg,.txt,.zip"
-                        allowedExtensionsText="PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX, PNG, JPG, JPEG, TXT, ZIP"
-                        label="Tài liệu đính kèm chuẩn bị"
-                        placeholder="Kéo thả tài liệu nộp"
-                        disabled={!canUpload}
-                      />
+                    <div className="space-y-2 relative">
+                      {uploadingMap[item.id] ? (
+                        <div className="flex flex-col items-center justify-center w-full h-32 border border-gray-200 rounded-2xl bg-gray-50/50">
+                          <div className="h-8 w-8 animate-spin rounded-full border-4 border-solid border-[#C8102E] border-r-transparent mb-2"></div>
+                          <span className="text-sm text-gray-500 font-medium">Đang tải tài liệu lên...</span>
+                        </div>
+                      ) : (
+                        <FileUploader
+                          files={files}
+                          onChange={(updatedFiles) => handleFileChange(item.id, updatedFiles)}
+                          multiple={true}
+                          accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg,.txt,.zip"
+                          allowedExtensionsText="PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX, PNG, JPG, JPEG, TXT, ZIP"
+                          label="Tài liệu đính kèm chuẩn bị"
+                          placeholder="Kéo thả tài liệu nộp"
+                          disabled={!canUpload}
+                          currentUserId={user?.id}
+                        />
+                      )}
                     </div>
 
                   </div>
@@ -353,7 +403,7 @@ export default function PrepareDocumentsPage() {
                         </p>
                         <Button
                           onClick={() => handleSubmitDocs(item.id)}
-                          disabled={isSubmitting || files.length === 0}
+                          disabled={isSubmitting || !files.some(f => !f.createdByUserId || f.createdByUserId === user?.id)}
                           className="bg-[#C8102E] hover:bg-[#A90F14] text-white rounded-xl flex items-center gap-2 shadow-sm font-semibold px-5"
                         >
                           {isSubmitting ? (

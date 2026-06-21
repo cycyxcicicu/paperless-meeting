@@ -1,36 +1,88 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { defaultTemplate } from '../components/mau-thu-moi/template.data';
 import { TemplateList } from '../components/mau-thu-moi/TemplateList';
 import { TemplateEditor } from '../components/mau-thu-moi/TemplateEditor';
+import { templateApi } from '../services/template.api';
+import { toast } from '@/lib/toast';
 
 export default function MauThuMoiPage() {
   const [showList, setShowList] = useState(true);
   const [templateData, setTemplateData] = useState({ ...defaultTemplate });
-  const [templates, setTemplates] = useState([
-    { id: 1, name: "Thư mời họp hội đồng", code: "THU_MOI_HOP_HOI_DONG", desc: "Dùng cho các cuộc họp xét duyệt, đánh giá hội đồng." },
-    { id: 2, name: "Thư mời họp giao ban", code: "THU_MOI_GIAO_BAN", desc: "Dùng cho giao ban định kỳ hàng tuần/tháng." },
-    { id: 3, name: "Thư mời họp chuyên đề", code: "THU_MOI_CHUYEN_DE", desc: "Dùng cho các cuộc họp chuyên đề đột xuất." },
-  ]);
+  const [templates, setTemplates] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const fetchTemplates = async () => {
+    setLoading(true);
+    try {
+      const response = await templateApi.list();
+      if (response.success && response.data) {
+        setTemplates(response.data);
+      } else {
+        toast.error(response.message || 'Không thể tải danh sách mẫu');
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Có lỗi xảy ra khi tải dữ liệu');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchTemplates();
+  }, []);
 
   const handleEdit = (row?: any) => {
-    setTemplateData({ 
-      ...defaultTemplate, 
-      tenMau: row?.name || defaultTemplate.tenMau, 
-      maMau: row?.code || defaultTemplate.maMau 
-    });
+    if (row) {
+      try {
+        const data = JSON.parse(row.contentJson);
+        setTemplateData({
+          ...defaultTemplate,
+          ...data,
+          id: row.id,
+          tenMau: row.name,
+          maMau: row.code
+        });
+      } catch (e) {
+        setTemplateData({ 
+          ...defaultTemplate, 
+          id: row.id,
+          tenMau: row.name, 
+          maMau: row.code 
+        });
+      }
+    } else {
+      setTemplateData({ ...defaultTemplate });
+    }
     setShowList(false);
   };
 
-  const handleBack = () => {
+  const handleBack = (shouldRefresh?: boolean) => {
     setShowList(true);
+    if (shouldRefresh) {
+      fetchTemplates();
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      const response = await templateApi.delete(id);
+      if (response.success) {
+        toast.success('Xóa mẫu thư mời thành công');
+        fetchTemplates();
+      } else {
+        toast.error(response.message || 'Không thể xóa mẫu thư mời');
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Có lỗi xảy ra khi xóa');
+    }
   };
 
   if (showList) {
     return (
       <TemplateList 
         templates={templates} 
-        setTemplates={setTemplates} 
         onEdit={handleEdit} 
+        onDelete={handleDelete}
       />
     );
   }

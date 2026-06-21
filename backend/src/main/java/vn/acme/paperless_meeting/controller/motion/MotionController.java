@@ -103,6 +103,18 @@ public class MotionController {
                 .message("Đã thực hiện biểu quyết thành công").build());
     }
 
+    @Operation(summary = "Khách mời đi thay bỏ phiếu công khai",
+               description = "Khách mời đi thay thực hiện biểu quyết bằng guestToken.")
+    @PostMapping("/meetings/public/motions/{id}/vote")
+    public ResponseEntity<ApiResponse<MotionResponse>> publicCastVote(
+            @PathVariable UUID id,
+            @RequestBody @Valid VoteRequest request,
+            @RequestParam UUID guestToken) {
+        return ResponseEntity.ok(ApiResponse.<MotionResponse>builder()
+                .data(motionService.publicCastVote(id, request.getOptionId(), guestToken))
+                .message("Đã thực hiện biểu quyết thành công").build());
+    }
+
     @Operation(summary = "Xem kết quả biểu quyết",
                description = "Trả về số phiếu từng lựa chọn, tỷ lệ phần trăm và kết quả thắng/thua sau khi phiên kết thúc.")
     @GetMapping("/motions/{id}/vote-statistics")

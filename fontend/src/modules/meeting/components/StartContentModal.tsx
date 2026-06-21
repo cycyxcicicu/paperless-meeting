@@ -3,7 +3,7 @@ import { X } from 'lucide-react';
 import { Button } from '@/common/components/ui/button';
 
 interface MeetingContent {
-  id: number;
+  id: string | number;
   title: string;
   description: string;
 }
@@ -12,7 +12,7 @@ interface StartContentModalProps {
   isOpen: boolean;
   onClose: () => void;
   content: MeetingContent | null;
-  onConfirm: (contentId: number) => void;
+  onConfirm: (contentId: string | number) => void;
 }
 
 export const StartContentModal: React.FC<StartContentModalProps> = ({

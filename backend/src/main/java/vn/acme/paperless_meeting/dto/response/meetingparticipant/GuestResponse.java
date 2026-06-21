@@ -8,6 +8,7 @@ import lombok.Getter;
 import lombok.Setter;
 import vn.acme.paperless_meeting.entity.enums.AttendanceStatus;
 import vn.acme.paperless_meeting.entity.enums.InviteStatus;
+import vn.acme.paperless_meeting.entity.enums.SendStatus;
 
 @Getter
 @Setter
@@ -26,9 +27,12 @@ public class GuestResponse {
     private UUID guestToken;
     private InviteStatus inviteStatus;
     private AttendanceStatus attendanceStatus;
+    private SendStatus sendStatus;
     private String note;
     private String substitutedForUserName;
     private String substitutedForUserPosition;
+    private Boolean isSubstitute;
+    private UUID substituteForParticipantId;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

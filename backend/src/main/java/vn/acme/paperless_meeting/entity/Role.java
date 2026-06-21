@@ -47,8 +47,7 @@ public class Role extends SoftDeletable {
         @OneToMany(mappedBy = "role", cascade = CascadeType.ALL, orphanRemoval = true)
         private Set<RolePermission> rolePermissionSet = new HashSet<>();
 
-        @OneToMany(mappedBy = "role")
-        private List<AclPrincipal> aclPrincipalList = new ArrayList<>();
+
 
         @OneToMany(mappedBy = "approverRole")
         private List<ApprovalStep> approvalStepList = new ArrayList<>();
