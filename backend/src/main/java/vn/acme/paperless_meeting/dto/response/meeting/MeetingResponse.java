@@ -6,9 +6,10 @@ import java.util.UUID;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.Setter;
-import vn.acme.paperless_meeting.entity.enums.MeetingStatus;
-import vn.acme.paperless_meeting.entity.enums.InviteStatus;
 import vn.acme.paperless_meeting.entity.MeetingFile;
+import vn.acme.paperless_meeting.entity.enums.AttendanceStatus;
+import vn.acme.paperless_meeting.entity.enums.InviteStatus;
+import vn.acme.paperless_meeting.entity.enums.MeetingStatus;
 
 @Getter
 @Setter
@@ -39,7 +40,8 @@ public class MeetingResponse {
     private String callerRole;
     private InviteStatus callerInviteStatus;
     private String chairName;
-    
+    private java.util.List<String> pendingParticipants;
+
     private Integer participantsCount;
     private Integer documentsCount;
     private Boolean canEdit;
@@ -50,8 +52,21 @@ public class MeetingResponse {
     private Boolean canSubmitApproval;
     private Boolean canUploadDocs;
     private Boolean canApprove;
+    private Boolean canApproveDocs;
+    private Integer pendingApprovalCount;
 
     private Boolean requiresInvitation;
     private UUID invitationTemplateId;
     private String invitationContent;
+
+    private AttendanceStatus callerAttendanceStatus;
+    private java.util.List<String> pendingAttendanceParticipants;
+
+    private String docPreparationStatus;
+    private String docPreparationRejectReason;
+    private Integer myDocPendingCount;
+    private Integer myDocSubmittedCount;
+    private Integer myDocRejectedCount;
+    private Integer myDocApprovedCount;
+    private Boolean isSaved;
 }

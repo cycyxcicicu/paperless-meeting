@@ -33,47 +33,54 @@ interface VoteStatsInput {
     noCount: number;
     notVotedCount: number;
     votedCount: number;
+    otherCount?: number;
+    showVotingList?: boolean;
+    votedDelegates?: any[];
+    notVotedDelegates?: any[];
 }
 
 /**
  * Xử lý dữ liệu thống kê biểu quyết từ backend thành kết quả chi tiết cho giao diện.
- * Giữ nguyên thuật toán mock slice mảng đại biểu để không làm đổi logic hiện tại.
+ * Sử dụng danh sách delegate thực tế từ API thay vì dữ liệu giả.
  */
 export const mapVotingResults = (
     stats: VoteStatsInput,
-    meetingParticipants: any[]
+    _meetingParticipants: any[]
 ): {
     results: VotingResult;
     votedDelegates: VotedDelegate[];
     notVotedDelegates: NotVotedDelegate[];
+    showVotingList: boolean;
 } => {
     const results: VotingResult = {
         agree: stats.yesCount,
         disagree: stats.noCount,
-        other: 0,
+        other: stats.otherCount || 0,
         notVoted: stats.notVotedCount
     };
 
-    const eligibleParticipants = meetingParticipants.filter(p => p.type !== 'guest');
+    const showVotingList = !!stats.showVotingList;
 
-    const votedDelegates: VotedDelegate[] = eligibleParticipants.slice(0, stats.votedCount).map((p, idx) => ({
-        id: idx + 1,
-        name: p.name,
-        position: p.position,
-        unit: p.unit,
-        vote: idx % 2 === 0 ? "agree" : "disagree"
+    // Use backend-provided delegate lists
+    const votedDelegates: VotedDelegate[] = (stats.votedDelegates || []).map((p: any, idx: number) => ({
+        id: p.id || idx + 1,
+        name: p.name || "",
+        position: p.position || "-",
+        unit: p.unit || "-",
+        vote: (p.vote === "agree" || p.vote === "disagree" || p.vote === "other") ? p.vote : "other"
     }));
 
-    const notVotedDelegates: NotVotedDelegate[] = eligibleParticipants.slice(stats.votedCount).map((p, idx) => ({
-        id: idx + 100,
-        name: p.name,
-        position: p.position,
-        unit: p.unit
+    const notVotedDelegates: NotVotedDelegate[] = (stats.notVotedDelegates || []).map((p: any, idx: number) => ({
+        id: p.id || idx + 100,
+        name: p.name || "",
+        position: p.position || "-",
+        unit: p.unit || "-"
     }));
 
     return {
         results,
         votedDelegates,
-        notVotedDelegates
+        notVotedDelegates,
+        showVotingList
     };
 };

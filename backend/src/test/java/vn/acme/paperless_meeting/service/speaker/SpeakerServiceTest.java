@@ -25,6 +25,7 @@ import vn.acme.paperless_meeting.dto.request.speaker.StartTurnRequest;
 import vn.acme.paperless_meeting.dto.response.speaker.SpeakerQueueResponse;
 import vn.acme.paperless_meeting.dto.response.speaker.SpeakerTurnResponse;
 import vn.acme.paperless_meeting.entity.Meeting;
+import vn.acme.paperless_meeting.entity.MeetingParticipant;
 import vn.acme.paperless_meeting.entity.SpeakerQueue;
 import vn.acme.paperless_meeting.entity.SpeakerTurn;
 import vn.acme.paperless_meeting.entity.User;
@@ -32,6 +33,8 @@ import vn.acme.paperless_meeting.entity.enums.MeetingStatus;
 import vn.acme.paperless_meeting.entity.enums.ParticipantRole;
 import vn.acme.paperless_meeting.entity.enums.SpeakerQueuePriority;
 import vn.acme.paperless_meeting.entity.enums.SpeakerQueueStatus;
+import vn.acme.paperless_meeting.entity.enums.InviteStatus;
+import vn.acme.paperless_meeting.entity.enums.AttendanceStatus;
 import vn.acme.paperless_meeting.exceptions.AppException;
 import vn.acme.paperless_meeting.exceptions.ErrorCode;
 import vn.acme.paperless_meeting.repository.AgendaItemRepository;
@@ -87,9 +90,18 @@ class SpeakerServiceTest {
         meeting.setId(meetingId);
         meeting.setStatus(MeetingStatus.IN_PROGRESS);
 
+        MeetingParticipant participant = new MeetingParticipant();
+        participant.setId(UUID.randomUUID());
+        participant.setMeeting(meeting);
+        participant.setUser(caller);
+        participant.setParticipantRole(ParticipantRole.PARTICIPANT);
+        participant.setInviteStatus(InviteStatus.ACCEPTED);
+        participant.setAttendanceStatus(AttendanceStatus.PRESENT);
+
         when(currentUserService.getCurrentActiveUser()).thenReturn(caller);
         when(meetingRepository.findById(meetingId)).thenReturn(Optional.of(meeting));
         when(meetingParticipantRepository.existsByMeetingIdAndUserId(meetingId, userId)).thenReturn(true);
+        when(meetingParticipantRepository.findByMeetingIdAndUserId(meetingId, userId)).thenReturn(Optional.of(participant));
     }
 
     @Test
@@ -105,7 +117,7 @@ class SpeakerServiceTest {
 
     @Test
     void requestToSpeak_WhenUserNotParticipant_ShouldThrowUnauthorized() {
-        when(meetingParticipantRepository.existsByMeetingIdAndUserId(meetingId, userId)).thenReturn(false);
+        when(meetingParticipantRepository.findByMeetingIdAndUserId(meetingId, userId)).thenReturn(Optional.empty());
 
         AppException ex = assertThrows(AppException.class, () -> {
             speakerService.requestToSpeak(meetingId, null);

@@ -16,9 +16,42 @@ export const WebSocketProvider: React.FC<{ children: ReactNode }> = ({ children 
   const [connected, setConnected] = useState(false);
   const clientRef = useRef<Client | null>(null);
   const subscriptionsRef = useRef<{ [topic: string]: Set<(message: any) => void> }>({});
+  const [guestToken, setGuestToken] = useState<string | null>(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    return searchParams.get('guestToken');
+  });
+
+  // Listen to URL changes to update guestToken
+  useEffect(() => {
+    const handleLocationChange = () => {
+      const searchParams = new URLSearchParams(window.location.search);
+      const token = searchParams.get('guestToken');
+      setGuestToken(token);
+    };
+
+    window.addEventListener('popstate', handleLocationChange);
+    const originalPushState = window.history.pushState;
+    const originalReplaceState = window.history.replaceState;
+
+    window.history.pushState = function(...args) {
+      originalPushState.apply(this, args);
+      handleLocationChange();
+    };
+
+    window.history.replaceState = function(...args) {
+      originalReplaceState.apply(this, args);
+      handleLocationChange();
+    };
+
+    return () => {
+      window.removeEventListener('popstate', handleLocationChange);
+      window.history.pushState = originalPushState;
+      window.history.replaceState = originalReplaceState;
+    };
+  }, []);
 
   useEffect(() => {
-    if (!user) {
+    if (!user && !guestToken) {
       if (clientRef.current) {
         clientRef.current.deactivate();
         clientRef.current = null;
@@ -41,28 +74,30 @@ export const WebSocketProvider: React.FC<{ children: ReactNode }> = ({ children 
         console.log('Connected to WebSocket');
         setConnected(true);
 
-        // 1. Subscribe to personal notifications
-        stompClient.subscribe('/user/queue/notifications', (message) => {
-          try {
-            const payload = JSON.parse(message.body);
-            console.log('Received notification:', payload);
+        // 1. Subscribe to personal notifications (only if user is logged in)
+        if (user) {
+          stompClient.subscribe('/user/queue/notifications', (message) => {
+            try {
+              const payload = JSON.parse(message.body);
+              console.log('Received notification:', payload);
 
-            // Display Toast
-            if (payload.message) {
-              toast.info(payload.message, {
-                duration: 5000
-              });
+              // Display Toast
+              if (payload.message) {
+                toast.info(payload.message, {
+                  duration: 5000
+                });
+              }
+
+              // Dispatch global event so page components can react to private notification
+              const eventName = `ws:notification:${payload.type}`;
+              window.dispatchEvent(new CustomEvent(eventName, { detail: payload }));
+              window.dispatchEvent(new CustomEvent('ws:notification:any', { detail: payload }));
+
+            } catch (e) {
+              console.error('Failed to parse notification payload', e);
             }
-
-            // Dispatch global event so page components can react to private notification
-            const eventName = `ws:notification:${payload.type}`;
-            window.dispatchEvent(new CustomEvent(eventName, { detail: payload }));
-            window.dispatchEvent(new CustomEvent('ws:notification:any', { detail: payload }));
-
-          } catch (e) {
-            console.error('Failed to parse notification payload', e);
-          }
-        });
+          });
+        }
 
         // 2. Re-establish active page subscriptions
         Object.keys(subscriptionsRef.current).forEach((topic) => {
@@ -92,7 +127,7 @@ export const WebSocketProvider: React.FC<{ children: ReactNode }> = ({ children 
       stompClient.deactivate();
       setConnected(false);
     };
-  }, [user]);
+  }, [user, guestToken]);
 
   const subscribe = (topic: string, callback: (message: any) => void) => {
     // Save callback to active callbacks set

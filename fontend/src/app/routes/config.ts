@@ -4,6 +4,11 @@ import { PositionCode } from '@/common/types/position';
 export const hasRoutePermission = (user: User | null, path: string): boolean => {
   if (!user) return false;
 
+  // Personal hub is accessible to all logged-in users
+  if (path.startsWith('/ca-nhan')) {
+    return true;
+  }
+
   const role = user.role?.roleCode || 'USER';
   
   // 1. SUPER_ADMIN thấy được tất cả
@@ -38,8 +43,7 @@ export const hasRoutePermission = (user: User | null, path: string): boolean => 
         return !!canCreateMeeting;
     }
     if (path.includes('/cap-nhat')) {
-        const isLeader = posCode === 'CHU_TICH' || posCode === 'GIAM_DOC';
-        return !!canCreateMeeting || isLeader;
+        return true;
     }
 
     // Các đường dẫn mà USER được truy cập mặc định:

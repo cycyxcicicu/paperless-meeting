@@ -175,7 +175,7 @@ export const SelectSpeakerModal: React.FC<SelectSpeakerModalProps> = ({
                           </Badge>
                         ) : participant.attendanceStatus ? (
                           <Badge className="bg-green-100 text-green-700 hover:bg-green-100 px-3 py-1 text-xs rounded-full border-none">
-                            {participant.attendanceStatus}
+                            {participant.attendanceStatus === 'present' ? 'Có mặt' : participant.attendanceStatus === 'absent' ? 'Vắng mặt' : 'Chưa điểm danh'}
                           </Badge>
                         ) : (
                           <span className="text-gray-500 text-xs">-</span>

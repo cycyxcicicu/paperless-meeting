@@ -21,6 +21,8 @@ import MauThuMoiPage from '@/modules/meeting/pages/MauThuMoiPage';
 import TaoPhienHopPage from '@/modules/meeting/pages/TaoPhienHopPage';
 import PrepareDocumentsPage from '@/modules/meeting/pages/PrepareDocumentsPage';
 import VaiTroPage from '@/modules/role/pages/VaiTroPage';
+import SavedMeetingsPage from '@/modules/meeting/pages/SavedMeetingsPage';
+import PersonalNotesHubPage from '@/modules/meeting/pages/PersonalNotesHubPage';
 
 export const router = createBrowserRouter([
     {
@@ -62,6 +64,9 @@ export const router = createBrowserRouter([
             { path: "phien-hop/tai-lieu", Component: PhongHopTaiLieuPage },
             { path: "phien-hop/tai-lieu/:type", Component: PhongHopTaiLieuPage },
             { path: "phien-hop/phieu-lay-y-kien", Component: PhienHopPage },
+            { path: "ca-nhan/phien-hop-luu", Component: SavedMeetingsPage },
+            { path: "ca-nhan/ghi-chu", Component: PersonalNotesHubPage },
+            { path: "ca-nhan", element: <Navigate to="/ca-nhan/phien-hop-luu" replace /> },
             { path: "*", Component: NotFoundPage },
         ],
     },

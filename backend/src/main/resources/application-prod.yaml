@@ -1,0 +1,8 @@
+app:
+    urls:
+        frontend: ${APP_FRONTEND_URL}
+        backend: ${APP_BACKEND_URL}
+    security:
+        frontend-origin: ${APP_FRONTEND_URL}
+        cookie-domain: ""
+        secure-cookies: false

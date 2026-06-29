@@ -53,4 +53,13 @@ public interface MeetingRepository extends JpaRepository<Meeting, UUID>, JpaSpec
     @Modifying
     @Query(value = "UPDATE meetings SET is_deleted = false, deleted_at = null WHERE id = :id", nativeQuery = true)
     void restoreMeetingNative(@Param("id") UUID id);
+
+    @Query(value = "SELECT CAST(id AS CHAR) FROM meetings WHERE JSON_UNQUOTE(JSON_EXTRACT(agenda_file, '$.id')) = :documentId", nativeQuery = true)
+    List<String> findMeetingIdsByAgendaFileId(@Param("documentId") String documentId);
+
+    @EntityGraph(attributePaths = { "createdBy", "location", "department" })
+    List<Meeting> findByStatus(MeetingStatus status);
+
+    @EntityGraph(attributePaths = { "createdBy", "location", "department" })
+    List<Meeting> findByCreatedById(UUID createdById);
 }

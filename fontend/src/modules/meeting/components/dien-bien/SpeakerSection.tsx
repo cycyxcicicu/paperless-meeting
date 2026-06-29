@@ -2,7 +2,7 @@ import React from 'react';
 import { Card } from '@/common/components/ui/card';
 import { Badge } from '@/common/components/ui/badge';
 import { Button } from '@/common/components/ui/button';
-import { Plus, Hand } from 'lucide-react';
+import { Plus, Hand, ArrowUp, ArrowDown } from 'lucide-react';
 import { CollapsibleSection } from '@/modules/meeting/components/CollapsibleSection';
 import { SpeakerActionMenu } from '@/modules/meeting/components/SpeakerActionMenu';
 import { DataTable } from '@/common/components/table-engine/DataTable';
@@ -14,9 +14,11 @@ interface SpeakerSectionProps {
     activeTab: "cho" | "bac-bo";
     onTabChange: (tab: "cho" | "bac-bo") => void;
     onAddSpeaker: () => void;
-    onPrepareSpeech: (id: number) => void;
-    onAssignSpeech: (id: number) => void;
-    onRejectSpeech: (id: number) => void;
+    onPrepareSpeech: (id: string | number) => void;
+    onAssignSpeech: (id: string | number) => void;
+    onRejectSpeech: (id: string | number) => void;
+    onReorderSpeech?: (id: string | number, direction: 'up' | 'down') => void;
+    onEndSpeaking?: () => void;
     isGuest?: boolean;
     meetingStatus?: string;
     isChairOrSecretary?: boolean;
@@ -33,6 +35,8 @@ export function SpeakerSection({
     onPrepareSpeech, 
     onAssignSpeech, 
     onRejectSpeech,
+    onReorderSpeech,
+    onEndSpeaking,
     isGuest,
     meetingStatus,
     isChairOrSecretary,
@@ -40,14 +44,13 @@ export function SpeakerSection({
     isAttendee = false,
     isAbsentOnActiveContent = false,
 }: SpeakerSectionProps) {
-    const waitingCount = speakers.filter(s => s.status !== "rejected").length;
+    const waitingCount = speakers.filter(s => s.status !== "rejected" && s.status !== "finished").length;
     const rejectedCount = speakers.filter(s => s.status === "rejected").length;
     const isInProgress = meetingStatus === "IN_PROGRESS";
 
-    const columns: any[] = [
+    const baseColumns: any[] = [
         { key: 'name', header: 'Tên đại biểu' },
         { key: 'position', header: 'Chức vụ' },
-        { key: 'note', header: 'Ghi chú', render: (row: Speaker) => row.note || '-' },
         { key: 'startTime', header: 'Thời gian bắt đầu', render: (row: Speaker) => row.startTime || '-' },
         { key: 'status', header: 'Trạng thái', render: (row: Speaker) => (
             <Badge className={cn(
@@ -65,13 +68,54 @@ export function SpeakerSection({
         )}
     ];
 
+    const waitingColumns = [...baseColumns];
     if (isChairOrSecretary && isInProgress && isAttendee) {
-        columns.push({ key: 'id', header: 'Hành động', width: '100px', align: 'center' as const, render: (row: Speaker) => (
-            <SpeakerActionMenu speakerId={Number(row.id)} onPrepare={onPrepareSpeech} onAssign={onAssignSpeech} onReject={onRejectSpeech} />
+        waitingColumns.push({
+            key: 'sortOrder',
+            header: 'Thứ tự',
+            width: '90px',
+            align: 'center' as const,
+            render: (row: Speaker) => {
+                if (row.status !== 'waiting') return '-';
+                
+                const waitingList = speakers.filter(s => s.status === 'waiting');
+                const index = waitingList.findIndex(s => s.id === row.id);
+                const isFirst = index === 0;
+                const isLast = index === waitingList.length - 1;
+
+                return (
+                    <div className="flex items-center justify-center gap-0.5">
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="p-1 h-7 w-7 text-gray-500 hover:text-[#C8102E] disabled:opacity-30 rounded-full"
+                            disabled={isFirst}
+                            onClick={() => onReorderSpeech && onReorderSpeech(row.id, 'up')}
+                            title="Di chuyển lên"
+                        >
+                            <ArrowUp className="w-4 h-4" />
+                        </Button>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="p-1 h-7 w-7 text-gray-500 hover:text-[#C8102E] disabled:opacity-30 rounded-full"
+                            disabled={isLast}
+                            onClick={() => onReorderSpeech && onReorderSpeech(row.id, 'down')}
+                            title="Di chuyển xuống"
+                        >
+                            <ArrowDown className="w-4 h-4" />
+                        </Button>
+                    </div>
+                );
+            }
+        });
+
+        waitingColumns.push({ key: 'id', header: 'Hành động', width: '100px', align: 'center' as const, render: (row: Speaker) => (
+            <SpeakerActionMenu speakerId={row.id} speakerStatus={row.status} onPrepare={onPrepareSpeech} onAssign={onAssignSpeech} onReject={onRejectSpeech} onEndSpeaking={onEndSpeaking} />
         )});
     }
 
-    const config = { columns };
+    const rejectedColumns = [...baseColumns];
 
     // Render action button based on role and meeting status
     const renderSpeakerAction = () => {
@@ -157,8 +201,8 @@ export function SpeakerSection({
                         {/* Pane 1: Chờ phát biểu */}
                         <div className="w-full shrink-0">
                             <DataTable
-                                data={speakers.filter(s => s.status !== "rejected")}
-                                config={config}
+                                data={speakers.filter(s => s.status !== "rejected" && s.status !== "finished")}
+                                config={{ columns: waitingColumns }}
                                 pageSize={10}
                                 totalItems={waitingCount}
                                 onPageChange={() => {}}
@@ -168,7 +212,7 @@ export function SpeakerSection({
                         <div className="w-full shrink-0">
                             <DataTable
                                 data={speakers.filter(s => s.status === "rejected")}
-                                config={config}
+                                config={{ columns: rejectedColumns }}
                                 pageSize={10}
                                 totalItems={rejectedCount}
                                 onPageChange={() => {}}

@@ -13,6 +13,7 @@ interface MeetingCardProps {
     onCancel: (id: string) => void;
     onSend: (id: string) => void;
     onUploadDocs: (id: string) => void;
+    onToggleSave?: (id: string) => void;
 }
 
 export const MeetingCard: React.FC<MeetingCardProps> = ({
@@ -22,7 +23,8 @@ export const MeetingCard: React.FC<MeetingCardProps> = ({
     onCopy,
     onCancel,
     onSend,
-    onUploadDocs
+    onUploadDocs,
+    onToggleSave
 }) => {
     const [isTruncated, setIsTruncated] = React.useState(false);
     const titleRef = React.useRef<HTMLHeadingElement>(null);
@@ -137,7 +139,8 @@ export const MeetingCard: React.FC<MeetingCardProps> = ({
                                 meeting.canSubmitApproval || 
                                 meeting.canUploadDocs || 
                                 meeting.canCopy ||
-                                meeting.canApprove;
+                                meeting.canApprove ||
+                                meeting.rawStatus === 'IN_PROGRESS';
                             
                             if (!hasActions) return <div className="w-10 flex-shrink-0" />;
 
@@ -153,6 +156,9 @@ export const MeetingCard: React.FC<MeetingCardProps> = ({
                                         canUploadDocs={meeting.canUploadDocs}
                                         canCopy={meeting.canCopy}
                                         canApprove={meeting.canApprove}
+                                        status={meeting.rawStatus}
+                                        isSaved={meeting.isSaved}
+                                        onToggleSave={onToggleSave}
                                         onViewDetail={onViewDetail}
                                         onUpdate={onUpdate}
                                         onCopy={onCopy}

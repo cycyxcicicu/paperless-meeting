@@ -34,6 +34,7 @@ interface AttendanceRecord {
   substitutedForUserName?: string;
   substitutedForIsFullSession?: boolean;
   substitutedForAbsentAgendaItemIds?: string[];
+  role?: string;
 }
 
 interface AttendanceModalProps {
@@ -110,6 +111,7 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({
               replacementPerson,
               type: p.participantRole === 'CHAIR' || p.participantRole === 'CHAIRPERSON' ? 'individual' : 'unit',
               isChair: p.participantRole === 'CHAIR' || p.participantRole === 'CHAIRPERSON',
+              role: p.participantRole,
               isFullSession: p.isFullSession,
               absentAgendaItemIds: p.absentAgendaItemIds || [],
               isSubstitute: p.isSubstitute,
@@ -215,17 +217,31 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({
 
     if (activeTab === 'donvi') {
       baseColumns.push({
-        key: 'isChair',
-        header: 'Chủ trì',
-        width: '120px',
+        key: 'role',
+        header: 'Vai trò',
+        width: '130px',
         align: 'center',
-        render: (row) => row.isChair ? (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-[#C8102E]">
-            Chủ trì
-          </span>
-        ) : (
-          <span className="text-gray-400 text-xs">-</span>
-        )
+        render: (row) => {
+          if (row.role === 'CHAIR' || row.role === 'CHAIRPERSON' || row.isChair) {
+            return (
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-[#C8102E] border border-red-200">
+                Chủ trì
+              </span>
+            );
+          }
+          if (row.role === 'SECRETARY') {
+            return (
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700 border border-blue-200">
+                Thư ký
+              </span>
+            );
+          }
+          return (
+            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700 border border-gray-200">
+              Đại biểu
+            </span>
+          );
+        }
       });
     }
 
@@ -279,23 +295,25 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({
             />
           );
         }
-        if (row.isFullSession) {
-          const text = "Vắng toàn bộ phiên họp";
-          return <span className="text-red-600 font-medium text-sm">{text}</span>;
-        }
-        if (row.absentAgendaItemIds && row.absentAgendaItemIds.length > 0) {
-          const titles = row.absentAgendaItemIds
-            .map((id) => agendaItems.find((a) => String(a.id) === String(id))?.title)
-            .filter(Boolean);
-          if (titles.length > 0) {
-            const text = `Vắng nội dung: ${titles.join(', ')}`;
-            return (
-              <TableTooltip 
-                text={text} 
-                maxLength={30} 
-                className="text-gray-600 text-sm font-medium cursor-pointer" 
-              />
-            );
+        if (row.status === 'absent') {
+          if (row.isFullSession) {
+            const text = "Vắng toàn bộ phiên họp";
+            return <span className="text-red-600 font-medium text-sm">{text}</span>;
+          }
+          if (row.absentAgendaItemIds && row.absentAgendaItemIds.length > 0) {
+            const titles = row.absentAgendaItemIds
+              .map((id) => agendaItems.find((a) => String(a.id) === String(id))?.title)
+              .filter(Boolean);
+            if (titles.length > 0) {
+              const text = `Vắng nội dung: ${titles.join(', ')}`;
+              return (
+                <TableTooltip 
+                  text={text} 
+                  maxLength={30} 
+                  className="text-gray-600 text-sm font-medium cursor-pointer" 
+                />
+              );
+            }
           }
         }
         return <span className="text-gray-400 text-xs">-</span>;
@@ -307,12 +325,14 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({
       key: 'reasonAbsent',
       header: 'Lý do vắng',
       width: '180px',
-      render: (row) => (
+      render: (row) => row.status === 'absent' && row.reasonAbsent ? (
         <TableTooltip 
           text={row.reasonAbsent} 
           maxLength={22} 
           className="text-gray-600 text-sm cursor-pointer" 
         />
+      ) : (
+        <span className="text-gray-400 text-xs">-</span>
       )
     });
 

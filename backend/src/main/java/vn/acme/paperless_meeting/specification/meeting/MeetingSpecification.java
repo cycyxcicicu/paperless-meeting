@@ -10,11 +10,15 @@ import org.springframework.data.jpa.domain.Specification;
 import jakarta.persistence.criteria.Join;
 import jakarta.persistence.criteria.JoinType;
 import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Root;
+import jakarta.persistence.criteria.Subquery;
 import vn.acme.paperless_meeting.entity.Meeting;
+import vn.acme.paperless_meeting.entity.MeetingParticipant;
 import vn.acme.paperless_meeting.entity.enums.MeetingStatus;
+import vn.acme.paperless_meeting.entity.enums.InviteStatus;
 
 public class MeetingSpecification {
-    public static Specification<Meeting> build(String keyword, MeetingStatus status, List<MeetingStatus> statuses, LocalDateTime fromDate, LocalDateTime toDate, List<UUID> allowedDeptIds, UUID userId, boolean isSuperAdmin, boolean isDeptAdmin, Boolean onlyMyMeetings) {
+    public static Specification<Meeting> build(String keyword, MeetingStatus status, List<MeetingStatus> statuses, LocalDateTime fromDate, LocalDateTime toDate, List<UUID> allowedDeptIds, UUID userId, boolean isSuperAdmin, boolean isDeptAdmin, Boolean onlyMyMeetings, InviteStatus inviteStatus) {
         return (root, query, cb) -> {
             if (query.getResultType() != Long.class && query.getResultType() != long.class) {
                 root.fetch("createdBy", JoinType.LEFT);
@@ -23,6 +27,56 @@ public class MeetingSpecification {
             }
 
             List<Predicate> predicates = new ArrayList<>();
+
+            // Lọc theo trạng thái lời mời (inviteStatus) của người dùng hiện tại
+            if (inviteStatus != null) {
+                if (inviteStatus == InviteStatus.ACCEPTED) {
+                    List<Predicate> acceptedOrMine = new ArrayList<>();
+                    
+                    // 1. Creator
+                    acceptedOrMine.add(cb.equal(root.get("createdBy").get("id"), userId));
+                    
+                    // 2. Preparer
+                    Join<Object, Object> agendaJoin = root.join("agendaItemList", JoinType.LEFT);
+                    acceptedOrMine.add(cb.equal(agendaJoin.get("preparedByUser").get("id"), userId));
+                    
+                    // 3. Accepted Participant
+                    Join<Object, Object> participantJoin = root.join("meetingParticipantList", JoinType.LEFT);
+                    Predicate isParticipant = cb.equal(participantJoin.get("user").get("id"), userId);
+                    Predicate isAccepted = cb.equal(participantJoin.get("inviteStatus"), InviteStatus.ACCEPTED);
+                    acceptedOrMine.add(cb.and(isParticipant, isAccepted));
+                    
+                    predicates.add(cb.or(acceptedOrMine.toArray(new Predicate[0])));
+                    
+                    // Exclude meetings where the current user has a PENDING invitation
+                    Subquery<Long> subquery = query.subquery(Long.class);
+                    Root<MeetingParticipant> subRoot = subquery.from(MeetingParticipant.class);
+                    subquery.select(cb.count(subRoot));
+                    subquery.where(
+                        cb.equal(subRoot.get("meeting").get("id"), root.get("id")),
+                        cb.equal(subRoot.get("user").get("id"), userId),
+                        cb.equal(subRoot.get("inviteStatus"), InviteStatus.PENDING)
+                    );
+                    predicates.add(cb.equal(subquery, 0L));
+
+                    query.distinct(true);
+                } else if (inviteStatus == InviteStatus.PENDING) {
+                    Join<Object, Object> participantJoin = root.join("meetingParticipantList");
+                    if (Boolean.TRUE.equals(onlyMyMeetings)) {
+                        predicates.add(cb.equal(participantJoin.get("user").get("id"), userId));
+                    }
+                    predicates.add(cb.equal(participantJoin.get("inviteStatus"), InviteStatus.PENDING));
+                    query.distinct(true);
+                } else {
+                    Join<Object, Object> participantJoin = root.join("meetingParticipantList");
+                    if (Boolean.TRUE.equals(onlyMyMeetings)) {
+                        predicates.add(cb.equal(participantJoin.get("user").get("id"), userId));
+                    }
+                    predicates.add(cb.equal(participantJoin.get("inviteStatus"), inviteStatus));
+                    query.distinct(true);
+                }
+            }
+
 
             // Lọc theo từ khóa (tìm kiếm theo tên cuộc họp)
             if (keyword != null && !keyword.trim().isEmpty()) {
@@ -47,10 +101,19 @@ public class MeetingSpecification {
                 predicates.add(cb.lessThanOrEqualTo(root.get("startTime"), toDate));
             }
 
-            // Lọc chỉ cuộc họp mà user tham gia
+            // Lọc chỉ cuộc họp của tôi (My Meetings) gồm: người tạo, người được mời tham gia hoặc người chuẩn bị tài liệu
             if (Boolean.TRUE.equals(onlyMyMeetings)) {
-                Join<Object, Object> participantJoin = root.join("meetingParticipantList");
-                predicates.add(cb.equal(participantJoin.get("user").get("id"), userId));
+                List<Predicate> myMeetingsPredicates = new ArrayList<>();
+                
+                myMeetingsPredicates.add(cb.equal(root.get("createdBy").get("id"), userId));
+                
+                Join<Object, Object> participantJoin = root.join("meetingParticipantList", JoinType.LEFT);
+                myMeetingsPredicates.add(cb.equal(participantJoin.get("user").get("id"), userId));
+                
+                Join<Object, Object> agendaJoin = root.join("agendaItemList", JoinType.LEFT);
+                myMeetingsPredicates.add(cb.equal(agendaJoin.get("preparedByUser").get("id"), userId));
+                
+                predicates.add(cb.or(myMeetingsPredicates.toArray(new Predicate[0])));
                 query.distinct(true);
             }
 

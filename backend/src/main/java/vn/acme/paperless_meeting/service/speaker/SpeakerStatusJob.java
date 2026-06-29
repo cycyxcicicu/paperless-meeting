@@ -41,8 +41,15 @@ public class SpeakerStatusJob {
                     // Đổi trạng thái Queue tương ứng sang DONE
                     List<SpeakerQueue> speakingQueues = speakerQueueRepository.findByQueueStatus(SpeakerQueueStatus.SPEAKING);
                     for (SpeakerQueue q : speakingQueues) {
-                        if (q.getUser().getId().equals(turn.getUser().getId()) 
-                            && q.getMeeting().getId().equals(turn.getMeeting().getId())) {
+                        boolean match = false;
+                        if (q.getMeeting().getId().equals(turn.getMeeting().getId())) {
+                            if (q.getUser() != null && turn.getUser() != null) {
+                                match = q.getUser().getId().equals(turn.getUser().getId());
+                            } else if (q.getGuest() != null && turn.getGuest() != null) {
+                                match = q.getGuest().getId().equals(turn.getGuest().getId());
+                            }
+                        }
+                        if (match) {
                             q.setQueueStatus(SpeakerQueueStatus.DONE);
                             speakerQueueRepository.save(q);
                         }

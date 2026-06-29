@@ -21,7 +21,11 @@ public class SpeakerQueueResponse {
     private UUID userId;
     private String userName;
     private String avatarUrl;
+    private String position;
     private UUID meetingId;
     private UUID guestId;
     private Boolean isGuestSubstitute;
+    private UUID activeTurnId;
+    private LocalDateTime speakingStartAt;
+    private Long speakingDurationSeconds;
 }

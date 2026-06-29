@@ -40,7 +40,12 @@ import vn.acme.paperless_meeting.repository.DocumentRepository;
 import vn.acme.paperless_meeting.repository.DocumentVersionRepository;
 import vn.acme.paperless_meeting.repository.MeetingDocumentRepository;
 import vn.acme.paperless_meeting.repository.MeetingRepository;
+import vn.acme.paperless_meeting.repository.MeetingParticipantRepository;
 import vn.acme.paperless_meeting.service.auth.CurrentUserService;
+import vn.acme.paperless_meeting.service.approval.ApprovalService;
+import vn.acme.paperless_meeting.entity.MeetingFile;
+import vn.acme.paperless_meeting.entity.enums.RoleName;
+import vn.acme.paperless_meeting.entity.enums.ResourceType;
 import vn.acme.paperless_meeting.event.audit.AuditLogPublisher;
 
 @ExtendWith(MockitoExtension.class)
@@ -57,6 +62,8 @@ class DocumentServiceTest {
     @Mock DocumentMapper documentMapper;
     @Mock MeetingDocumentMapper meetingDocumentMapper;
     @Mock AuditLogPublisher auditLogPublisher;
+    @Mock MeetingParticipantRepository meetingParticipantRepository;
+    @Mock ApprovalService approvalService;
 
     @InjectMocks
     DocumentService documentService;
@@ -441,5 +448,45 @@ class DocumentServiceTest {
         AppException ex = assertThrows(AppException.class,
                 () -> documentService.updateMeetingDocument(meetingId, meetingDocId, new AttachDocumentRequest()));
         assertEquals(ErrorCode.DOCUMENT_MEETING_NOT_FOUND, ex.getErrorCode());
+    }
+
+    @Test
+    void getDownloadUrl_WhenDocumentIsAgendaFile_ShouldAllowAccess() {
+        // Arrange
+        UUID otherUserId = UUID.randomUUID();
+        User anotherUser = new User();
+        anotherUser.setId(otherUserId);
+        
+        document.setCreatedBy(anotherUser); 
+        
+        when(documentRepository.findById(documentId)).thenReturn(Optional.of(document));
+        when(meetingDocumentRepository.findMeetingIdsByDocumentId(documentId)).thenReturn(List.of());
+        when(meetingRepository.findMeetingIdsByAgendaFileId(documentId.toString())).thenReturn(List.of(meetingId.toString()));
+        when(meetingParticipantRepository.isUserParticipantOfAnyMeeting(any(), eq(userId))).thenReturn(false);
+        when(approvalService.hasApprovePermission(ResourceType.MEETING, meetingId)).thenReturn(true);
+        when(fileStorageService.getFileUrl("test-key.pdf")).thenReturn("http://storage/test-key.pdf");
+
+        // Act
+        String url = documentService.getDownloadUrl(documentId);
+
+        // Assert
+        assertEquals("http://storage/test-key.pdf", url);
+    }
+
+    @Test
+    void getDocumentVersionForPublic_WhenDocumentIsAgendaFile_ShouldAllowAccess() {
+        // Arrange
+        MeetingFile agendaFile = new MeetingFile(documentId.toString(), "agenda.pdf", "http://storage/agenda.pdf");
+        meeting.setAgendaFile(agendaFile);
+        
+        when(documentRepository.findById(documentId)).thenReturn(Optional.of(document));
+        when(meetingRepository.findById(meetingId)).thenReturn(Optional.of(meeting));
+
+        // Act
+        DocumentVersion resVersion = documentService.getDocumentVersionForPublic(documentId, meetingId);
+
+        // Assert
+        assertNotNull(resVersion);
+        assertEquals("test-key.pdf", resVersion.getStorageKey());
     }
 }

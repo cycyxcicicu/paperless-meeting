@@ -1,5 +1,4 @@
 export * from './AddOpinionForContentModal';
-export * from './AddOpinionModal';
 export * from './ApproveContentModal';
 export * from './AttendanceDetailModal';
 export * from './AttendanceModal';
@@ -19,3 +18,5 @@ export * from './ThanhPhanThamDuStep';
 export * from './WizardFooter';
 export * from './WizardStepper';
 export * from './FeedbackChatSection';
+export * from './ViewOpinionModal';
+

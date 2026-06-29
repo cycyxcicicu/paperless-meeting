@@ -27,7 +27,7 @@ const MainLayout: React.FC = () => {
         sidebarItems = QUAN_TRI_SIDEBAR_ITEMS;
     } else if (pathname.startsWith('/phong-hop')) {
         sidebarItems = PHONG_HOP_SIDEBAR_ITEMS;
-    } else if (pathname.startsWith('/phien-hop')) {
+    } else if (pathname.startsWith('/phien-hop') || pathname.startsWith('/ca-nhan')) {
         sidebarItems = PHIEN_HOP_SIDEBAR_ITEMS;
     }
 

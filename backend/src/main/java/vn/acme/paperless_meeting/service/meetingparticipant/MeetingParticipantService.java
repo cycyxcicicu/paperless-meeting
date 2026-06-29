@@ -848,8 +848,34 @@ public class MeetingParticipantService {
                     if (participant.getIsFullSession() == null || participant.getIsFullSession()) {
                         throw new AppException(ErrorCode.PARTICIPANT_STATUS_INCONSISTENT);
                     }
-                } else if (participant.getInviteStatus() == InviteStatus.PENDING) {
                     participant.setInviteStatus(InviteStatus.ACCEPTED);
+
+                    // Revoke substitute role from linked participants/guests
+                    List<MeetingParticipant> subsP = meetingParticipantRepository.findBySubstituteForParticipantId(participant.getId());
+                    for (MeetingParticipant sub : subsP) {
+                        sub.setIsSubstitute(false);
+                        sub.setSubstituteForParticipantId(null);
+                        meetingParticipantRepository.save(sub);
+                    }
+                    List<MeetingGuest> subsG = meetingGuestRepository.findBySubstituteForParticipantId(participant.getId());
+                    for (MeetingGuest sub : subsG) {
+                        sub.setIsSubstitute(false);
+                        sub.setSubstituteForParticipantId(null);
+                        meetingGuestRepository.save(sub);
+                    }
+
+                    participant.setDeclineReason(null);
+                    participant.setSubstituteUser(null);
+                    participant.setSubstituteName(null);
+                    participant.setSubstitutePosition(null);
+                    participant.setSubstituteCompany(null);
+                    participant.setSubstituteDepartment(null);
+                    participant.setSubstituteEmail(null);
+                    participant.setSubstitutePhone(null);
+                    participant.setIsFullSession(true);
+                    participant.getAbsentAgendaItemIds().clear();
+                } else if (participant.getInviteStatus() == InviteStatus.PENDING) {
+                    throw new AppException(ErrorCode.PARTICIPANT_STATUS_INCONSISTENT);
                 }
             }
 

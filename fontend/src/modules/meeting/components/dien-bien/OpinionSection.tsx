@@ -9,12 +9,13 @@ import { Opinion } from '../../meeting.mock';
 interface OpinionSectionProps {
     opinions: Opinion[];
     onAddOpinion: () => void;
+    onViewOpinion?: (opinion: Opinion) => void;
     isGuest?: boolean;
     meetingStatus?: string;
     isAttendee?: boolean;
 }
 
-export function OpinionSection({ opinions, onAddOpinion, isGuest, meetingStatus, isAttendee = false }: OpinionSectionProps) {
+export function OpinionSection({ opinions, onAddOpinion, onViewOpinion, isGuest, meetingStatus, isAttendee = false }: OpinionSectionProps) {
     const config = {
         columns: [
             { key: 'userName', header: 'Tên đại biểu' },
@@ -26,8 +27,17 @@ export function OpinionSection({ opinions, onAddOpinion, isGuest, meetingStatus,
                     {row.attachments.length > 0 && <p className="text-xs text-blue-600">{row.attachments.length} tài liệu đính kèm</p>}
                 </div>
             )},
-            { key: 'id', header: 'Hành động', width: '100px', align: 'center' as const, render: () => (
-                <Button variant="ghost" size="icon" className="text-gray-500 hover:text-[#C8102E]">
+            { key: 'id', header: 'Hành động', width: '100px', align: 'center' as const, render: (row: Opinion) => (
+                <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="text-gray-500 hover:text-[#C8102E]"
+                    onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        onViewOpinion?.(row);
+                    }}
+                >
                     <Eye className="w-4 h-4" />
                 </Button>
             )}

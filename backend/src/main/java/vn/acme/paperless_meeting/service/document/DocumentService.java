@@ -1,6 +1,7 @@
 package vn.acme.paperless_meeting.service.document;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -213,7 +214,17 @@ public class DocumentService {
         boolean isCreator = document.getCreatedBy() != null && document.getCreatedBy().getId().equals(caller.getId());
 
         if (!isCreator && !currentUserService.hasRole(RoleName.SUPER_ADMIN)) {
-            List<UUID> meetingIds = meetingDocumentRepository.findMeetingIdsByDocumentId(document.getId());
+            List<UUID> meetingIds = new ArrayList<>(meetingDocumentRepository.findMeetingIdsByDocumentId(document.getId()));
+            List<String> agendaMeetingIds = meetingRepository.findMeetingIdsByAgendaFileId(document.getId().toString());
+            if (agendaMeetingIds != null) {
+                for (String midStr : agendaMeetingIds) {
+                    try {
+                        meetingIds.add(UUID.fromString(midStr));
+                    } catch (Exception e) {
+                        // ignore
+                    }
+                }
+            }
             if (meetingIds.isEmpty()) {
                 throw new AppException(ErrorCode.UNAUTHOZIZED);
             }
@@ -244,7 +255,17 @@ public class DocumentService {
         boolean isCreator = document.getCreatedBy() != null && document.getCreatedBy().getId().equals(caller.getId());
 
         if (!isCreator && !currentUserService.hasRole(RoleName.SUPER_ADMIN)) {
-            List<UUID> meetingIds = meetingDocumentRepository.findMeetingIdsByDocumentId(document.getId());
+            List<UUID> meetingIds = new ArrayList<>(meetingDocumentRepository.findMeetingIdsByDocumentId(document.getId()));
+            List<String> agendaMeetingIds = meetingRepository.findMeetingIdsByAgendaFileId(document.getId().toString());
+            if (agendaMeetingIds != null) {
+                for (String midStr : agendaMeetingIds) {
+                    try {
+                        meetingIds.add(UUID.fromString(midStr));
+                    } catch (Exception e) {
+                        // ignore
+                    }
+                }
+            }
             if (meetingIds.isEmpty()) {
                 throw new AppException(ErrorCode.UNAUTHOZIZED);
             }
@@ -273,6 +294,14 @@ public class DocumentService {
 
         boolean hasAccess = document.getMeetingDocumentList().stream()
                 .anyMatch(md -> md.getMeeting().getId().equals(meetingId) && (md.getIsConfidential() == null || !md.getIsConfidential()));
+        
+        if (!hasAccess) {
+            Meeting meeting = meetingRepository.findById(meetingId).orElse(null);
+            if (meeting != null && meeting.getAgendaFile() != null && documentId.toString().equals(meeting.getAgendaFile().getId())) {
+                hasAccess = true;
+            }
+        }
+
         if (!hasAccess) {
             throw new AppException(ErrorCode.UNAUTHOZIZED);
         }

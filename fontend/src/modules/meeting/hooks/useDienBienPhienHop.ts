@@ -43,14 +43,9 @@ export function useDienBienPhienHop(guestToken?: string | null) {
     }, [isGuest, guestToken, user, rawAttendees.participants, rawAttendees.guests]);
 
     const isSelfCheckedIn = useMemo(() => {
-        if (isGuest) {
-            if (!currentUserParticipant) return false;
-            return currentUserParticipant.attendanceStatus === "PRESENT";
-        } else {
-            if (!currentUserParticipant) return true;
-            return currentUserParticipant.attendanceStatus === "PRESENT";
-        }
-    }, [isGuest, currentUserParticipant]);
+        if (!currentUserParticipant) return false;
+        return currentUserParticipant.attendanceStatus === "PRESENT";
+    }, [currentUserParticipant]);
 
     const isWithinCheckInWindow = useMemo(() => {
         if (!meeting?.startTime) return false;
@@ -112,6 +107,13 @@ export function useDienBienPhienHop(guestToken?: string | null) {
     const [isApproveContentModalOpen, setIsApproveContentModalOpen] = useState(false);
     const [isAddOpinionForContentModalOpen, setIsAddOpinionForContentModalOpen] = useState(false);
     const [selectedContent, setSelectedContent] = useState<MeetingContent | null>(null);
+    const [isDurationModalOpen, setIsDurationModalOpen] = useState(false);
+    const [durationModalType, setDurationModalType] = useState<'assign' | 'add' | null>(null);
+    const [durationTargetId, setDurationTargetId] = useState<string | number | null>(null);
+    const [durationSelectedParticipants, setDurationSelectedParticipants] = useState<Participant[]>([]);
+    const [speakingDuration, setSpeakingDuration] = useState("5");
+    const [selectedViewOpinion, setSelectedViewOpinion] = useState<Opinion | null>(null);
+    const [isViewOpinionModalOpen, setIsViewOpinionModalOpen] = useState(false);
 
     const isAbsentOnActiveContent = useMemo(() => {
         if (!currentUserParticipant || !activeContent) return false;
@@ -123,8 +125,8 @@ export function useDienBienPhienHop(guestToken?: string | null) {
             if (!delegatorId) return true; // Block if not a substitute
             const delegator = (rawAttendees.participants || []).find((p: any) => p.id === delegatorId);
             if (!delegator) return true;
-            const isDelegatorAbsent = delegator.isFullSession || 
-                (delegator.absentAgendaItemIds && delegator.absentAgendaItemIds.includes(agendaId));
+            const isDelegatorAbsent = delegator.inviteStatus === "DECLINED" && (delegator.isFullSession || 
+                (delegator.absentAgendaItemIds && delegator.absentAgendaItemIds.includes(agendaId)));
             return !isDelegatorAbsent; // Guest can speak only if delegator is absent
         }
 
@@ -134,14 +136,14 @@ export function useDienBienPhienHop(guestToken?: string | null) {
             if (!delegatorId) return true; // Block if delegator not set
             const delegator = (rawAttendees.participants || []).find((p: any) => p.id === delegatorId);
             if (!delegator) return true;
-            const isDelegatorAbsent = delegator.isFullSession || 
-                (delegator.absentAgendaItemIds && delegator.absentAgendaItemIds.includes(agendaId));
+            const isDelegatorAbsent = delegator.inviteStatus === "DECLINED" && (delegator.isFullSession || 
+                (delegator.absentAgendaItemIds && delegator.absentAgendaItemIds.includes(agendaId)));
             return !isDelegatorAbsent; // Substitute can speak only if delegator is absent
         }
 
         // Regular delegate check
-        return currentUserParticipant.isFullSession || 
-            (currentUserParticipant.absentAgendaItemIds && currentUserParticipant.absentAgendaItemIds.includes(agendaId));
+        return currentUserParticipant.inviteStatus === "DECLINED" && (currentUserParticipant.isFullSession || 
+            (currentUserParticipant.absentAgendaItemIds && currentUserParticipant.absentAgendaItemIds.includes(agendaId)));
     }, [currentUserParticipant, activeContent, isGuest, rawAttendees.participants]);
 
     // Voting modal states
@@ -156,48 +158,74 @@ export function useDienBienPhienHop(guestToken?: string | null) {
         results: VotingResult;
         votedDelegates: VotedDelegate[];
         notVotedDelegates: NotVotedDelegate[];
+        showVotingList: boolean;
     } | null>(null);
 
     // Initialize activeContent to the first item, or the one currently IN_PROGRESS
     useEffect(() => {
-        if (rawAgendaItems.length > 0 && !activeContent) {
+        if (!activeContent) {
             const inProgressItem = rawAgendaItems.find(item => item.status === "IN_PROGRESS");
             if (inProgressItem) {
                 setActiveContent(inProgressItem.id);
-            } else {
+            } else if (meeting?.agendaFile) {
+                setActiveContent("GENERAL_AGENDA");
+            } else if (rawAgendaItems.length > 0) {
                 setActiveContent(rawAgendaItems[0].id);
             }
         }
-    }, [rawAgendaItems, activeContent]);
+    }, [rawAgendaItems, activeContent, meeting]);
 
     // Derived states
     const meetingContents = useMemo<MeetingContent[]>(() => {
-        return rawAgendaItems.map(item => ({
-            id: item.id,
-            title: item.title,
-            description: item.content || "",
-            status: item.status,
-            durationEst: item.durationEst,
-            preparedByFullName: item.preparedByFullName,
-            startTime: item.startTime,
-            endTime: item.endTime,
-            documents: (item.documents || []).map((doc: any) => ({
-                documentId: doc.documentId,
-                title: doc.title || doc.fileName || "",
-                fileName: doc.fileName || "",
-                fileSize: doc.fileSize
-            }))
-        }));
-    }, [rawAgendaItems]);
+        const list: MeetingContent[] = [];
+        if (meeting?.agendaFile) {
+            list.push({
+                id: "GENERAL_AGENDA",
+                title: "Chương trình họp chung",
+                description: "Tài liệu chương trình họp tổng quan của phiên họp.",
+                status: "DONE",
+                durationEst: 0,
+                preparedByFullName: "",
+                documents: []
+            });
+        }
+        rawAgendaItems.forEach(item => {
+            list.push({
+                id: item.id,
+                title: item.title,
+                description: item.content || "",
+                status: item.status,
+                durationEst: item.durationEst,
+                preparedByFullName: item.preparedByFullName,
+                startTime: item.startTime,
+                endTime: item.endTime,
+                documents: (item.documents || []).map((doc: any) => ({
+                    documentId: doc.documentId,
+                    title: doc.title || doc.fileName || "",
+                    fileName: doc.fileName || "",
+                    fileSize: doc.fileSize,
+                    createdByFullName: doc.createdByFullName
+                }))
+            });
+        });
+        return list;
+    }, [rawAgendaItems, meeting]);
 
     const availableDocuments = useMemo(() => {
-        return rawAgendaItems.flatMap(item => 
+        const list = rawAgendaItems.flatMap(item => 
             (item.documents || []).map((doc: any) => ({
                 value: doc.documentId,
                 label: doc.title || doc.fileName || ""
             }))
         );
-    }, [rawAgendaItems]);
+        if (meeting?.agendaFile) {
+            list.unshift({
+                value: meeting.agendaFile.id,
+                label: meeting.agendaFile.name || "Chương trình họp"
+            });
+        }
+        return list;
+    }, [rawAgendaItems, meeting]);
 
     const availableContents = useMemo(() => {
         return rawAgendaItems.map(item => ({
@@ -207,18 +235,27 @@ export function useDienBienPhienHop(guestToken?: string | null) {
     }, [rawAgendaItems]);
 
     const opinions = useMemo<Opinion[]>(() => {
-        return rawOpinions.map(op => ({
-            id: op.id,
-            userName: op.delegateName || op.userName || "",
-            userPosition: op.position || "-",
-            documentName: op.documentName || undefined,
-            opinionDetail: op.content || "",
-            attachments: (op.attachments || []).map((att: any) => ({
-                name: att.fileName || att.title || "",
-                size: att.fileSize || 0
-            })),
-            createdAt: op.time ? new Date(op.time).toLocaleString("vi-VN") : ""
-        }));
+        return rawOpinions.map(op => {
+            const documentName = op.documentName || undefined;
+            const attachments = (op.attachments || [])
+                .map((att: any) => ({
+                    name: att.fileName || att.title || "",
+                    size: att.fileSize || 0,
+                    documentId: att.documentId,
+                    fileUrl: att.fileUrl
+                }))
+                .filter((att) => att.name !== documentName);
+
+            return {
+                id: op.id,
+                userName: op.delegateName || op.userName || "",
+                userPosition: op.position || "-",
+                documentName,
+                opinionDetail: op.content || "",
+                attachments,
+                createdAt: op.time ? new Date(op.time).toLocaleString("vi-VN") : ""
+            };
+        });
     }, [rawOpinions]);
 
     const speakers = useMemo<Speaker[]>(() => {
@@ -226,13 +263,15 @@ export function useDienBienPhienHop(guestToken?: string | null) {
             ...(rawAttendees.participants || []),
             ...(rawAttendees.guests || [])
         ];
-        return rawSpeakersQueue.map(q => {
-            let status: "waiting" | "speaking" | "finished" | "rejected" = "waiting";
-            if (q.queueStatus === "SPEAKING") status = "speaking";
-            else if (q.queueStatus === "DONE") status = "finished";
-            else if (q.queueStatus === "REJECTED") status = "rejected";
+        return rawSpeakersQueue
+            .filter(q => q.queueStatus !== "CANCELLED" && q.queueStatus !== "EXPIRED")
+            .map(q => {
+                let status: "waiting" | "speaking" | "finished" | "rejected" = "waiting";
+                if (q.queueStatus === "SPEAKING") status = "speaking";
+                else if (q.queueStatus === "DONE") status = "finished";
+                else if (q.queueStatus === "REJECTED") status = "rejected";
 
-            const p = attendeesList.find((x: any) => x.userId === q.userId || x.guestId === q.userId || x.id === q.userId);
+                const p = attendeesList.find((x: any) => x.userId === q.userId || x.guestId === q.userId || x.id === q.userId);
 
             return {
                 id: q.id,
@@ -240,7 +279,10 @@ export function useDienBienPhienHop(guestToken?: string | null) {
                 position: p?.positionName || p?.position || "-",
                 unit: p?.deptName || p?.company || "-",
                 status,
-                addedTime: q.requestedAt ? new Date(q.requestedAt).toLocaleTimeString("vi-VN") : ""
+                addedTime: q.requestedAt ? new Date(q.requestedAt).toLocaleTimeString("vi-VN") : "",
+                activeTurnId: q.activeTurnId,
+                speakingStartAt: q.speakingStartAt,
+                durationSeconds: q.speakingDurationSeconds
             };
         });
     }, [rawSpeakersQueue, rawAttendees]);
@@ -307,6 +349,20 @@ export function useDienBienPhienHop(guestToken?: string | null) {
         ];
     }, [rawAttendees]);
 
+    // Participants available for adding as speakers:
+    // - Must have checked in (attendanceStatus === "present")
+    // - Must NOT already be in the speaker queue with QUEUED or SPEAKING status
+    const availableSpeakerParticipants = useMemo<Participant[]>(() => {
+        const activeSpeakerUserIds = new Set(
+            rawSpeakersQueue
+                .filter(q => q.queueStatus === "QUEUED" || q.queueStatus === "SPEAKING")
+                .map(q => String(q.userId))
+        );
+        return meetingParticipants.filter(
+            p => p.attendanceStatus === "present" && !activeSpeakerUserIds.has(String(p.id))
+        );
+    }, [meetingParticipants, rawSpeakersQueue]);
+
     const mockDelegates = useMemo<Delegate[]>(() => {
         return meetingParticipants.map((p, idx) => ({
             id: idx + 1,
@@ -320,8 +376,6 @@ export function useDienBienPhienHop(guestToken?: string | null) {
     // Determine if user is Chair or Secretary for this meeting
     const isChairOrSecretary = useMemo(() => {
         if (!user) return false;
-        const role = user.role?.roleCode;
-        if (role === 'SUPER_ADMIN' || role === 'DEPARTMENT_ADMIN') return true;
 
         const participants = rawAttendees.participants || [];
         const currentUserId = String(user.id);
@@ -336,24 +390,19 @@ export function useDienBienPhienHop(guestToken?: string | null) {
     const handleAddSpeakers = async (selectedParticipants: Participant[]) => {
         if (!checkAttendance()) return;
         if (selectedParticipants.length === 0) return;
-        try {
-            for (const participant of selectedParticipants) {
-                await meetingApi.startDirectSpeakerTurn(id || "", participant.id, 5);
-            }
-            toast.success("Đã chỉ định phát biểu thành công");
-            setIsAddSpeakerModalOpen(false);
-            refreshData();
-        } catch (error) {
-            toast.error("Không thể chỉ định phát biểu");
-        }
+        setDurationSelectedParticipants(selectedParticipants);
+        setDurationModalType('add');
+        setSpeakingDuration("5");
+        setIsDurationModalOpen(true);
     };
 
     const handleEndSpeaking = async () => {
         if (!checkAttendance()) return;
         if (!currentSpeaker) return;
         try {
-            if (activeTurnId) {
-                await meetingApi.stopSpeakerTurn(id || "", activeTurnId);
+            const turnId = activeTurnId || currentSpeaker.activeTurnId;
+            if (turnId) {
+                await meetingApi.stopSpeakerTurn(id || "", turnId);
             } else {
                 // Fallback to canceling/rejecting current speaker queue item if turnId is unknown
                 await meetingApi.rejectSpeakRequest(id || "", currentSpeaker.id.toString());
@@ -366,22 +415,83 @@ export function useDienBienPhienHop(guestToken?: string | null) {
         }
     };
 
-    const handlePrepareSpeech = (speakerId: string | number) => {
-        console.log("Chuẩn bị phát biểu cho speaker:", speakerId);
-        toast.info("Yêu cầu chuẩn bị phát biểu đã được ghi nhận");
+    const handlePrepareSpeech = async (speakerId: string | number) => {
+        if (!checkAttendance()) return;
+        try {
+            await meetingApi.prepareSpeakerTurn(id || "", speakerId.toString());
+            toast.success("Đã gửi yêu cầu chuẩn bị phát biểu");
+            refreshData();
+        } catch (error) {
+            toast.error("Không thể gửi yêu cầu chuẩn bị phát biểu");
+        }
+    };
+
+    const handleReorderSpeaker = async (speakerId: string | number, direction: 'up' | 'down') => {
+        if (!checkAttendance()) return;
+        // Lấy danh sách những người đang chờ phát biểu (status === 'waiting')
+        const waitingList = speakers.filter(s => s.status === 'waiting');
+        const index = waitingList.findIndex(s => s.id === speakerId);
+        if (index === -1) return;
+
+        const newWaitingList = [...waitingList];
+        if (direction === 'up' && index > 0) {
+            const temp = newWaitingList[index];
+            newWaitingList[index] = newWaitingList[index - 1];
+            newWaitingList[index - 1] = temp;
+        } else if (direction === 'down' && index < newWaitingList.length - 1) {
+            const temp = newWaitingList[index];
+            newWaitingList[index] = newWaitingList[index + 1];
+            newWaitingList[index + 1] = temp;
+        } else {
+            return;
+        }
+
+        try {
+            const queueIds = newWaitingList.map(s => s.id.toString());
+            await meetingApi.reorderSpeakersQueue(id || "", queueIds);
+            toast.success("Đã thay đổi thứ tự phát biểu");
+            refreshData();
+        } catch (error) {
+            toast.error("Không thể thay đổi thứ tự phát biểu");
+        }
     };
 
     const handleAssignSpeech = async (speakerId: string | number) => {
         if (!checkAttendance()) return;
+        setDurationTargetId(speakerId);
+        setDurationModalType('assign');
+        setSpeakingDuration("5");
+        setIsDurationModalOpen(true);
+    };
+
+    const handleConfirmDuration = async () => {
+        const minutes = parseInt(speakingDuration, 10);
+        if (isNaN(minutes) || minutes <= 0) {
+            toast.error("Thời gian phát biểu không hợp lệ (phải là số nguyên lớn hơn 0)");
+            return;
+        }
+
         try {
-            const res = await meetingApi.startSpeakerTurn(id || "", speakerId.toString(), 5);
-            if (res.success && res.data) {
-                setActiveTurnId(res.data.id);
+            if (durationModalType === 'assign' && durationTargetId) {
+                const res = await meetingApi.startSpeakerTurn(id || "", durationTargetId.toString(), minutes);
+                if (res.success && res.data) {
+                    setActiveTurnId(res.data.id);
+                }
+                toast.success("Đã chuyển quyền phát biểu");
+            } else if (durationModalType === 'add' && durationSelectedParticipants.length > 0) {
+                for (const participant of durationSelectedParticipants) {
+                    await meetingApi.startDirectSpeakerTurn(id || "", participant.id, minutes);
+                }
+                toast.success("Đã chỉ định phát biểu thành công");
+                setIsAddSpeakerModalOpen(false);
             }
-            toast.success("Đã chuyển quyền phát biểu");
             refreshData();
+            setIsDurationModalOpen(false);
+            setDurationModalType(null);
+            setDurationTargetId(null);
+            setDurationSelectedParticipants([]);
         } catch (error) {
-            toast.error("Không thể bắt đầu lượt phát biểu");
+            toast.error("Không thể thiết lập lượt phát biểu");
         }
     };
 
@@ -404,7 +514,7 @@ export function useDienBienPhienHop(guestToken?: string | null) {
         if (!checkAttendance()) return;
         try {
             let res;
-            const agendaIdStr = activeContent ? activeContent.toString() : undefined;
+            const agendaIdStr = activeContent && activeContent !== "GENERAL_AGENDA" ? activeContent.toString() : undefined;
             if (guestToken) {
                 res = await meetingApi.publicRequestToSpeak(guestToken, agendaIdStr);
             } else {
@@ -468,8 +578,8 @@ export function useDienBienPhienHop(guestToken?: string | null) {
             if (!delegatorId) return false;
             const delegator = (rawAttendees.participants || []).find((p: any) => p.id === delegatorId);
             if (!delegator) return false;
-            const isDelegatorAbsent = delegator.isFullSession || 
-                (delegator.absentAgendaItemIds && delegator.absentAgendaItemIds.includes(agendaId));
+            const isDelegatorAbsent = delegator.inviteStatus === "DECLINED" && (delegator.isFullSession || 
+                (delegator.absentAgendaItemIds && delegator.absentAgendaItemIds.includes(agendaId)));
             return isDelegatorAbsent;
         }
 
@@ -480,14 +590,14 @@ export function useDienBienPhienHop(guestToken?: string | null) {
             if (!delegatorId) return false;
             const delegator = (rawAttendees.participants || []).find((p: any) => p.id === delegatorId);
             if (!delegator) return false;
-            const isDelegatorAbsent = delegator.isFullSession || 
-                (delegator.absentAgendaItemIds && delegator.absentAgendaItemIds.includes(agendaId));
+            const isDelegatorAbsent = delegator.inviteStatus === "DECLINED" && (delegator.isFullSession || 
+                (delegator.absentAgendaItemIds && delegator.absentAgendaItemIds.includes(agendaId)));
             return isDelegatorAbsent;
         }
 
         // Normal delegate
-        const isAbsent = currentUserParticipant.isFullSession || 
-            (currentUserParticipant.absentAgendaItemIds && currentUserParticipant.absentAgendaItemIds.includes(agendaId));
+        const isAbsent = currentUserParticipant.inviteStatus === "DECLINED" && (currentUserParticipant.isFullSession || 
+            (currentUserParticipant.absentAgendaItemIds && currentUserParticipant.absentAgendaItemIds.includes(agendaId)));
         if (isAbsent) {
             return false;
         }
@@ -591,7 +701,7 @@ export function useDienBienPhienHop(guestToken?: string | null) {
             return;
         }
 
-        const targetLabel = option === "agree" ? "CÓ" : (option === "disagree" ? "KHÔNG" : "");
+        const targetLabel = option === "agree" ? "CÓ" : (option === "disagree" ? "KHÔNG" : "Ý KIẾN KHÁC");
         const voteOpt = motion.options.find((o: any) => o.label.toUpperCase() === targetLabel);
 
         if (!voteOpt) {
@@ -643,10 +753,15 @@ export function useDienBienPhienHop(guestToken?: string | null) {
 
     const handleViewVotingResult = async (issueId: string | number) => {
         try {
-            const res = await meetingApi.getVoteStatistics(issueId.toString());
+            const res = guestToken
+                ? await meetingApi.publicGetVoteStatistics(issueId.toString(), guestToken)
+                : await meetingApi.getVoteStatistics(issueId.toString());
             if (res.success && res.data) {
                 const mapped = mapVotingResults(res.data, meetingParticipants);
                 setVotingResultData(mapped);
+                // Ensure currentVotingIssue is set so toggle callback has motionId
+                const issue = votingIssues.find(i => String(i.id) === String(issueId));
+                if (issue) setCurrentVotingIssue(issue);
                 setIsVotingResultModalOpen(true);
             }
         } catch (error) {
@@ -654,9 +769,22 @@ export function useDienBienPhienHop(guestToken?: string | null) {
         }
     };
 
+    const handleToggleVotingList = async (motionId: string | number, show: boolean) => {
+        try {
+            const res = await meetingApi.toggleVotingList(motionId.toString(), show);
+            if (res.success && res.data) {
+                const mapped = mapVotingResults(res.data, meetingParticipants);
+                setVotingResultData(mapped);
+            }
+        } catch (error) {
+            toast.error("Không thể cập nhật trạng thái hiển thị danh sách biểu quyết");
+        }
+    };
+
     // --- Content handlers ---
     const handleStartContent = async (contentId: string | number) => {
         if (!checkAttendance()) return;
+        if (contentId === "GENERAL_AGENDA") return;
         try {
             await meetingApi.startAgenda(id || "", contentId.toString());
             toast.success("Đã bắt đầu điều hành nội dung họp");
@@ -669,6 +797,7 @@ export function useDienBienPhienHop(guestToken?: string | null) {
 
     const handleApproveContent = async (contentId: string | number, isApproved: boolean) => {
         if (!checkAttendance()) return;
+        if (contentId === "GENERAL_AGENDA") return;
         try {
             if (isApproved) {
                 await meetingApi.completeAgenda(id || "", contentId.toString());
@@ -687,13 +816,49 @@ export function useDienBienPhienHop(guestToken?: string | null) {
     const handleAddOpinionForContent = async (data: OpinionForContentData) => {
         if (!checkAttendance()) return;
         try {
-            await meetingApi.addFeedback(data.contentId.toString(), data.opinionDetail, "OPINION");
-            toast.success("Đã thêm ý kiến phản hồi cho nội dung");
+            let documentIds: string[] = [];
+            if (data.attachments && data.attachments.length > 0) {
+                const uploadPromises = data.attachments.map(file => meetingApi.uploadDocument(file));
+                const uploadResponses = await Promise.all(uploadPromises);
+                documentIds = uploadResponses
+                    .filter(res => res.success && res.data)
+                    .map(res => res.data!.id);
+            }
+
+            const documentName = data.documentId
+                ? availableDocuments.find((doc) => doc.value === data.documentId)?.label
+                : undefined;
+
+            if (guestToken) {
+                await meetingApi.publicCreateOpinion(guestToken, {
+                    opinionDetail: data.opinionDetail,
+                    documentName,
+                    documentIds
+                });
+            } else {
+                await meetingApi.createOpinion(id || "", {
+                    opinionDetail: data.opinionDetail,
+                    documentName,
+                    documentIds
+                });
+            }
+
+            toast.success("Đã gửi ý kiến đóng góp thành công");
             setIsAddOpinionForContentModalOpen(false);
             refreshData();
         } catch (error) {
-            toast.error("Không thể thêm góp ý cho nội dung");
+            toast.error("Không thể gửi ý kiến đóng góp");
         }
+    };
+
+    const handleViewOpinion = (opinion: Opinion) => {
+        setSelectedViewOpinion(opinion);
+        setIsViewOpinionModalOpen(true);
+    };
+
+    const handleCloseViewOpinion = () => {
+        setSelectedViewOpinion(null);
+        setIsViewOpinionModalOpen(false);
     };
 
     const handleOpenStartContent = () => {
@@ -733,7 +898,7 @@ export function useDienBienPhienHop(guestToken?: string | null) {
         // Derived
         currentSpeaker, waitingSpeakers,
         meetingContents, availableDocuments, availableContents,
-        mockDelegates, meetingParticipants,
+        mockDelegates, meetingParticipants, availableSpeakerParticipants,
 
         // Modal states
         isAddSpeakerModalOpen, setIsAddSpeakerModalOpen,
@@ -748,20 +913,28 @@ export function useDienBienPhienHop(guestToken?: string | null) {
         isVotingModalOpen, setIsVotingModalOpen,
         isPauseVotingModalOpen, setIsPauseVotingModalOpen,
         isVotingResultModalOpen, setIsVotingResultModalOpen,
+        isDurationModalOpen, setIsDurationModalOpen,
+        isViewOpinionModalOpen, setIsViewOpinionModalOpen,
+        selectedViewOpinion,
 
         // Handlers
         handleAddSpeakers, handleEndSpeaking,
         handlePrepareSpeech, handleAssignSpeech, handleRejectSpeech,
+        handleReorderSpeaker,
+        handleConfirmDuration,
+        speakingDuration, setSpeakingDuration,
         handleAddOpinion,
         handleToggleBroadcast, handleConfirmBroadcast,
         handleProceedFromReadiness, handleConfirmVotingTime,
         handleVote, handlePauseVoting, handleConfirmPause,
-        handleRevote, handleViewVotingResult,
+        handleRevote, handleViewVotingResult, handleToggleVotingList,
         handleStartContent, handleApproveContent,
         handleAddOpinionForContent,
         handleOpenStartContent, handleOpenApproveContent, handleOpenAddOpinionForContent,
         handleRequestToSpeak,
         handleSelfCheckIn,
+        handleViewOpinion,
+        handleCloseViewOpinion,
         isChairOrSecretary,
         checkAttendance,
         isAttendee: !!currentUserParticipant,

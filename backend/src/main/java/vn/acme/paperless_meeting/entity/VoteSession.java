@@ -69,6 +69,9 @@ public class VoteSession extends SoftDeletable {
 
     private Boolean allowChangeVote;
 
+    @Column(name = "show_voting_list")
+    private Boolean showVotingList = false;
+
     private Integer durationMinutes;
 
     private BigDecimal quorumRequiredPct;

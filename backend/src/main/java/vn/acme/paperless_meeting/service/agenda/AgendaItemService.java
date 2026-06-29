@@ -230,10 +230,6 @@ public class AgendaItemService {
         agendaItemFeedbackRepository.save(feedback);
 
         notifyAgendaUpdate(savedAgendaItem, "ASSIGN_PREPARER", "Bạn được gán chuẩn bị tài liệu", caller);
-        webSocketNotificationService.sendToTopic(
-            "/topic/meeting-updates",
-            Map.of("action", "REFRESH_MEETING_LIST", "meetingId", meetingId.toString())
-        );
 
         return toResponseWithDocs(savedAgendaItem);
     }
@@ -333,6 +329,10 @@ public class AgendaItemService {
         webSocketNotificationService.sendToTopic(
             "/topic/meeting/" + saved.getMeeting().getId(),
             Map.of("action", "REFRESH_MEETING_DETAIL", "status", saved.getMeeting().getStatus().name())
+        );
+        webSocketNotificationService.sendToTopic(
+            "/topic/meeting-updates",
+            Map.of("action", "REFRESH_MEETING_LIST", "meetingId", saved.getMeeting().getId().toString())
         );
 
         return response;
@@ -1027,6 +1027,10 @@ public class AgendaItemService {
         webSocketNotificationService.sendToTopic(
             "/topic/meeting/" + agendaItem.getMeeting().getId(),
             Map.of("action", "REFRESH_AGENDA", "status", agendaItem.getMeeting().getStatus().name())
+        );
+        webSocketNotificationService.sendToTopic(
+            "/topic/meeting-updates",
+            Map.of("action", "REFRESH_MEETING_LIST", "meetingId", agendaItem.getMeeting().getId().toString())
         );
     }
 

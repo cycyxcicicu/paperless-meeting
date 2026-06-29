@@ -73,6 +73,7 @@ interface NoiDungHopStepProps {
   isReadOnly?: boolean;
   isUpdateMode?: boolean;
   meetingId?: string;
+  hasProgramInStep1?: boolean;
 }
 
 
@@ -86,6 +87,7 @@ const NoiDungHopStep: React.FC<NoiDungHopStepProps> = ({
   isUpdateMode,
   meetingId,
   isReadOnly = false,
+  hasProgramInStep1 = false,
 }) => {
   const { subscribe } = useWebSocket();
   const { user } = useAuth();
@@ -429,6 +431,18 @@ const NoiDungHopStep: React.FC<NoiDungHopStepProps> = ({
 
   return (
     <div>
+      {hasProgramInStep1 && (
+        <div className="mb-4 flex items-start gap-3 bg-blue-50/70 border border-blue-200 rounded-xl p-4 text-blue-800 animate-in fade-in duration-200">
+          <AlertCircle className="h-5 w-5 shrink-0 text-blue-600 mt-0.5" />
+          <div className="space-y-1">
+            <span className="text-sm font-semibold block">Thông báo chương trình họp</span>
+            <p className="text-xs text-blue-700/90 leading-relaxed">
+              Bạn đã cung cấp nội dung chương trình họp ở <strong>Bước 1 (Chi tiết họp)</strong>. Do đó, việc nhập các nội dung chi tiết tại bước này là <strong>không bắt buộc</strong>. Bạn có thể bỏ qua hoặc chỉ nhập các nội dung chi tiết nếu cần thiết.
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="border border-gray-400 rounded-xl overflow-hidden">
         {/* Tabs */}
         <div className="border-b border-gray-200 bg-gray-50/50">

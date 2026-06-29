@@ -25,6 +25,7 @@ import vn.acme.paperless_meeting.entity.enums.MeetingStatus;
 import vn.acme.paperless_meeting.entity.enums.ParticipantRole;
 import vn.acme.paperless_meeting.entity.enums.ResourceType;
 import vn.acme.paperless_meeting.entity.enums.RoleName;
+import vn.acme.paperless_meeting.entity.enums.AgendaItemStatus;
 import vn.acme.paperless_meeting.exceptions.AppException;
 import vn.acme.paperless_meeting.exceptions.ErrorCode;
 import vn.acme.paperless_meeting.mapper.meeting.MeetingMapper;
@@ -279,6 +280,27 @@ class MeetingServiceTest {
         meetingService.submitForApproval(meetingId);
 
         // Assert
+        verify(approvalService, times(1)).submitResource(ResourceType.MEETING, meetingId, null, null, null);
+    }
+
+    @Test
+    void submitForApproval_WhenAgendaHasNoPreparer_ShouldNotThrowException() {
+        // Arrange
+        AgendaItem agendaItem = new AgendaItem();
+        agendaItem.setId(UUID.randomUUID());
+        agendaItem.setStatus(AgendaItemStatus.DRAFT);
+        agendaItem.setPreparedByUser(null); // No preparer
+        meeting.setAgendaItemList(List.of(agendaItem));
+
+        when(meetingRepository.findById(meetingId)).thenReturn(Optional.of(meeting));
+        when(currentUserService.getCurrentActiveUser()).thenReturn(caller);
+        when(meetingParticipantRepository.countByMeetingIdAndParticipantRole(meetingId, ParticipantRole.CHAIR)).thenReturn(1L);
+        when(meetingParticipantRepository.countByMeetingIdAndParticipantRole(meetingId, ParticipantRole.SECRETARY)).thenReturn(1L);
+        when(approvalService.submitResource(ResourceType.MEETING, meetingId, null, null, null))
+                .thenReturn(ApprovalRequestResponse.builder().build());
+
+        // Act & Assert (Should not throw exception despite agendaItem status being DRAFT)
+        assertDoesNotThrow(() -> meetingService.submitForApproval(meetingId));
         verify(approvalService, times(1)).submitResource(ResourceType.MEETING, meetingId, null, null, null);
     }
 

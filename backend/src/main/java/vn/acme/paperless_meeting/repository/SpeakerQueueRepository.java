@@ -13,5 +13,6 @@ public interface SpeakerQueueRepository extends JpaRepository<SpeakerQueue, UUID
     List<SpeakerQueue> findByQueueStatus(SpeakerQueueStatus queueStatus);
     boolean existsByMeetingIdAndUserIdAndQueueStatus(UUID meetingId, UUID userId, SpeakerQueueStatus queueStatus);
     boolean existsByMeetingIdAndGuestIdAndQueueStatus(UUID meetingId, UUID guestId, SpeakerQueueStatus queueStatus);
+    boolean existsByMeetingIdAndQueueStatus(UUID meetingId, SpeakerQueueStatus queueStatus);
     List<SpeakerQueue> findByMeetingId(UUID meetingId);
 }

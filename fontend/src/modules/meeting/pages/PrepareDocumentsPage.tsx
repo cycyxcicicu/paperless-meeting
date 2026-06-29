@@ -127,6 +127,26 @@ export default function PrepareDocumentsPage() {
   }, [subscribe, meetingId]);
 
   useEffect(() => {
+    if (!meetingId) return;
+
+    const handlePrivateNotification = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      const payload = customEvent.detail;
+      if (payload && payload.data && payload.data.meetingId === meetingId) {
+        if (payload.type === 'APPROVE_DOCS' || payload.type === 'REJECT_DOCS') {
+          console.log('Received private doc status update notification, reloading data...');
+          loadData(true);
+        }
+      }
+    };
+
+    window.addEventListener('ws:notification:any', handlePrivateNotification);
+    return () => {
+      window.removeEventListener('ws:notification:any', handlePrivateNotification);
+    };
+  }, [meetingId]);
+
+  useEffect(() => {
     if (!meetingId || agendaItems.length === 0) return;
 
     const unsubscribers = agendaItems.map(item => {

@@ -30,6 +30,7 @@ export interface MeetingResponse {
   chairName?: string;
   lateAfterMinutes?: number;
   agendaFile?: { id: string; name: string; url: string };
+  pendingParticipants?: string[];
   
   participantsCount?: number;
   documentsCount?: number;
@@ -40,12 +41,22 @@ export interface MeetingResponse {
   canSubmitApproval?: boolean;
   canUploadDocs?: boolean;
   canApprove?: boolean;
+  canApproveDocs?: boolean;
+  pendingApprovalCount?: number;
+  callerAttendanceStatus?: 'NOT_CHECKED_IN' | 'PRESENT' | 'ABSENT';
+  pendingAttendanceParticipants?: string[];
   canClose?: boolean;
   rejectReason?: string;
   cancelReason?: string;
   requiresInvitation?: boolean;
   invitationTemplateId?: string;
   invitationContent?: string;
+  docPreparationStatus?: 'PENDING' | 'SUBMITTED' | 'APPROVED' | 'REJECTED';
+  docPreparationRejectReason?: string;
+  myDocPendingCount?: number;
+  myDocSubmittedCount?: number;
+  myDocRejectedCount?: number;
+  myDocApprovedCount?: number;
 }
 
 export interface AgendaDocumentResponse {
@@ -187,6 +198,8 @@ export const meetingApi = {
     statuses?: string[];
     fromDate?: string;
     toDate?: string;
+    inviteStatus?: 'PENDING' | 'ACCEPTED' | 'DECLINED';
+    onlyMyMeetings?: boolean;
   }): Promise<ApiResponse<PageResponse<MeetingResponse>>> => {
     return api.get('/meetings', {
       params,
@@ -204,6 +217,14 @@ export const meetingApi = {
       params,
       paramsSerializer: (p) => serializeParamsWithArrays(p)
     });
+  },
+
+  getSidebarApprovalMeetings: (): Promise<ApiResponse<MeetingResponse[]>> => {
+    return api.get('/meetings/sidebar/approval');
+  },
+
+  getSidebarDocTaskMeetings: (): Promise<ApiResponse<MeetingResponse[]>> => {
+    return api.get('/meetings/sidebar/doc-tasks');
   },
 
   getMeetingById: (id: string): Promise<ApiResponse<MeetingResponse>> => {
@@ -405,6 +426,10 @@ export const meetingApi = {
     return api.get(`/motions/${motionId}/vote-statistics`);
   },
 
+  toggleVotingList: (motionId: string, show: boolean): Promise<ApiResponse<any>> => {
+    return api.put(`/motions/${motionId}/toggle-voting-list`, null, { params: { show } });
+  },
+
   castVote: (motionId: string, optionId: string): Promise<ApiResponse<any>> => {
     return api.post(`/motions/${motionId}/vote`, { optionId });
   },
@@ -441,6 +466,14 @@ export const meetingApi = {
     return api.post(`/meetings/${meetingId}/speakers/stop-turn/${turnId}`);
   },
 
+  prepareSpeakerTurn: (meetingId: string, queueId: string): Promise<ApiResponse<void>> => {
+    return api.post(`/meetings/${meetingId}/speakers/prepare/${queueId}`);
+  },
+
+  reorderSpeakersQueue: (meetingId: string, queueIds: string[]): Promise<ApiResponse<void>> => {
+    return api.put(`/meetings/${meetingId}/speakers/reorder`, { queueIds });
+  },
+
   // ========== Guest Public APIs ==========
 
   publicGetMeeting: (guestToken: string): Promise<ApiResponse<any>> => {
@@ -455,7 +488,7 @@ export const meetingApi = {
     return api.get(`/meetings/public/opinions`, { params: { guestToken } });
   },
 
-  publicCreateOpinion: (guestToken: string, data: { opinionDetail: string; documentName?: string }): Promise<ApiResponse<any>> => {
+  publicCreateOpinion: (guestToken: string, data: { opinionDetail: string; documentName?: string; documentIds?: string[] }): Promise<ApiResponse<any>> => {
     return api.post(`/meetings/public/opinions`, data, { params: { guestToken } });
   },
 

@@ -24,15 +24,17 @@ export function SpeakerTimerPanel({ currentSpeaker, onEndSpeaking, isGuest }: Sp
         if (!currentSpeaker) return;
 
         // Tính toán thời gian bắt đầu thực tế nếu có
-        let initialSeconds = 300;
-        if (currentSpeaker.startTime) {
+        const totalDuration = currentSpeaker.durationSeconds || 300;
+        let initialSeconds = totalDuration;
+        const startStr = currentSpeaker.speakingStartAt || currentSpeaker.startTime;
+        if (startStr) {
             try {
-                const start = new Date(currentSpeaker.startTime).getTime();
+                const start = new Date(startStr).getTime();
                 const now = Date.now();
                 const diffSeconds = Math.floor((now - start) / 1000);
-                initialSeconds = Math.max(0, 300 - diffSeconds);
+                initialSeconds = Math.max(0, totalDuration - diffSeconds);
             } catch (e) {
-                initialSeconds = 300;
+                initialSeconds = totalDuration;
             }
         }
 

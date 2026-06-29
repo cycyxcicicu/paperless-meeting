@@ -283,8 +283,8 @@ public class MotionServiceTest {
     // =====================================================================
 
     @Test
-    void castVote_WhenParticipantRoleIsChair_ShouldThrowException() {
-        // Arrange — CHAIR không được vote (chỉ PARTICIPANT mới được)
+    void castVote_WhenParticipantRoleIsSecretary_ShouldThrowException() {
+        // Arrange — SECRETARY không được vote
         VoteSession session = new VoteSession();
         session.setStatus(VoteSessionStatus.OPEN);
         session.setOpenedAt(LocalDateTime.now());
@@ -293,7 +293,7 @@ public class MotionServiceTest {
         motion.getVoteSessionList().add(session);
 
         participant.setAttendanceStatus(AttendanceStatus.PRESENT);
-        participant.setParticipantRole(ParticipantRole.CHAIR); // Chủ tọa không vote
+        participant.setParticipantRole(ParticipantRole.SECRETARY); // Thư ký không vote
 
         // Act & Assert
         AppException exception = assertThrows(AppException.class, () -> {
@@ -344,5 +344,56 @@ public class MotionServiceTest {
             motionService.startVote(motionId, 5);
         });
         assertEquals(ErrorCode.MEETING_STATUS_TRANSITION_INVALID, exception.getErrorCode());
+    }
+
+    @Test
+    void startVote_AsSecretary_Success() {
+        // Arrange
+        participant.setParticipantRole(ParticipantRole.SECRETARY);
+        when(meetingParticipantRepository.findByMeetingIdAndUserId(meetingId, userId))
+                .thenReturn(Optional.of(participant));
+        when(voteSessionRepository.save(any(VoteSession.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(motionRepository.save(any(Motion.class))).thenReturn(motion);
+        
+        MotionResponse expectedResponse = MotionResponse.builder()
+                .id(motionId)
+                .status(MotionStatus.SUBMITTED)
+                .build();
+        when(motionMapper.toResponse(any(Motion.class))).thenReturn(expectedResponse);
+
+        // Act
+        MotionResponse response = motionService.startVote(motionId, 10);
+
+        // Assert
+        assertNotNull(response);
+        assertEquals(MotionStatus.SUBMITTED, response.getStatus());
+    }
+
+    @Test
+    void stopVote_AsSecretary_Success() {
+        // Arrange
+        participant.setParticipantRole(ParticipantRole.SECRETARY);
+        when(meetingParticipantRepository.findByMeetingIdAndUserId(meetingId, userId))
+                .thenReturn(Optional.of(participant));
+
+        VoteSession activeSession = new VoteSession();
+        activeSession.setId(UUID.randomUUID());
+        activeSession.setStatus(VoteSessionStatus.OPEN);
+        activeSession.setOpenedAt(LocalDateTime.now());
+        activeSession.setDurationMinutes(10);
+        activeSession.setMotion(motion);
+        motion.getVoteSessionList().add(activeSession);
+
+        when(voteSessionRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+        when(motionRepository.save(any())).thenReturn(motion);
+        when(motionMapper.toResponse(any())).thenReturn(MotionResponse.builder().id(motionId).status(MotionStatus.CLOSED).build());
+        when(voteEligibilityRepository.countByVoteSessionId(any())).thenReturn(0L);
+
+        // Act
+        MotionResponse response = motionService.stopVote(motionId);
+        
+        // Assert
+        assertNotNull(response);
+        assertEquals(MotionStatus.CLOSED, response.getStatus());
     }
 }

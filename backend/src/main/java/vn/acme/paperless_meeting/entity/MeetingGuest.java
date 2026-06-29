@@ -90,6 +90,7 @@ public class MeetingGuest extends SoftDeletable {
 
     private String note;
 
+    @Builder.Default
     @Column(name = "is_substitute")
     private Boolean isSubstitute = false;
 

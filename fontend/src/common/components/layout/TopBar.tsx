@@ -10,6 +10,7 @@ import {
     User,
     UserCircle,
     Users,
+    BookOpen,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useState, useRef, useEffect } from "react";

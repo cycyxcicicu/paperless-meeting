@@ -7,17 +7,20 @@ interface MeetingDocumentSectionProps {
     agendaItems: any[];
     viewDocument: (docId: string) => void;
     downloadDocument: (docId: string, title: string) => void;
+    agendaFile?: { id: string; name: string; url: string } | null;
 }
 
 export const MeetingDocumentSection: React.FC<MeetingDocumentSectionProps> = ({
     agendaItems,
     viewDocument,
     downloadDocument,
+    agendaFile,
 }) => {
-    const totalDocsCount = agendaItems.reduce(
-        (acc: number, item: any) => acc + (item.documents?.length || 0),
-        0
-    );
+    const totalDocsCount =
+        agendaItems.reduce(
+            (acc: number, item: any) => acc + (item.documents?.length || 0),
+            0
+        ) + (agendaFile ? 1 : 0);
 
     return (
         <CollapsibleSection
@@ -25,7 +28,55 @@ export const MeetingDocumentSection: React.FC<MeetingDocumentSectionProps> = ({
             defaultExpanded={false}
         >
             <div className="space-y-4 px-2">
-                {agendaItems.length === 0 ? (
+                {agendaFile && (
+                    <div className="p-4 bg-red-50/30 border border-red-100 rounded-xl hover:shadow-sm transition-shadow">
+                        <div className="flex flex-col md:flex-row md:items-start justify-between border-b border-red-100/50 pb-3 mb-3 gap-2">
+                            <div>
+                                <h4 className="font-semibold text-[#C8102E] text-[15px]">
+                                    Tài liệu chung / Chương trình họp
+                                </h4>
+                                <p className="text-xs text-gray-500 mt-1">
+                                    Tài liệu tổng quan của phiên họp
+                                </p>
+                            </div>
+                        </div>
+                        <div className="flex items-center justify-between p-2 rounded-lg bg-white border border-gray-100 hover:bg-gray-50 transition-colors">
+                            <div className="flex items-center gap-2">
+                                <FileText className="w-4 h-4 text-red-500 shrink-0" />
+                                <div className="text-xs">
+                                    <span className="text-gray-800 font-medium">
+                                        {agendaFile.name || "Chương trình họp"}
+                                    </span>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-1">
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="w-7 h-7 text-gray-500 hover:text-[#C8102E]"
+                                    onClick={() => viewDocument(agendaFile.id)}
+                                >
+                                    <Eye className="w-3.5 h-3.5" />
+                                </Button>
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="w-7 h-7 text-gray-500 hover:text-[#C8102E]"
+                                    onClick={() =>
+                                        downloadDocument(
+                                            agendaFile.id,
+                                            agendaFile.name
+                                        )
+                                    }
+                                >
+                                    <Download className="w-3.5 h-3.5" />
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {agendaItems.length === 0 && !agendaFile ? (
                     <p className="text-sm text-gray-500 text-center py-4">
                         Chưa có nội dung họp & tài liệu.
                     </p>
@@ -77,9 +128,14 @@ export const MeetingDocumentSection: React.FC<MeetingDocumentSectionProps> = ({
                                                 <div className="flex items-center gap-2">
                                                     <FileText className="w-4 h-4 text-red-500 shrink-0" />
                                                     <div className="text-xs">
-                                                        <span className="text-gray-800">
+                                                        <div className="text-gray-800 font-medium">
                                                             {doc.title || doc.fileName || "Tài liệu"}
-                                                        </span>
+                                                        </div>
+                                                        {doc.createdByFullName && (
+                                                            <div className="text-[10px] text-gray-500 mt-0.5">
+                                                                Người chuẩn bị/tải lên: {doc.createdByFullName}
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 </div>
                                                 <div className="flex items-center gap-1">

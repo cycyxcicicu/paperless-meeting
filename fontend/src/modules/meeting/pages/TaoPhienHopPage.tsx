@@ -31,7 +31,7 @@ import { WizardFooter } from "@/modules/meeting/components/WizardFooter";
 import { WizardStepper } from "@/modules/meeting/components/WizardStepper";
 import { meetingApi } from "@/modules/meeting/services/meeting.api";
 import { AlertCircle, ArrowLeft } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
 import {
     chiTietHopSchema,
@@ -193,6 +193,35 @@ const TaoPhienHopPage = () => {
 
     const [noiDungErrors, setNoiDungErrors] = useState<Record<string, any>>({});
 
+    const hasProgramInStep1 = useMemo(() => {
+        if (chiTietData.noiDungChuongTrinh === "text") {
+            const plainText = chiTietData.noiDungChuongTrinhText
+                ? chiTietData.noiDungChuongTrinhText.replace(/<[^>]*>/g, "").trim()
+                : "";
+            return plainText.length > 0;
+        } else if (chiTietData.noiDungChuongTrinh === "upload") {
+            return !!(
+                chiTietData.noiDungChuongTrinhFile &&
+                (chiTietData.noiDungChuongTrinhFile.id ||
+                    chiTietData.noiDungChuongTrinhFile.name)
+            );
+        }
+        return false;
+    }, [
+        chiTietData.noiDungChuongTrinh,
+        chiTietData.noiDungChuongTrinhText,
+        chiTietData.noiDungChuongTrinhFile,
+    ]);
+
+    const isStep4EffectivelyEmpty = useMemo(() => {
+        return noiDungData.contents.every(
+            (item) =>
+                !item.noiDungChiTiet?.trim() &&
+                !item.thoiGianBatDau &&
+                !item.thoiGianKetThuc,
+        );
+    }, [noiDungData.contents]);
+
     // Dynamic error clearing for Step 1
     useEffect(() => {
         setChiTietErrors((prev) => {
@@ -320,8 +349,12 @@ const TaoPhienHopPage = () => {
             `/topic/meeting/${activeMeetingId}`,
             (message: any) => {
                 if (
-                    message.action === "REFRESH_MEETING_DETAIL" ||
-                    message.action === "REFRESH_MEETING_STATUS"
+                    [
+                        "REFRESH_MEETING_DETAIL",
+                        "REFRESH_MEETING_STATUS",
+                        "REFRESH_AGENDA",
+                        "REFRESH_ATTENDEES",
+                    ].includes(message.action)
                 ) {
                     if (message.status) {
                         setMeetingStatus(message.status);
@@ -740,6 +773,12 @@ const TaoPhienHopPage = () => {
         }
     }, [id, copyFromId]);
 
+    useEffect(() => {
+        if (location.hash === "#noi-dung") {
+            setCurrentStep(4);
+        }
+    }, [location.hash]);
+
     // Validation
     const validateStep1 = (): boolean => {
         const result = chiTietHopSchema.safeParse(chiTietData);
@@ -776,6 +815,26 @@ const TaoPhienHopPage = () => {
     };
 
     const validateStep4 = (): boolean => {
+        if (hasProgramInStep1 && isStep4EffectivelyEmpty) {
+            setNoiDungErrors({});
+            return true;
+        }
+
+        if (!hasProgramInStep1 && isStep4EffectivelyEmpty) {
+            toast.error("Vui lòng nhập nội dung họp chi tiết do chưa có chương trình họp ở bước 1.");
+            if (noiDungData.contents.length > 0) {
+                const firstId = noiDungData.contents[0].id;
+                setNoiDungErrors({
+                    [firstId]: {
+                        noiDungChiTiet: "Vui lòng nhập tiêu đề nội dung",
+                        thoiGianBatDau: "Vui lòng chọn thời gian bắt đầu",
+                        thoiGianKetThuc: "Vui lòng chọn thời gian kết thúc",
+                    },
+                });
+            }
+            return false;
+        }
+
         const errors: Record<string, any> = {};
 
         // Gọi Zod Schema để validate (sẽ check require, và logic kết thúc sau bắt đầu)
@@ -867,6 +926,38 @@ const TaoPhienHopPage = () => {
     // Helper Pipeline to save step 4 Agenda & Upload/Attach Files
     const saveAgendaItemsPipeline = async () => {
         if (!activeMeetingId) throw new Error("Thiếu ID cuộc họp");
+
+        const nonHandledEmpty = hasProgramInStep1 && isStep4EffectivelyEmpty;
+        if (nonHandledEmpty) {
+            const res = await meetingApi.createAgendaItem(
+                activeMeetingId,
+                [],
+            );
+            if (!res.success) {
+                throw new Error(
+                    res.message || "Lưu danh sách nội dung họp thất bại",
+                );
+            }
+            setNoiDungData({
+                contents: [
+                    {
+                        id: "content-1",
+                        noiDungChiTiet: "",
+                        thoiGianBatDau: "",
+                        thoiGianKetThuc: "",
+                        nguoiChuanBi: "",
+                        nguoiDuyet: "",
+                        taiLieu: [],
+                        bieuQuyetIssues: [],
+                        thanhPhanThamDu: {
+                            donVi: [],
+                            khachMoi: [],
+                        },
+                    },
+                ],
+            });
+            return;
+        }
 
         const batchItems = noiDungData.contents.map((c, index) => {
             const duration = Math.max(
@@ -1549,6 +1640,9 @@ const TaoPhienHopPage = () => {
                                             isUpdateMode={isUpdateMode}
                                             meetingId={
                                                 activeMeetingId || undefined
+                                            }
+                                            hasProgramInStep1={
+                                                hasProgramInStep1
                                             }
                                         />
                                     )}

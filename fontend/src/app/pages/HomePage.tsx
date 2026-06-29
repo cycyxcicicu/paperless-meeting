@@ -1,510 +1,900 @@
-import React, { useState } from 'react';
-import { Clock, MapPin, User, Calendar } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { Clock, MapPin, User, Calendar, Shield, Users, Landmark, FileText, ArrowRight, Check, X, AlertCircle } from 'lucide-react';
 import { Badge } from '@/common/components/ui/badge';
 import { Button } from '@/common/components/ui/button';
+import { TableTooltip } from '@/common/components/table-engine/TableTooltip';
+import { useAuth } from '@/app/context/AuthContext';
+import { useNavigate, Link } from 'react-router';
+import { meetingApi, MeetingResponse } from '@/modules/meeting/services/meeting.api';
+import { userApi } from '@/modules/user/services/user.api';
+import { departmentApi } from '@/modules/organization/services/department.api';
+import { toast } from '@/lib/toast';
+import { useWebSocket } from '@/app/context/WebSocketContext';
+import { format } from 'date-fns';
+import { getErrorMessage } from '@/lib/api/error';
 
-interface MeetingItem {
-  id: number;
-  name: string;
-  time: string;
-  chairperson: string;
-  room: string;
-  status: 'ongoing' | 'upcoming' | 'unconfirmed';
-  hasParticipated?: boolean;
-}
-
-interface ApprovalMeeting {
-  id: number;
-  name: string;
-  time: string;
-  chairperson: string;
-}
-
-interface DocumentMeeting {
-  id: number;
-  name: string;
-  time: string;
-  documentStatus: 'missing' | 'preparing';
+interface TabState {
+  meetings: MeetingResponse[];
+  page: number;
+  loading: boolean;
+  hasMore: boolean;
+  totalElements: number;
 }
 
 const HomePage = () => {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const { subscribe } = useWebSocket();
+
+  // Phân chia state phân trang độc lập cho từng Tab
+  const [ongoingState, setOngoingState] = useState<TabState>({
+    meetings: [],
+    page: 0,
+    loading: false,
+    hasMore: true,
+    totalElements: 0,
+  });
+
+  const [upcomingState, setUpcomingState] = useState<TabState>({
+    meetings: [],
+    page: 0,
+    loading: false,
+    hasMore: true,
+    totalElements: 0,
+  });
+
+  const [unconfirmedState, setUnconfirmedState] = useState<TabState>({
+    meetings: [],
+    page: 0,
+    loading: false,
+    hasMore: true,
+    totalElements: 0,
+  });
+
   const [activeTab, setActiveTab] = useState<'ongoing' | 'upcoming' | 'unconfirmed'>('ongoing');
 
-  // Statistics
-  const stats = [
-    {
-      label: 'Phiên họp đang diễn ra',
-      value: 1,
-      bgColor: 'bg-gradient-to-br from-green-50 to-green-100/50',
-      borderColor: 'border-green-200',
-      textColor: 'text-green-700',
-    },
-    {
-      label: 'Phiên họp sắp diễn ra',
-      value: 5,
-      bgColor: 'bg-gradient-to-br from-blue-50 to-blue-100/50',
-      borderColor: 'border-blue-200',
-      textColor: 'text-blue-700',
-    },
-    {
-      label: 'Phiên họp chưa xác nhận',
-      value: 3,
-      bgColor: 'bg-gradient-to-br from-amber-50 to-amber-100/50',
-      borderColor: 'border-amber-200',
-      textColor: 'text-amber-700',
-    },
-    {
-      label: 'Tổng số phiếu lấy ý kiến',
-      value: 12,
-      bgColor: 'bg-gradient-to-br from-purple-50 to-purple-100/50',
-      borderColor: 'border-purple-200',
-      textColor: 'text-purple-700',
-    },
-  ];
+  // State lưu trữ dữ liệu cuộc họp sidebar (đã được lọc từ backend)
+  const [approvalMeetings, setApprovalMeetings] = useState<MeetingResponse[]>([]);
+  const [preparationMeetings, setPreparationMeetings] = useState<MeetingResponse[]>([]);
+  const [adminStats, setAdminStats] = useState<{
+    totalUsers: number;
+    activeUsers: number;
+    totalUnits: number;
+    activeUnits: number;
+  } | null>(null);
 
-  // Mock data for meetings
-  const allMeetings: MeetingItem[] = [
-    {
-      id: 1,
-      name: 'Phiên họp HĐND tỉnh Quảng Ninh lần thứ 18',
-      time: '09:00 - 11:30, 20/04/2026',
-      chairperson: 'Nguyễn Văn A',
-      room: 'Phòng họp Hội đồng tỉnh',
-      status: 'ongoing',
-    },
-    {
-      id: 2,
-      name: 'Phiên họp UBND tỉnh Quảng Ninh về Kế hoạch đầu tư công Quý 2',
-      time: '14:00 - 16:00, 22/04/2026',
-      chairperson: 'Trần Thị B',
-      room: 'Phòng họp A - Tầng 5',
-      status: 'upcoming',
-      hasParticipated: true,
-    },
-    {
-      id: 3,
-      name: 'Phiên họp Ban Thường vụ Tỉnh ủy lần thứ 25',
-      time: '08:30 - 12:00, 25/04/2026',
-      chairperson: 'Lê Văn C',
-      room: 'Hội trường Tỉnh ủy',
-      status: 'upcoming',
-      hasParticipated: true,
-    },
-    {
-      id: 4,
-      name: 'Phiên họp chuyên đề về phát triển du lịch bền vững',
-      time: '09:00 - 11:00, 28/04/2026',
-      chairperson: 'Phạm Thị D',
-      room: 'Phòng họp B - Tầng 3',
-      status: 'unconfirmed',
-      hasParticipated: false,
-    },
-    {
-      id: 5,
-      name: 'Phiên họp về triển khai dự án hạ tầng giao thông',
-      time: '14:30 - 17:00, 30/04/2026',
-      chairperson: 'Hoàng Văn E',
-      room: 'Phòng họp C - Tầng 2',
-      status: 'unconfirmed',
-      hasParticipated: false,
-    },
-    {
-      id: 6,
-      name: 'Phiên họp về công tác phòng chống tham nhũng',
-      time: '09:30 - 11:30, 23/04/2026',
-      chairperson: 'Vũ Văn F',
-      room: 'Phòng họp D - Tầng 4',
-      status: 'upcoming',
-      hasParticipated: true,
-    },
-    {
-      id: 7,
-      name: 'Phiên họp triển khai chương trình xây dựng nông thôn mới',
-      time: '14:00 - 16:30, 26/04/2026',
-      chairperson: 'Đặng Thị G',
-      room: 'Hội trường UBND huyện',
-      status: 'upcoming',
-      hasParticipated: false,
-    },
-    {
-      id: 8,
-      name: 'Phiên họp về chính sách hỗ trợ doanh nghiệp SME',
-      time: '08:00 - 10:00, 29/04/2026',
-      chairperson: 'Bùi Văn H',
-      room: 'Phòng họp E - Tầng 6',
-      status: 'unconfirmed',
-      hasParticipated: false,
-    },  {
-      id: 9,
-      name: 'Phiên họp HĐND tỉnh Quảng Ninh lần thứ 18',
-      time: '09:00 - 11:30, 20/04/2026',
-      chairperson: 'Nguyễn Văn A',
-      room: 'Phòng họp Hội đồng tỉnh',
-      status: 'ongoing',
-    },
-    {
-      id: 10,
-      name: 'Phiên họp UBND tỉnh Quảng Ninh về Kế hoạch đầu tư công Quý 2',
-      time: '14:00 - 16:00, 22/04/2026',
-      chairperson: 'Trần Thị B',
-      room: 'Phòng họp A - Tầng 5',
-      status: 'upcoming',
-      hasParticipated: true,
-    },
-    {
-      id: 11,
-      name: 'Phiên họp Ban Thường vụ Tỉnh ủy lần thứ 25',
-      time: '08:30 - 12:00, 25/04/2026',
-      chairperson: 'Lê Văn C',
-      room: 'Hội trường Tỉnh ủy',
-      status: 'upcoming',
-      hasParticipated: true,
-    },
-    {
-      id: 12,
-      name: 'Phiên họp chuyên đề về phát triển du lịch bền vững',
-      time: '09:00 - 11:00, 28/04/2026',
-      chairperson: 'Phạm Thị D',
-      room: 'Phòng họp B - Tầng 3',
-      status: 'unconfirmed',
-      hasParticipated: false,
-    },
-    {
-      id: 13,
-      name: 'Phiên họp về triển khai dự án hạ tầng giao thông',
-      time: '14:30 - 17:00, 30/04/2026',
-      chairperson: 'Hoàng Văn E',
-      room: 'Phòng họp C - Tầng 2',
-      status: 'unconfirmed',
-      hasParticipated: false,
-    },
-    {
-      id: 14,
-      name: 'Phiên họp về công tác phòng chống tham nhũng',
-      time: '09:30 - 11:30, 23/04/2026',
-      chairperson: 'Vũ Văn F',
-      room: 'Phòng họp D - Tầng 4',
-      status: 'upcoming',
-      hasParticipated: true,
-    },
-    {
-      id: 15,
-      name: 'Phiên họp triển khai chương trình xây dựng nông thôn mới',
-      time: '14:00 - 16:30, 26/04/2026',
-      chairperson: 'Đặng Thị G',
-      room: 'Hội trường UBND huyện',
-      status: 'upcoming',
-      hasParticipated: false,
-    },
-    {
-      id: 16,
-      name: 'Phiên họp về chính sách hỗ trợ doanh nghiệp SME',
-      time: '08:00 - 10:00, 29/04/2026',
-      chairperson: 'Bùi Văn H',
-      room: 'Phòng họp E - Tầng 6',
-      status: 'unconfirmed',
-      hasParticipated: false,
-    },
-  ];
+  const isSuperAdmin = user?.role?.roleCode === 'SUPER_ADMIN';
+  const isDeptAdmin = user?.role?.roleCode === 'DEPARTMENT_ADMIN';
+  const isAdminOrDeptAdmin = isSuperAdmin || isDeptAdmin;
 
-  const filteredMeetings = allMeetings.filter((m) => m.status === activeTab);
+  // Sử dụng Refs để lưu trữ trạng thái mới nhất của các tab, tránh stale closures khi scroll
+  const ongoingRef = useRef(ongoingState);
+  const upcomingRef = useRef(upcomingState);
+  const unconfirmedRef = useRef(unconfirmedState);
 
-  // Mock data for approval meetings
-  const approvalMeetings: ApprovalMeeting[] = [
-    {
-      id: 101,
-      name: 'Phiên họp UBND tỉnh về quy hoạch đô thị',
-      time: '15:00, 21/04/2026',
-      chairperson: 'Nguyễn Văn X',
-    },
-    {
-      id: 102,
-      name: 'Phiên họp xét duyệt dự án đầu tư hạ tầng khu công nghiệp',
-      time: '09:00, 23/04/2026',
-      chairperson: 'Trần Thị Y',
-    },
-    {
-      id: 103,
-      name: 'Phiên họp Ban Chấp hành về công tác tổ chức',
-      time: '14:00, 24/04/2026',
-      chairperson: 'Lê Văn Z',
-    },
-  ];
+  useEffect(() => { ongoingRef.current = ongoingState; }, [ongoingState]);
+  useEffect(() => { upcomingRef.current = upcomingState; }, [upcomingState]);
+  useEffect(() => { unconfirmedRef.current = unconfirmedState; }, [unconfirmedState]);
 
-  // Mock data for document meetings
-  const documentMeetings: DocumentMeeting[] = [
-    {
-      id: 201,
-      name: 'Phiên họp HĐND về ngân sách năm 2026',
-      time: '08:30, 22/04/2026',
-      documentStatus: 'missing',
-    },
-    {
-      id: 202,
-      name: 'Phiên họp chuyên đề về giáo dục',
-      time: '10:00, 25/04/2026',
-      documentStatus: 'preparing',
-    },
-    {
-      id: 203,
-      name: 'Phiên họp về chính sách y tế cơ sở',
-      time: '14:30, 27/04/2026',
-      documentStatus: 'missing',
-    },
-    {
-      id: 204,
-      name: 'Phiên họp Ban Thường vụ về công tác tuyên truyền',
-      time: '09:00, 29/04/2026',
-      documentStatus: 'preparing',
-    },
-  ];
+  // Hàm tải dữ liệu cuộc họp phân trang của từng Tab từ backend
+  const fetchTabMeetings = async (tab: 'ongoing' | 'upcoming' | 'unconfirmed', isRefresh: boolean = false) => {
+    const currentState = tab === 'ongoing' 
+      ? ongoingRef.current 
+      : tab === 'upcoming' 
+        ? upcomingRef.current 
+        : unconfirmedRef.current;
 
-  const MeetingCard = ({ meeting }: { meeting: MeetingItem }) => (
-    <div className="bg-white border border-gray-200 rounded-xl p-5 hover:shadow-md transition-all">
+    if (currentState.loading || (!currentState.hasMore && !isRefresh)) {
+      return;
+    }
+
+    const setTargetState = tab === 'ongoing' 
+      ? setOngoingState 
+      : tab === 'upcoming' 
+        ? setUpcomingState 
+        : setUnconfirmedState;
+
+    const nextPage = isRefresh ? 0 : currentState.page;
+
+    setTargetState(prev => ({ ...prev, loading: true }));
+
+    try {
+      let res;
+      if (tab === 'ongoing') {
+        res = await meetingApi.getMeetings({
+          page: nextPage,
+          size: 10,
+          statuses: ['IN_PROGRESS'],
+          onlyMyMeetings: true,
+          inviteStatus: 'ACCEPTED'
+        });
+      } else if (tab === 'upcoming') {
+        res = await meetingApi.getMeetings({
+          page: nextPage,
+          size: 10,
+          statuses: ['APPROVED', 'UPCOMING'],
+          onlyMyMeetings: true,
+          inviteStatus: 'ACCEPTED'
+        });
+      } else {
+        res = await meetingApi.getMeetings({
+          page: nextPage,
+          size: 10,
+          statuses: ['UPCOMING', 'IN_PROGRESS'],
+          inviteStatus: 'PENDING',
+          onlyMyMeetings: true
+        });
+      }
+
+      if (res.success && res.data) {
+        const newMeetings = res.data.content;
+        const isLast = res.data.last;
+
+        setTargetState(prev => {
+          const existingMeetings = isRefresh ? [] : prev.meetings;
+          const combined = [...existingMeetings, ...newMeetings];
+          const unique = combined.filter((m, index, self) =>
+            self.findIndex(t => t.id === m.id) === index
+          );
+
+          return {
+            meetings: unique,
+            page: nextPage + 1,
+            loading: false,
+            hasMore: !isLast && newMeetings.length > 0,
+            totalElements: res.data.totalElements || 0
+          };
+        });
+      } else {
+        setTargetState(prev => ({ ...prev, loading: false }));
+      }
+    } catch (error) {
+      console.error(`Error fetching ${tab} meetings:`, error);
+      setTargetState(prev => ({ ...prev, loading: false }));
+    }
+  };
+
+  // Lấy dữ liệu sidebar: Cuộc họp cần phê duyệt (đã lọc từ backend)
+  const fetchSidebarApproval = async () => {
+    try {
+      const res = await meetingApi.getSidebarApprovalMeetings();
+      if (res.success && res.data) {
+        setApprovalMeetings(res.data);
+      }
+    } catch (error) {
+      console.error('Error fetching sidebar approval meetings:', error);
+    }
+  };
+
+  // Lấy dữ liệu sidebar: Tài liệu cần xử lý (đã lọc từ backend)
+  const fetchSidebarDocTasks = async () => {
+    try {
+      const res = await meetingApi.getSidebarDocTaskMeetings();
+      if (res.success && res.data) {
+        setPreparationMeetings(res.data);
+      }
+    } catch (error) {
+      console.error('Error fetching sidebar doc-task meetings:', error);
+    }
+  };
+
+  // Lấy thống kê hệ thống (dành cho Admin)
+  const fetchAdminStats = async () => {
+    if (!isSuperAdmin) return;
+    try {
+      const [userRes, deptRes] = await Promise.all([
+        userApi.getStats(),
+        departmentApi.getStats()
+      ]);
+      if (userRes.success && deptRes.success) {
+        setAdminStats({
+          totalUsers: userRes.data?.totalUsers || 0,
+          activeUsers: userRes.data?.activeUsers || 0,
+          totalUnits: deptRes.data?.totalUnits || 0,
+          activeUnits: deptRes.data?.activeUnits || 0
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching admin stats:', error);
+    }
+  };
+
+  // Làm mới toàn bộ dữ liệu trang chủ
+  const handleRefreshAll = () => {
+    fetchSidebarApproval();
+    fetchSidebarDocTasks();
+    fetchAdminStats();
+    fetchTabMeetings('ongoing', true);
+    fetchTabMeetings('upcoming', true);
+    fetchTabMeetings('unconfirmed', true);
+  };
+
+  useEffect(() => {
+    handleRefreshAll();
+  }, [user]);
+
+  // Đăng ký WebSocket
+  useEffect(() => {
+    let debounceTimeout: any = null;
+    const unsubscribeWs = subscribe('/topic/meeting-updates', (message) => {
+      if (debounceTimeout) clearTimeout(debounceTimeout);
+      debounceTimeout = setTimeout(() => {
+        handleRefreshAll();
+      }, 300);
+    });
+    return () => {
+      unsubscribeWs();
+      if (debounceTimeout) clearTimeout(debounceTimeout);
+    };
+  }, [subscribe]);
+
+  // Xử lý sự kiện cuộn container danh sách cuộc họp (Lazy Load 80%)
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const container = e.currentTarget;
+    const { scrollTop, scrollHeight, clientHeight } = container;
+    if (scrollTop + clientHeight >= 0.8 * scrollHeight) {
+      fetchTabMeetings(activeTab);
+    }
+  };
+
+  // Trả về trực tiếp danh sách cuộc họp của tab hiện tại (đã được lọc từ backend)
+  const displayMeetings = useMemo(() => {
+    if (activeTab === 'ongoing') {
+      return ongoingState.meetings;
+    }
+    if (activeTab === 'upcoming') {
+      return upcomingState.meetings;
+    }
+    return unconfirmedState.meetings;
+  }, [activeTab, ongoingState.meetings, upcomingState.meetings, unconfirmedState.meetings]);
+
+  // Danh sách sidebar: Dữ liệu đã được lọc từ backend, không cần filter ở frontend
+
+  // Định nghĩa Thống kê (Stats counters)
+  const stats = useMemo(() => {
+    if (isSuperAdmin && adminStats) {
+      return [
+        {
+          label: 'Tổng người dùng',
+          value: adminStats.totalUsers,
+          subLabel: `${adminStats.activeUsers} hoạt động`,
+          icon: Users,
+          bgColor: 'from-blue-50 to-blue-100/50',
+          borderColor: 'border-blue-200',
+          textColor: 'text-blue-700',
+        },
+        {
+          label: 'Đơn vị phòng ban',
+          value: adminStats.totalUnits,
+          subLabel: `${adminStats.activeUnits} hoạt động`,
+          icon: Landmark,
+          bgColor: 'from-purple-50 to-purple-100/50',
+          borderColor: 'border-purple-200',
+          textColor: 'text-purple-700',
+        },
+        {
+          label: 'Chờ phê duyệt',
+          value: approvalMeetings.length,
+          subLabel: 'Cuộc họp cần duyệt',
+          icon: Calendar,
+          bgColor: 'from-amber-50 to-amber-100/50',
+          borderColor: 'border-amber-200',
+          textColor: 'text-amber-700',
+        },
+        {
+          label: 'Đang diễn ra',
+          value: ongoingState.totalElements,
+          subLabel: 'Vào phòng họp ngay',
+          icon: Clock,
+          bgColor: 'from-green-50 to-green-100/50',
+          borderColor: 'border-green-200',
+          textColor: 'text-green-700',
+        },
+      ];
+    }
+
+    return [
+      {
+        label: 'Đang diễn ra',
+        value: ongoingState.totalElements,
+        subLabel: 'Vào họp ngay',
+        icon: Clock,
+        bgColor: 'from-green-50 to-green-100/50',
+        borderColor: 'border-green-200',
+        textColor: 'text-green-700',
+      },
+      {
+        label: 'Sắp diễn ra',
+        value: upcomingState.totalElements,
+        subLabel: 'Lịch họp đã nhận',
+        icon: Calendar,
+        bgColor: 'from-blue-50 to-blue-100/50',
+        borderColor: 'border-blue-200',
+        textColor: 'text-blue-700',
+      },
+      {
+        label: 'Chưa xác nhận',
+        value: unconfirmedState.totalElements,
+        subLabel: 'Yêu cầu RSVP',
+        icon: AlertCircle,
+        bgColor: 'from-amber-50 to-amber-100/50',
+        borderColor: 'border-amber-200',
+        textColor: 'text-amber-700',
+      },
+      {
+        label: 'Tài liệu cần xử lý',
+        value: preparationMeetings.length,
+        subLabel: 'Tải lên hoặc phê duyệt',
+        icon: FileText,
+        bgColor: 'from-purple-50 to-purple-100/50',
+        borderColor: 'border-purple-200',
+        textColor: 'text-purple-700',
+      },
+    ];
+  }, [isSuperAdmin, adminStats, approvalMeetings.length, preparationMeetings.length, ongoingState.totalElements, upcomingState.totalElements, unconfirmedState.totalElements]);
+
+  const formatTime = (startStr: string, endStr: string) => {
+    try {
+      const start = new Date(startStr);
+      const end = new Date(endStr);
+      return `${format(start, 'HH:mm')} - ${format(end, 'HH:mm')}, ${format(start, 'dd/MM/yyyy')}`;
+    } catch {
+      return 'Chưa xác định';
+    }
+  };
+
+  // Xác nhận tham gia
+  const handleAcceptInvite = async (meetingId: string) => {
+    if (!user?.id) return;
+    try {
+      const res = await meetingApi.updateInviteStatus(meetingId, user.id, {
+        inviteStatus: 'ACCEPTED',
+      });
+      if (res.success) {
+        toast.success('Xác nhận tham gia cuộc họp thành công!');
+        handleRefreshAll();
+      } else {
+        toast.error('Thất bại', res.message || 'Không thể xác nhận tham gia.');
+      }
+    } catch (error) {
+      console.error('Error accepting invite:', error);
+      toast.error('Lỗi', getErrorMessage(error, 'Đã xảy ra lỗi khi xác nhận tham gia.'));
+    }
+  };
+
+  // Từ chối tham gia
+  const handleDeclineInvite = async (meetingId: string) => {
+    if (!user?.id) return;
+    const reason = prompt('Vui lòng nhập lý do từ chối tham gia (nếu có):');
+    if (reason === null) return;
+    try {
+      const res = await meetingApi.updateInviteStatus(meetingId, user.id, {
+        inviteStatus: 'DECLINED',
+        declineReason: reason || undefined,
+      });
+      if (res.success) {
+        toast.success('Đã từ chối tham gia cuộc họp.');
+        handleRefreshAll();
+      } else {
+        toast.error('Thất bại', res.message || 'Không thể từ chối tham gia.');
+      }
+    } catch (error) {
+      console.error('Error declining invite:', error);
+      toast.error('Lỗi', getErrorMessage(error, 'Đã xảy ra lỗi khi từ chối tham gia.'));
+    }
+  };
+
+  // Phê duyệt nhanh cuộc họp
+  const handleApproveMeeting = async (meetingId: string) => {
+    try {
+      const res = await meetingApi.approveMeeting(meetingId);
+      if (res.success) {
+        toast.success('Phê duyệt cuộc họp thành công!');
+        handleRefreshAll();
+      } else {
+        toast.error('Thất bại', res.message || 'Không thể phê duyệt.');
+      }
+    } catch (error) {
+      console.error('Error approving meeting:', error);
+      toast.error('Lỗi', getErrorMessage(error, 'Không thể phê duyệt cuộc họp.'));
+    }
+  };
+
+  // Từ chối duyệt nhanh cuộc họp
+  const handleRejectMeeting = async (meetingId: string) => {
+    const reason = prompt('Nhập lý do từ chối phê duyệt cuộc họp:');
+    if (!reason) return;
+    try {
+      const res = await meetingApi.rejectMeeting(meetingId, reason);
+      if (res.success) {
+        toast.success('Đã từ chối phê duyệt cuộc họp.');
+        handleRefreshAll();
+      } else {
+        toast.error('Thất bại', res.message || 'Không thể từ chối cuộc họp.');
+      }
+    } catch (error) {
+      console.error('Error rejecting meeting:', error);
+      toast.error('Lỗi', getErrorMessage(error, 'Không thể từ chối cuộc họp.'));
+    }
+  };
+
+  const MeetingCard = ({ meeting }: { meeting: MeetingResponse }) => (
+    <div
+      onClick={() => navigate(`/phien-hop/${meeting.id}`)}
+      className="bg-white border border-gray-150 rounded-2xl p-5 hover:shadow-lg hover:border-gray-300/70 transition-all duration-300 cursor-pointer group relative overflow-hidden"
+    >
+      <div className="absolute top-0 left-0 w-1.5 h-full bg-gradient-to-b from-[#C8102E] to-[#8a0a1e] opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
       <div className="space-y-4">
-        {/* Title and Badge */}
         <div className="flex items-start justify-between gap-3">
-          <h4 className="text-base btn-primary text-gray-900 flex-1 line-clamp-2">
-            {meeting.name}
+          <h4 className="text-base font-semibold text-gray-900 group-hover:text-[#C8102E] transition-colors duration-250 line-clamp-2 flex-1">
+            {meeting.title}
           </h4>
-          {meeting.status === 'ongoing' && (
-            <Badge className="bg-green-100 text-green-700 hover:bg-green-100 shrink-0">
+          {meeting.status === 'IN_PROGRESS' && (
+            <Badge className="bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-50 shrink-0 text-xs py-0.5 px-2">
               Đang diễn ra
             </Badge>
           )}
-          {meeting.status === 'upcoming' && meeting.hasParticipated && (
-            <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100 shrink-0">
-              Có tham gia
+          {(meeting.status === 'APPROVED' || meeting.status === 'UPCOMING') && (
+            <Badge className="bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-50 shrink-0 text-xs py-0.5 px-2">
+              Sắp diễn ra
             </Badge>
           )}
-          {meeting.status === 'unconfirmed' && (
-            <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100 shrink-0">
-              Chưa xác nhận
+          {meeting.status === 'DRAFT' && (
+            <Badge className="bg-amber-50 border border-amber-200 text-amber-700 hover:bg-amber-50 shrink-0 text-xs py-0.5 px-2">
+              Bản nháp
+            </Badge>
+          )}
+          {meeting.status === 'REJECTED' && (
+            <Badge className="bg-rose-50 border border-rose-200 text-rose-700 hover:bg-rose-50 shrink-0 text-xs py-0.5 px-2">
+              Từ chối duyệt
             </Badge>
           )}
         </div>
 
-        {/* Details */}
-        <div className="space-y-2 text-sm text-gray-600">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm text-gray-600 border-t border-gray-100 pt-3">
           <div className="flex items-center gap-2">
-            <Clock className="h-4 w-4 shrink-0" />
-            <span className="truncate">{meeting.time}</span>
+            <Clock className="h-4 w-4 text-gray-400 shrink-0" />
+            <span className="truncate">{formatTime(meeting.startTime, meeting.endTime)}</span>
           </div>
           <div className="flex items-center gap-2">
-            <User className="h-4 w-4 shrink-0" />
-            <span className="truncate">Chủ trì: {meeting.chairperson}</span>
+            <User className="h-4 w-4 text-gray-400 shrink-0" />
+            <span className="truncate">Chủ trì: {meeting.chairName || 'Chưa xác định'}</span>
           </div>
           <div className="flex items-center gap-2">
-            <MapPin className="h-4 w-4 shrink-0" />
-            <span className="truncate">{meeting.room}</span>
+            <MapPin className="h-4 w-4 text-gray-400 shrink-0" />
+            <span className="truncate">{meeting.locationName || meeting.onlineLink || 'Chưa xác định'}</span>
           </div>
         </div>
 
-        {/* Action Buttons */}
-        {(meeting.status === 'upcoming' || meeting.status === 'unconfirmed') && (
-          <div className="flex flex-wrap gap-2 pt-2">
+        {meeting.callerInviteStatus === 'PENDING' && (
+          <div
+            className="flex gap-2 pt-2 border-t border-gray-50 mt-2"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Button
+              onClick={() => handleAcceptInvite(meeting.id)}
+              className="text-xs px-3 py-1.5 h-auto bg-[#C8102E] hover:bg-[#a80d26] text-white flex items-center gap-1"
+            >
+              <Check className="h-3 w-3" /> Xác nhận tham gia
+            </Button>
             <Button
               variant="outline"
-              className="text-xs px-3 py-1.5 h-auto border-gray-300"
+              onClick={() => handleDeclineInvite(meeting.id)}
+              className="text-xs px-3 py-1.5 h-auto border-gray-300 hover:bg-rose-50 text-gray-700 flex items-center gap-1"
             >
-              Thêm góp ý
-            </Button>
-            <Button
-              className="text-xs px-3 py-1.5 h-auto bg-[#C8102E] hover:bg-[#a80d26]"
-            >
-              Xác nhận tham gia
+              <X className="h-3 w-3" /> Từ chối
             </Button>
           </div>
+        )}
+
+        {meeting.status === 'IN_PROGRESS' ? (
+          <div 
+            className="pt-2 border-t border-gray-50 mt-2 space-y-2"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {meeting.callerAttendanceStatus && (
+              <div className="flex items-center gap-1.5 text-xs">
+                <span className="font-semibold text-gray-700">Điểm danh của bạn:</span>
+                {meeting.callerAttendanceStatus === 'PRESENT' ? (
+                  <Badge className="bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-50 text-xs py-0.5 px-2 font-medium">
+                    Đã điểm danh
+                  </Badge>
+                ) : (
+                  <Badge className="bg-amber-50 border border-amber-200 text-amber-700 hover:bg-amber-50 text-xs py-0.5 px-2 font-medium">
+                    Chưa điểm danh
+                  </Badge>
+                )}
+              </div>
+            )}
+
+            {meeting.pendingAttendanceParticipants && meeting.pendingAttendanceParticipants.length > 0 && (
+              <div className="flex items-center gap-1 text-xs text-gray-500">
+                <span className="font-semibold text-gray-700 shrink-0">Chưa điểm danh:</span>
+                <TableTooltip
+                  text={meeting.pendingAttendanceParticipants.join(', ')}
+                  maxLength={45}
+                  className="truncate text-amber-600 bg-amber-50 px-2 py-0.5 rounded-md font-medium"
+                />
+              </div>
+            )}
+          </div>
+        ) : (
+          meeting.callerInviteStatus !== 'PENDING' && (() => {
+            const isCreator = meeting.createdById === user?.id || meeting.callerRole === 'CREATOR';
+            const isSecretary = meeting.callerRole === 'SECRETARY';
+            const isChair = meeting.callerRole === 'CHAIR';
+            const canSeeUnconfirmed = isSuperAdmin || isDeptAdmin || isCreator || isSecretary || isChair;
+
+            if (canSeeUnconfirmed) {
+              return meeting.pendingParticipants && meeting.pendingParticipants.length > 0 ? (
+                <div 
+                  className="pt-2 border-t border-gray-50 mt-2 text-xs text-gray-500 flex items-center gap-1"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <span className="font-semibold text-gray-700 shrink-0">Chưa xác nhận:</span>
+                  <TableTooltip
+                    text={meeting.pendingParticipants.join(', ')}
+                    maxLength={45}
+                    className="truncate text-red-600 bg-red-50 px-2 py-0.5 rounded-md font-medium"
+                  />
+                </div>
+              ) : null;
+            } else {
+              if (meeting.callerInviteStatus === 'ACCEPTED') {
+                return (
+                  <div className="pt-2 border-t border-gray-50 mt-2 text-xs text-emerald-600 flex items-center gap-1">
+                    <Check className="h-3.5 w-3.5 shrink-0" />
+                    <span className="font-semibold shrink-0">Đã xác nhận tham gia</span>
+                  </div>
+                );
+              } else if (meeting.callerInviteStatus === 'DECLINED') {
+                return (
+                  <div className="pt-2 border-t border-gray-50 mt-2 text-xs text-rose-600 flex items-center gap-1">
+                    <X className="h-3.5 w-3.5 shrink-0" />
+                    <span className="font-semibold shrink-0">Đã từ chối tham gia</span>
+                  </div>
+                );
+              }
+              return null;
+            }
+          })()
         )}
       </div>
     </div>
   );
 
+  const activeTabState = activeTab === 'ongoing' ? ongoingState : activeTab === 'upcoming' ? upcomingState : unconfirmedState;
+
   return (
     <div className="p-4 sm:p-6 lg:p-8 bg-gray-50/30 min-h-screen">
       <div className="max-w-[1800px] mx-auto space-y-6">
+        
         {/* Statistics Row */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
-          {stats.map((stat, index) => (
-            <div
-              key={index}
-              className={`${stat.bgColor} border ${stat.borderColor} rounded-2xl p-6 transition-all hover:shadow-md`}
-            >
-              <div className="text-center">
-                <p className={`text-5xl heading ${stat.textColor} mb-2`}>{stat.value}</p>
-                <p className="text-sm body text-gray-600">{stat.label}</p>
+          {stats.map((stat, index) => {
+            const IconComponent = stat.icon;
+            return (
+              <div
+                key={index}
+                className={`bg-gradient-to-br ${stat.bgColor} border ${stat.borderColor} rounded-2xl p-6 transition-all duration-300 hover:shadow-md flex items-center justify-between`}
+              >
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-gray-500 uppercase tracking-wider">{stat.label}</p>
+                  <p className={`text-4xl font-extrabold ${stat.textColor}`}>{stat.value}</p>
+                  <p className="text-xs text-gray-600">{stat.subLabel}</p>
+                </div>
+                <div className={`p-4 rounded-xl bg-white/70 shadow-sm border border-white/50 ${stat.textColor}`}>
+                  <IconComponent className="h-6 w-6" />
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
-        {/* Main Content Row */}
+        {/* Main Content Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left: Meeting List (70%) */}
+          
+          {/* Cột Trái: Danh sách cuộc họp của tôi (70%) */}
           <div className="lg:col-span-2">
-            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col lg:h-[850px]">
-              {/* Tabs Header */}
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col min-h-[600px] lg:h-[750px]">
+              
+              {/* Header Tab */}
               <div className="border-b border-gray-200 shrink-0">
                 <div className="flex items-center gap-1 p-2">
                   <button
                     onClick={() => setActiveTab('ongoing')}
-                    className={`flex-1 px-4 py-3 text-sm body rounded-xl transition-all ${
+                    className={`flex-1 px-4 py-3 text-sm font-semibold rounded-xl transition-all flex items-center justify-center gap-2 ${
                       activeTab === 'ongoing'
-                        ? 'bg-green-100 text-green-700'
+                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/50'
                         : 'text-gray-600 hover:bg-gray-50'
                     }`}
                   >
-                    Đang diễn ra ({allMeetings.filter((m) => m.status === 'ongoing').length})
+                    Đang diễn ra ({ongoingState.totalElements})
                   </button>
                   <button
                     onClick={() => setActiveTab('upcoming')}
-                    className={`flex-1 px-4 py-3 text-sm body rounded-xl transition-all ${
+                    className={`flex-1 px-4 py-3 text-sm font-semibold rounded-xl transition-all flex items-center justify-center gap-2 ${
                       activeTab === 'upcoming'
-                        ? 'bg-blue-100 text-blue-700'
+                        ? 'bg-blue-50 text-blue-700 border border-blue-200/50'
                         : 'text-gray-600 hover:bg-gray-50'
                     }`}
                   >
-                    Sắp diễn ra ({allMeetings.filter((m) => m.status === 'upcoming').length})
+                    Sắp diễn ra ({upcomingState.totalElements})
                   </button>
                   <button
                     onClick={() => setActiveTab('unconfirmed')}
-                    className={`flex-1 px-4 py-3 text-sm body rounded-xl transition-all ${
+                    className={`flex-1 px-4 py-3 text-sm font-semibold rounded-xl transition-all flex items-center justify-center gap-2 ${
                       activeTab === 'unconfirmed'
-                        ? 'bg-amber-100 text-amber-700'
+                        ? 'bg-amber-50 text-amber-700 border border-amber-200/50'
                         : 'text-gray-600 hover:bg-gray-50'
                     }`}
                   >
-                    Chưa xác nhận ({allMeetings.filter((m) => m.status === 'unconfirmed').length})
+                    Chưa xác nhận ({unconfirmedState.totalElements})
                   </button>
                 </div>
               </div>
 
-              {/* Meeting List */}
+              {/* Danh sách cuộn Lazy Load */}
               <div className="flex-1 overflow-hidden p-6">
-                {filteredMeetings.length === 0 ? (
+                {displayMeetings.length === 0 && activeTabState.loading ? (
                   <div className="flex flex-col items-center justify-center h-full">
-                    <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gray-100 mb-4">
+                    <div className="h-8 w-8 animate-spin rounded-full border-4 border-solid border-[#C8102E] border-r-transparent mb-4"></div>
+                    <p className="text-gray-500 text-sm">Đang tải danh sách cuộc họp...</p>
+                  </div>
+                ) : displayMeetings.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-full text-center">
+                    <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gray-50 border border-gray-150 mb-4">
                       <Calendar className="h-8 w-8 text-gray-400" />
                     </div>
-                    <p className="text-sm body text-gray-900 mb-1">Không có dữ liệu</p>
-                    <p className="text-sm text-gray-500">Chưa có phiên họp nào</p>
+                    <p className="text-base font-semibold text-gray-900 mb-1">Không có cuộc họp nào</p>
+                    <p className="text-sm text-gray-500">Chưa có lịch họp thuộc danh mục này.</p>
                   </div>
                 ) : (
-                  <div className="h-full overflow-y-auto pr-2 space-y-4 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
-                    {filteredMeetings.map((meeting) => (
+                  <div 
+                    onScroll={handleScroll}
+                    className="h-full overflow-y-auto pr-2 space-y-4 scrollbar-thin scrollbar-thumb-gray-200 scrollbar-track-gray-50"
+                  >
+                    {displayMeetings.map((meeting) => (
                       <MeetingCard key={meeting.id} meeting={meeting} />
                     ))}
+                    {activeTabState.loading && (
+                      <div className="flex justify-center py-4">
+                        <div className="h-6 w-6 animate-spin rounded-full border-2 border-solid border-[#C8102E] border-r-transparent"></div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
             </div>
           </div>
 
-          {/* Right: Action Cards (30%) */}
+          {/* Cột Phải: Các Widget tác vụ nhanh (Luôn hiển thị 2 Card) */}
           <div className="space-y-6">
-            {/* Approval Meetings Card */}
-            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col h-[400px]">
-              <div className="px-6 py-4 border-b border-gray-200 shrink-0">
-                <h3 className="text-base btn-primary text-gray-900">Cuộc họp cần phê duyệt</h3>
-                <p className="text-sm text-gray-500 mt-1">{approvalMeetings.length} phiên họp</p>
+            
+            {/* Widget 1: Cuộc họp cần phê duyệt */}
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col h-[360px]">
+              <div className="px-6 py-4 border-b border-gray-200 shrink-0 flex justify-between items-center bg-amber-50/30 rounded-t-2xl">
+                <div>
+                  <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                    <Shield className="h-5 w-5 text-amber-600" /> Cuộc họp cần phê duyệt
+                  </h3>
+                  <p className="text-xs text-gray-500 mt-0.5">Yêu cầu duyệt thông tin cuộc họp</p>
+                </div>
+                <Badge className="bg-amber-100 border border-amber-200 text-amber-800 hover:bg-amber-100 text-xs font-bold">
+                  {approvalMeetings.length}
+                </Badge>
               </div>
-              <div className="flex-1 overflow-hidden p-6">
-                <div className="h-full overflow-y-auto pr-2 space-y-4 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
-                  {approvalMeetings.map((meeting) => (
-                    <div
-                      key={meeting.id}
-                      className="bg-amber-50 border border-amber-200 rounded-xl p-4 hover:shadow-md transition-all"
-                    >
-                      <div className="space-y-3">
-                        <div className="flex items-start justify-between gap-2">
-                          <h4 className="text-sm btn-primary text-gray-900 line-clamp-2 flex-1">
-                            {meeting.name}
+              
+              <div className="flex-1 overflow-hidden p-4">
+                {approvalMeetings.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-full text-center p-4">
+                    <Check className="h-8 w-8 text-emerald-500 mb-2" />
+                    <p className="text-xs font-medium text-gray-500">Không có cuộc họp cần phê duyệt</p>
+                  </div>
+                ) : (
+                  <div className="h-full overflow-y-auto pr-1 space-y-3 scrollbar-thin scrollbar-thumb-gray-200 scrollbar-track-gray-50">
+                    {approvalMeetings.map((meeting) => (
+                      <div
+                        key={meeting.id}
+                        className="bg-white border border-gray-150 rounded-xl p-4 hover:shadow-md hover:border-amber-300/70 transition-all duration-200 space-y-3"
+                      >
+                        <div>
+                          <h4
+                            onClick={() => navigate(`/phien-hop/${meeting.id}`)}
+                            className="text-sm font-semibold text-gray-900 hover:text-[#C8102E] cursor-pointer line-clamp-1"
+                          >
+                            {meeting.title}
                           </h4>
-                          <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100 shrink-0 text-xs">
-                            Chờ phê duyệt
-                          </Badge>
+                          <span className="text-[11px] text-gray-500 block mt-1">
+                            Người tạo: {meeting.createdByName || 'Chưa rõ'}
+                          </span>
                         </div>
-                        <div className="space-y-1 text-xs text-gray-600">
+
+                        <div className="space-y-1 text-xs text-gray-600 border-t border-gray-50 pt-2">
                           <div className="flex items-center gap-2">
-                            <Clock className="h-3 w-3 shrink-0" />
-                            <span>{meeting.time}</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <User className="h-3 w-3 shrink-0" />
-                            <span className="truncate">Chủ trì: {meeting.chairperson}</span>
+                            <Clock className="h-3.5 w-3.5 text-gray-400" />
+                            <span>{formatTime(meeting.startTime, meeting.endTime)}</span>
                           </div>
                         </div>
-                        <div className="flex gap-2">
-                          <Button className="text-xs px-3 py-1.5 h-auto bg-[#C8102E] hover:bg-[#a80d26] flex-1">
-                            Phê duyệt
+
+                        <div className="flex gap-2 pt-1">
+                          <Button
+                            onClick={() => handleApproveMeeting(meeting.id)}
+                            className="text-xs px-2.5 py-1.5 h-auto bg-emerald-600 hover:bg-emerald-700 text-white flex-1 flex items-center justify-center gap-1"
+                          >
+                            <Check className="h-3 w-3" /> Phê duyệt
                           </Button>
                           <Button
                             variant="outline"
-                            className="text-xs px-3 py-1.5 h-auto border-gray-300 flex-1"
+                            onClick={() => handleRejectMeeting(meeting.id)}
+                            className="text-xs px-2.5 py-1.5 h-auto border-gray-300 hover:bg-rose-50 text-gray-700 flex-1 flex items-center justify-center gap-1"
                           >
-                            Xem chi tiết
+                            <X className="h-3 w-3" /> Từ chối
                           </Button>
                         </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 
-            {/* Document Meetings Card */}
-            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col h-[426px]">
-              <div className="px-6 py-4 border-b border-gray-200 shrink-0">
-                <h3 className="text-base btn-primary text-gray-900">Cuộc họp cần chuẩn bị tài liệu</h3>
-                <p className="text-sm text-gray-500 mt-1">{documentMeetings.length} phiên họp</p>
+            {/* Widget 2: Tài liệu cần xử lý (Tải lên + Phê duyệt) */}
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm flex flex-col h-[360px]">
+              <div className="px-6 py-4 border-b border-gray-200 shrink-0 flex justify-between items-center bg-blue-50/30 rounded-t-2xl">
+                <div>
+                  <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                    <FileText className="h-5 w-5 text-blue-600" /> Tài liệu cần xử lý
+                  </h3>
+                  <p className="text-xs text-gray-500 mt-0.5">Tải lên hoặc phê duyệt tài liệu cuộc họp</p>
+                </div>
+                <Badge className="bg-blue-100 border border-blue-200 text-blue-800 hover:bg-blue-100 text-xs font-bold">
+                  {preparationMeetings.length}
+                </Badge>
               </div>
-              <div className="flex-1 overflow-hidden p-6">
-                <div className="h-full overflow-y-auto pr-2 space-y-4 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
-                  {documentMeetings.map((meeting) => (
-                    <div
-                      key={meeting.id}
-                      className="bg-blue-50 border border-blue-200 rounded-xl p-4 hover:shadow-md transition-all"
-                    >
-                      <div className="space-y-3">
-                        <div className="flex items-start justify-between gap-2">
-                          <h4 className="text-sm btn-primary text-gray-900 line-clamp-2 flex-1">
-                            {meeting.name}
-                          </h4>
-                          <Badge
-                            className={`shrink-0 text-xs ${
-                              meeting.documentStatus === 'missing'
-                                ? 'bg-red-100 text-red-700 hover:bg-red-100'
-                                : 'bg-blue-100 text-blue-700 hover:bg-blue-100'
-                            }`}
-                          >
-                            {meeting.documentStatus === 'missing' ? 'Chưa có' : 'Đang chuẩn bị'}
-                          </Badge>
-                        </div>
-                        <div className="text-xs text-gray-600">
-                          <div className="flex items-center gap-2">
-                            <Clock className="h-3 w-3 shrink-0" />
-                            <span>{meeting.time}</span>
+
+              <div className="flex-1 overflow-hidden p-4">
+                {preparationMeetings.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-full text-center p-4">
+                    <FileText className="h-8 w-8 text-blue-400 mb-2" />
+                    <p className="text-xs font-medium text-gray-500">Không có tài liệu cần xử lý</p>
+                  </div>
+                ) : (
+                  <div className="h-full overflow-y-auto pr-1 space-y-3 scrollbar-thin scrollbar-thumb-gray-200 scrollbar-track-gray-50">
+                    {preparationMeetings.map((meeting) => (
+                      <div
+                        key={meeting.id}
+                        className="bg-white border border-gray-150 rounded-xl p-4 hover:shadow-md hover:border-blue-300/70 transition-all duration-200 space-y-3"
+                      >
+                        <h4
+                          onClick={() => navigate(`/phien-hop/${meeting.id}`)}
+                          className="text-sm font-semibold text-gray-900 hover:text-[#C8102E] cursor-pointer line-clamp-1"
+                        >
+                          {meeting.title}
+                        </h4>
+
+                        <div className="text-xs text-gray-500 space-y-1">
+                          <div className="flex items-center gap-1.5">
+                            <Clock className="h-3.5 w-3.5 text-gray-400" />
+                            <span>{formatTime(meeting.startTime, meeting.endTime)}</span>
                           </div>
+                          {meeting.canApproveDocs && (
+                            <div className="flex items-center gap-1.5 text-amber-600 font-medium">
+                              <AlertCircle className="h-3.5 w-3.5" />
+                              <span>{meeting.pendingApprovalCount} đầu mục chờ phê duyệt tài liệu</span>
+                            </div>
+                          )}
+                           {/* Chi tiết số lượng tài liệu của tôi */}
+                          {(meeting.myDocPendingCount !== undefined && 
+                            (meeting.myDocPendingCount > 0 || 
+                             meeting.myDocSubmittedCount > 0 || 
+                             meeting.myDocRejectedCount > 0 || 
+                             meeting.myDocApprovedCount > 0)) && (
+                            <div className="flex flex-wrap gap-1.5 pt-1">
+                              {meeting.myDocPendingCount > 0 && (
+                                <span className="text-[10px] px-2 py-0.5 bg-gray-100 text-gray-700 rounded-md border border-gray-200 font-medium">
+                                  Cần chuẩn bị: {meeting.myDocPendingCount}
+                                </span>
+                              )}
+                              {meeting.myDocRejectedCount > 0 && (
+                                <span className="text-[10px] px-2 py-0.5 bg-rose-50 text-rose-700 rounded-md border border-rose-100 font-medium">
+                                  Bị từ chối: {meeting.myDocRejectedCount}
+                                </span>
+                              )}
+                              {meeting.myDocSubmittedCount > 0 && (
+                                <span className="text-[10px] px-2 py-0.5 bg-blue-50 text-blue-700 rounded-md border border-blue-100 font-medium">
+                                  Chờ duyệt: {meeting.myDocSubmittedCount}
+                                </span>
+                              )}
+                              {meeting.myDocApprovedCount > 0 && (
+                                <span className="text-[10px] px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded-md border border-emerald-100 font-medium">
+                                  Đã duyệt: {meeting.myDocApprovedCount}
+                                </span>
+                              )}
+                            </div>
+                          )}
+
+                          {meeting.docPreparationStatus === 'SUBMITTED' && (
+                            <div className="flex items-center gap-1.5 text-blue-600 font-medium bg-blue-50/70 px-2 py-1 rounded-md border border-blue-100 mt-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse shrink-0" />
+                              <span>Đã nộp tài liệu, chờ phê duyệt</span>
+                            </div>
+                          )}
+                          {meeting.docPreparationStatus === 'REJECTED' && meeting.docPreparationRejectReason && (
+                            <div className="text-[11px] text-rose-600 bg-rose-50/70 px-2 py-1 rounded-md border border-rose-100 mt-1 break-words">
+                              <span className="font-semibold block text-xs mb-0.5">Tài liệu bị từ chối duyệt</span>
+                              Lý do: {meeting.docPreparationRejectReason}
+                            </div>
+                          )}
                         </div>
+
                         <div className="flex gap-2">
-                          <Button className="text-xs px-3 py-1.5 h-auto bg-[#C8102E] hover:bg-[#a80d26] flex-1">
-                            Tải lên tài liệu
-                          </Button>
-                          <Button
-                            variant="outline"
-                            className="text-xs px-3 py-1.5 h-auto border-gray-300"
-                          >
-                            Xem
-                          </Button>
+                          {meeting.canApproveDocs && (
+                            <Button
+                              onClick={() => navigate(`/phien-hop/${meeting.id}/cap-nhat#noi-dung`)}
+                              className="text-xs px-3 py-2 h-auto bg-amber-600 hover:bg-amber-700 text-white flex-1 flex items-center justify-center gap-1.5"
+                            >
+                              Phê duyệt tài liệu <ArrowRight className="h-3 w-3" />
+                            </Button>
+                          )}
+                          {meeting.canUploadDocs && (
+                            <Button
+                              onClick={() => navigate(`/phien-hop/${meeting.id}/up-tai-lieu`)}
+                              className="text-xs px-3 py-2 h-auto bg-blue-600 hover:bg-blue-700 text-white flex-1 flex items-center justify-center gap-1.5"
+                            >
+                              Tải lên tài liệu <ArrowRight className="h-3 w-3" />
+                            </Button>
+                          )}
                         </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
+
+            {/* Widget 3: Lối tắt quản trị (Dành riêng cho SUPER_ADMIN) */}
+            {isSuperAdmin && (
+              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 space-y-4">
+                <h3 className="text-base font-bold text-gray-900 flex items-center gap-2 border-b border-gray-100 pb-3">
+                  <Shield className="h-5 w-5 text-[#C8102E]" /> Quản trị hệ thống
+                </h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <Link
+                    to="/nguoi-dung"
+                    className="p-3 bg-gray-50 rounded-xl border border-gray-100 hover:border-[#C8102E]/30 hover:bg-[#C8102E]/5 text-center transition-all duration-200 block"
+                  >
+                    <Users className="h-5 w-5 text-gray-600 mx-auto mb-2" />
+                    <span className="text-xs font-semibold text-gray-800">Người dùng</span>
+                  </Link>
+                  <Link
+                    to="/nguoi-dung/don-vi"
+                    className="p-3 bg-gray-50 rounded-xl border border-gray-100 hover:border-[#C8102E]/30 hover:bg-[#C8102E]/5 text-center transition-all duration-200 block"
+                  >
+                    <Landmark className="h-5 w-5 text-gray-600 mx-auto mb-2" />
+                    <span className="text-xs font-semibold text-gray-800">Đơn vị</span>
+                  </Link>
+                  <Link
+                    to="/phong-hop/dia-diem"
+                    className="p-3 bg-gray-50 rounded-xl border border-gray-100 hover:border-[#C8102E]/30 hover:bg-[#C8102E]/5 text-center transition-all duration-200 block"
+                  >
+                    <MapPin className="h-5 w-5 text-gray-600 mx-auto mb-2" />
+                    <span className="text-xs font-semibold text-gray-800">Phòng họp</span>
+                  </Link>
+                  <Link
+                    to="/nguoi-dung/lich-su"
+                    className="p-3 bg-gray-50 rounded-xl border border-gray-100 hover:border-[#C8102E]/30 hover:bg-[#C8102E]/5 text-center transition-all duration-200 block"
+                  >
+                    <Clock className="h-5 w-5 text-gray-600 mx-auto mb-2" />
+                    <span className="text-xs font-semibold text-gray-800">Audit logs</span>
+                  </Link>
+                </div>
+              </div>
+            )}
+            
           </div>
         </div>
+        
       </div>
     </div>
   );

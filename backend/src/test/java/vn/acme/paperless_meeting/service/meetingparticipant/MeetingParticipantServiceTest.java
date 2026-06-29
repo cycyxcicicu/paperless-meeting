@@ -27,6 +27,8 @@ import vn.acme.paperless_meeting.mapper.meetingparticipant.MeetingParticipantMap
 import vn.acme.paperless_meeting.repository.*;
 import vn.acme.paperless_meeting.service.auth.CurrentUserService;
 import vn.acme.paperless_meeting.service.document.DocumentService;
+import vn.acme.paperless_meeting.service.email.InvitationMailService;
+import vn.acme.paperless_meeting.service.websocket.WebSocketNotificationService;
 import vn.acme.paperless_meeting.event.audit.AuditLogPublisher;
 
 @ExtendWith(MockitoExtension.class)
@@ -62,13 +64,13 @@ class MeetingParticipantServiceTest {
     @Mock
     NotificationRepository notificationRepository;
     @Mock
-    vn.acme.paperless_meeting.service.email.InvitationMailService invitationMailService;
+    InvitationMailService invitationMailService;
     @Mock
     vn.acme.paperless_meeting.mapper.user.UserMapper userMapper;
     @Mock
     DepartmentRepository departmentRepository;
     @Mock
-    vn.acme.paperless_meeting.service.websocket.WebSocketNotificationService webSocketNotificationService;
+    WebSocketNotificationService webSocketNotificationService;
 
     @InjectMocks
     MeetingParticipantService meetingParticipantService;
@@ -123,6 +125,9 @@ class MeetingParticipantServiceTest {
         guest.setEmail("guest@example.com");
         guest.setFullName("Guest Test");
         guest.setInviteStatus(InviteStatus.PENDING);
+
+        when(meetingParticipantRepository.save(any(MeetingParticipant.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(meetingGuestRepository.save(any(MeetingGuest.class))).thenAnswer(invocation -> invocation.getArgument(0));
     }
 
     @Test
@@ -169,19 +174,20 @@ class MeetingParticipantServiceTest {
     @Test
     void updateInviteStatus_DeclineWithSubstitute_Successful() {
         // Arrange
+        UUID substituteUserId = UUID.randomUUID();
         UpdateInviteStatusRequest req = new UpdateInviteStatusRequest();
         req.setInviteStatus(InviteStatus.DECLINED);
         req.setDeclineReason("Vắng mặt");
-        req.setSubstituteUserId(userId);
+        req.setSubstituteUserId(substituteUserId);
 
         User substituteUser = new User();
-        substituteUser.setId(userId);
+        substituteUser.setId(substituteUserId);
         substituteUser.setFullName("Substitute User");
 
         when(meetingRepository.findById(meetingId)).thenReturn(Optional.of(meeting));
         when(currentUserService.getCurrentActiveUser()).thenReturn(caller);
         when(meetingParticipantRepository.findByMeetingIdAndUserId(meetingId, userId)).thenReturn(Optional.of(participant));
-        when(userRepository.findById(userId)).thenReturn(Optional.of(substituteUser));
+        when(userRepository.findById(substituteUserId)).thenReturn(Optional.of(substituteUser));
 
         // Act
         meetingParticipantService.updateInviteStatus(meetingId, userId, req);

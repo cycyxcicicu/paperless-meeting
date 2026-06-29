@@ -206,7 +206,7 @@ public class SpeakerService {
         
         User caller = currentUserService.getCurrentActiveUser();
         
-        if (!queue.getUser().getId().equals(caller.getId())) {
+        if (queue.getUser() == null || !queue.getUser().getId().equals(caller.getId())) {
             checkIsChairOrSecretary(meetingId, caller.getId());
             queue.setQueueStatus(SpeakerQueueStatus.REJECTED);
         } else {
@@ -239,8 +239,27 @@ public class SpeakerService {
             meetingService.requireViewPermission(meeting);
         }
         
-        SpeakerQueueStatus targetStatus = (status != null) ? status : SpeakerQueueStatus.QUEUED;
-        List<SpeakerQueue> list = speakerQueueRepository.findByMeetingIdAndQueueStatusOrderBySortOrderAscRequestedAtAsc(meetingId, targetStatus);
+        List<SpeakerQueue> list;
+        if (status != null) {
+            list = speakerQueueRepository.findByMeetingIdAndQueueStatusOrderBySortOrderAscRequestedAtAsc(meetingId, status);
+        } else {
+            list = speakerQueueRepository.findByMeetingId(meetingId);
+            list.sort((a, b) -> {
+                boolean activeA = a.getQueueStatus() == SpeakerQueueStatus.QUEUED || a.getQueueStatus() == SpeakerQueueStatus.SPEAKING;
+                boolean activeB = b.getQueueStatus() == SpeakerQueueStatus.QUEUED || b.getQueueStatus() == SpeakerQueueStatus.SPEAKING;
+                if (activeA && activeB) {
+                    if (a.getSortOrder() != null && b.getSortOrder() != null) {
+                        return a.getSortOrder().compareTo(b.getSortOrder());
+                    }
+                }
+                if (activeA) return -1;
+                if (activeB) return 1;
+                if (a.getRequestedAt() != null && b.getRequestedAt() != null) {
+                    return b.getRequestedAt().compareTo(a.getRequestedAt());
+                }
+                return 0;
+            });
+        }
         return list.stream().map(this::mapToQueueResponse).collect(Collectors.toList());
     }
 
@@ -276,6 +295,35 @@ public class SpeakerService {
         webSocketNotificationService.sendToTopic("/topic/meeting/" + meetingId + "/speakers", Map.of("action", "REFRESH"));
     }
 
+    // 4.5. Chủ trì yêu cầu chuẩn bị phát biểu
+    @Transactional
+    public void prepareSpeaker(UUID meetingId, UUID queueId) {
+        User caller = currentUserService.getCurrentActiveUser();
+        checkIsChairOrSecretary(meetingId, caller.getId());
+
+        SpeakerQueue queue = speakerQueueRepository.findById(queueId)
+                .orElseThrow(() -> new AppException(ErrorCode.BAD_REQUEST));
+
+        if (!queue.getMeeting().getId().equals(meetingId)) {
+            throw new AppException(ErrorCode.BAD_REQUEST);
+        }
+
+        if (queue.getQueueStatus() != SpeakerQueueStatus.QUEUED) {
+            throw new AppException(ErrorCode.BAD_REQUEST);
+        }
+
+        webSocketNotificationService.sendToTopic(
+                "/topic/meeting/" + meetingId + "/speakers",
+                Map.of(
+                        "action", "PREPARE_SPEECH",
+                        "queueId", queue.getId().toString(),
+                        "userId", queue.getUser() != null ? queue.getUser().getId().toString() : "",
+                        "guestId", queue.getGuest() != null ? queue.getGuest().getId().toString() : "",
+                        "userName", queue.getUser() != null ? queue.getUser().getFullName() : queue.getGuest().getFullName()
+                )
+        );
+    }
+
     // 5. Đồng ý cho người trong queue phát biểu
     @Transactional
     public SpeakerTurnResponse startTurn(UUID meetingId, UUID queueId, StartTurnRequest request) {
@@ -292,6 +340,12 @@ public class SpeakerService {
 
         if (queue.getQueueStatus() != SpeakerQueueStatus.QUEUED) {
             throw new AppException(ErrorCode.BAD_REQUEST);
+        }
+
+        // Check if someone is already speaking
+        boolean isSomeoneSpeaking = speakerQueueRepository.existsByMeetingIdAndQueueStatus(meetingId, SpeakerQueueStatus.SPEAKING);
+        if (isSomeoneSpeaking) {
+            throw new AppException(ErrorCode.SPEAKER_ALREADY_SPEAKING);
         }
         
         queue.setQueueStatus(SpeakerQueueStatus.SPEAKING);
@@ -332,35 +386,108 @@ public class SpeakerService {
         Meeting meeting = meetingRepository.findById(meetingId)
                 .orElseThrow(() -> new AppException(ErrorCode.MEETING_NOT_EXIST));
         
-        User targetUser = userRepository.findById(request.getUserId())
-                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
+        UUID targetId = request.getUserId();
+        User targetUser = userRepository.findById(targetId).orElse(null);
+        MeetingGuest targetGuest = null;
 
-        // Kiểm tra xem targetUser có là participant/guest trong cuộc họp đó không
-        checkIsParticipant(meetingId, targetUser.getId());
+        if (targetUser == null) {
+            targetGuest = meetingGuestRepository.findById(targetId)
+                    .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
+        }
 
-        SpeakerTurn turn = new SpeakerTurn();
-        turn.setMeeting(meeting);
-        turn.setUser(targetUser);
-        turn.setStartAt(LocalDateTime.now());
-        turn.setDurationSeconds(Long.valueOf(request.getMinutes() * 60));
-        turn.setCreatedBy(caller);
-        turn = speakerTurnRepository.save(turn);
+        // Kiểm tra xem targetUser hoặc targetGuest có trong cuộc họp đó không
+        if (targetUser != null) {
+            checkIsParticipant(meetingId, targetUser.getId());
+        } else {
+            if (!targetGuest.getMeeting().getId().equals(meetingId)) {
+                throw new AppException(ErrorCode.UNAUTHOZIZED);
+            }
+        }
 
-        auditLogPublisher.publish(
-                caller,
-                AuditAction.START_SPEAKER_TURN,
-                ResourceType.SPEAKER,
-                turn.getId(),
-                Map.of(
-                        "meetingId", String.valueOf(meetingId),
-                        "userId", String.valueOf(targetUser.getId()),
-                        "durationSeconds", String.valueOf(turn.getDurationSeconds())
-                )
-        );
+        // Check if there is already an active speaker in the meeting
+        boolean isSomeoneSpeaking = speakerQueueRepository.existsByMeetingIdAndQueueStatus(meetingId, SpeakerQueueStatus.SPEAKING);
+
+        SpeakerQueue queue = new SpeakerQueue();
+        queue.setMeeting(meeting);
+        queue.setRequestedAt(LocalDateTime.now());
+        queue.setPriority(SpeakerQueuePriority.NORMAL);
+
+        if (isSomeoneSpeaking) {
+            List<SpeakerQueue> currentQueue = speakerQueueRepository.findByMeetingIdAndQueueStatusOrderBySortOrderAscRequestedAtAsc(meetingId, SpeakerQueueStatus.QUEUED);
+            int nextSortOrder = currentQueue.isEmpty() ? 1 : currentQueue.get(currentQueue.size() - 1).getSortOrder() + 1;
+            queue.setSortOrder(nextSortOrder);
+            queue.setQueueStatus(SpeakerQueueStatus.QUEUED);
+        } else {
+            queue.setSortOrder(0);
+            queue.setQueueStatus(SpeakerQueueStatus.SPEAKING);
+        }
+
+        if (targetUser != null) {
+            queue.setUser(targetUser);
+        } else {
+            queue.setGuest(targetGuest);
+        }
+
+        speakerQueueRepository.save(queue);
+
+        SpeakerTurnResponse.SpeakerTurnResponseBuilder responseBuilder = SpeakerTurnResponse.builder()
+                .meetingId(meetingId);
+
+        if (targetUser != null) {
+            responseBuilder.userId(targetUser.getId())
+                           .userName(targetUser.getFullName())
+                           .avatarUrl(targetUser.getAvatar())
+                           .isGuestSubstitute(false);
+        } else {
+            responseBuilder.guestId(targetGuest.getId())
+                           .userName(targetGuest.getFullName())
+                           .isGuestSubstitute(true);
+        }
+
+        if (!isSomeoneSpeaking) {
+            SpeakerTurn turn = new SpeakerTurn();
+            turn.setMeeting(meeting);
+            turn.setStartAt(LocalDateTime.now());
+            turn.setDurationSeconds(Long.valueOf(request.getMinutes() * 60));
+            turn.setCreatedBy(caller);
+            if (targetUser != null) {
+                turn.setUser(targetUser);
+            } else {
+                turn.setGuest(targetGuest);
+            }
+            turn = speakerTurnRepository.save(turn);
+
+            responseBuilder.id(turn.getId())
+                           .startAt(turn.getStartAt())
+                           .durationSeconds(turn.getDurationSeconds());
+
+            auditLogPublisher.publish(
+                    caller,
+                    AuditAction.START_SPEAKER_TURN,
+                    ResourceType.SPEAKER,
+                    turn.getId(),
+                    Map.of(
+                            "meetingId", String.valueOf(meetingId),
+                            "userId", String.valueOf(targetUser != null ? targetUser.getId() : targetGuest.getId()),
+                            "durationSeconds", String.valueOf(turn.getDurationSeconds())
+                    )
+            );
+        } else {
+            auditLogPublisher.publish(
+                    caller,
+                    AuditAction.REGISTER_SPEAKER,
+                    ResourceType.SPEAKER,
+                    queue.getId(),
+                    Map.of(
+                            "meetingId", String.valueOf(meetingId),
+                            "userId", String.valueOf(targetUser != null ? targetUser.getId() : targetGuest.getId())
+                    )
+            );
+        }
 
         webSocketNotificationService.sendToTopic("/topic/meeting/" + meetingId + "/speakers", Map.of("action", "REFRESH"));
 
-        return mapToTurnResponse(turn);
+        return responseBuilder.build();
     }
 
     // 7. Ép buộc dừng phát biểu sớm — chỉ CHAIR/SECRETARY
@@ -387,7 +514,13 @@ public class SpeakerService {
             // Tìm SpeakerQueue tương ứng để update DONE
             List<SpeakerQueue> speakingQueueList = speakerQueueRepository.findByMeetingIdAndQueueStatusOrderBySortOrderAscRequestedAtAsc(meetingId, SpeakerQueueStatus.SPEAKING);
             for (SpeakerQueue q : speakingQueueList) {
-                if (q.getUser().getId().equals(turn.getUser().getId())) {
+                boolean match = false;
+                if (q.getUser() != null && turn.getUser() != null) {
+                    match = q.getUser().getId().equals(turn.getUser().getId());
+                } else if (q.getGuest() != null && turn.getGuest() != null) {
+                    match = q.getGuest().getId().equals(turn.getGuest().getId());
+                }
+                if (match) {
                     q.setQueueStatus(SpeakerQueueStatus.DONE);
                     speakerQueueRepository.save(q);
                 }
@@ -401,7 +534,7 @@ public class SpeakerService {
                 turn.getId(),
                 Map.of(
                         "meetingId", String.valueOf(meetingId),
-                        "userId", String.valueOf(turn.getUser().getId()),
+                        "userId", String.valueOf(turn.getUser() != null ? turn.getUser().getId() : turn.getGuest().getId()),
                         "actualSeconds", String.valueOf(turn.getDurationSeconds())
                 )
         );
@@ -453,10 +586,38 @@ public class SpeakerService {
                    .userName(q.getUser().getFullName())
                    .avatarUrl(q.getUser().getAvatar())
                    .isGuestSubstitute(false);
+            if (q.getUser().getPosition() != null) {
+                builder.position(q.getUser().getPosition().getPositionName());
+            }
+            if (q.getQueueStatus() == SpeakerQueueStatus.SPEAKING) {
+                speakerTurnRepository.findByEndAtIsNull().stream()
+                    .filter(t -> t.getMeeting().getId().equals(q.getMeeting().getId())
+                            && t.getUser() != null && t.getUser().getId().equals(q.getUser().getId()))
+                    .findFirst()
+                    .ifPresent(t -> {
+                        builder.activeTurnId(t.getId());
+                        builder.speakingStartAt(t.getStartAt());
+                        builder.speakingDurationSeconds(t.getDurationSeconds());
+                    });
+            }
         } else if (q.getGuest() != null) {
             builder.guestId(q.getGuest().getId())
                    .userName(q.getGuest().getFullName())
                    .isGuestSubstitute(true);
+            if (q.getGuest().getPosition() != null) {
+                builder.position(q.getGuest().getPosition());
+            }
+            if (q.getQueueStatus() == SpeakerQueueStatus.SPEAKING) {
+                speakerTurnRepository.findByEndAtIsNull().stream()
+                    .filter(t -> t.getMeeting().getId().equals(q.getMeeting().getId())
+                            && t.getGuest() != null && t.getGuest().getId().equals(q.getGuest().getId()))
+                    .findFirst()
+                    .ifPresent(t -> {
+                        builder.activeTurnId(t.getId());
+                        builder.speakingStartAt(t.getStartAt());
+                        builder.speakingDurationSeconds(t.getDurationSeconds());
+                    });
+            }
         }
         return builder.build();
     }
@@ -482,8 +643,27 @@ public class SpeakerService {
     }
 
     public List<SpeakerQueueResponse> publicGetQueue(UUID meetingId, SpeakerQueueStatus status) {
-        SpeakerQueueStatus targetStatus = (status != null) ? status : SpeakerQueueStatus.QUEUED;
-        List<SpeakerQueue> list = speakerQueueRepository.findByMeetingIdAndQueueStatusOrderBySortOrderAscRequestedAtAsc(meetingId, targetStatus);
+        List<SpeakerQueue> list;
+        if (status != null) {
+            list = speakerQueueRepository.findByMeetingIdAndQueueStatusOrderBySortOrderAscRequestedAtAsc(meetingId, status);
+        } else {
+            list = speakerQueueRepository.findByMeetingId(meetingId);
+            list.sort((a, b) -> {
+                boolean activeA = a.getQueueStatus() == SpeakerQueueStatus.QUEUED || a.getQueueStatus() == SpeakerQueueStatus.SPEAKING;
+                boolean activeB = b.getQueueStatus() == SpeakerQueueStatus.QUEUED || b.getQueueStatus() == SpeakerQueueStatus.SPEAKING;
+                if (activeA && activeB) {
+                    if (a.getSortOrder() != null && b.getSortOrder() != null) {
+                        return a.getSortOrder().compareTo(b.getSortOrder());
+                    }
+                }
+                if (activeA) return -1;
+                if (activeB) return 1;
+                if (a.getRequestedAt() != null && b.getRequestedAt() != null) {
+                    return b.getRequestedAt().compareTo(a.getRequestedAt());
+                }
+                return 0;
+            });
+        }
         return list.stream().map(this::mapToQueueResponse).collect(Collectors.toList());
     }
 

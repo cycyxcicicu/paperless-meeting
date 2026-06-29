@@ -20,6 +20,8 @@ export interface Meeting {
     canUploadDocs?: boolean;
     canCopy?: boolean;
     canApprove?: boolean;
+    rawStatus?: string;
+    isSaved?: boolean;
 }
 
 export const createMeetingColumns = (handlers: {

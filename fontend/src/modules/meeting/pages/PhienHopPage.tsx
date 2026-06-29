@@ -20,6 +20,7 @@ import { PHIEN_HOP_SIDEBAR_ITEMS } from '@/app/constants/sidebar';
 import { useAuth } from '@/app/context/AuthContext';
 import { PositionCode } from '@/common/types/position';
 import { meetingApi, MeetingResponse } from '../services/meeting.api';
+import { personalApi } from '../services/personal.api';
 import { Popover, PopoverContent, PopoverTrigger } from '@/common/components/ui/popover';
 import { ScrollDatePicker } from '@/common/components/ui/scroll-date-picker';
 import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from 'date-fns';
@@ -146,6 +147,8 @@ const PhienHopPage = () => {
         canUploadDocs: res.canUploadDocs,
         canCopy: res.createdById === user?.id,
         canApprove: res.canApprove,
+        rawStatus: res.status,
+        isSaved: res.isSaved,
       };
     };
 
@@ -221,6 +224,21 @@ const PhienHopPage = () => {
 
     const handleUploadDocs = (id: string) => {
         navigate(`/phien-hop/${id}/up-tai-lieu`);
+    };
+
+    const handleToggleSave = async (id: string) => {
+        try {
+            const res = await personalApi.toggleSaveMeeting(id);
+            if (res.success) {
+                toast.success(res.data ? "Lưu tài liệu phiên họp thành công" : "Đã hủy lưu tài liệu phiên họp");
+                fetchMeetings();
+            } else {
+                toast.error("Thất bại", res.message || "Không thể thực hiện hành động.");
+            }
+        } catch (error) {
+            console.error("Error toggling save:", error);
+            toast.error("Lỗi", "Đã xảy ra lỗi khi thực hiện.");
+        }
     };
 
 
@@ -380,6 +398,7 @@ const PhienHopPage = () => {
             onCancel={handleCancel}
             onSend={handleSend}
             onUploadDocs={handleUploadDocs}
+            onToggleSave={handleToggleSave}
         />
     );
 

@@ -1,12 +1,14 @@
 import React from "react";
 import { useNavigate, useParams, useLocation } from "react-router";
-import { ArrowLeft, Clock, Users, X, CalendarClock, CalendarX } from "lucide-react";
+import { ArrowLeft, Clock, Users, X, CalendarClock, CalendarX, BookOpen } from "lucide-react";
 import { PageHeader } from '@/common/components/layout/PageHeader';
 import { Button } from '@/common/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/common/components/ui/dialog";
 import { SelectSpeakerModal } from '@/modules/meeting/components/SelectSpeakerModal';
 import { AttendanceModal } from '@/modules/meeting/components/AttendanceModal';
-import { AddOpinionModal } from '@/modules/meeting/components/AddOpinionModal';
+import { ViewOpinionModal } from '@/modules/meeting/components/ViewOpinionModal';
 import { AddOpinionForContentModal } from '@/modules/meeting/components/AddOpinionForContentModal';
+import { PersonalNotesModal } from '@/modules/meeting/components/PersonalNotesModal';
 import { ConfirmBroadcastModal } from '@/modules/meeting/components/voting/ConfirmBroadcastModal';
 import { PauseVotingModal } from '@/modules/meeting/components/voting/PauseVotingModal';
 import { ReadinessCheckModal } from '@/modules/meeting/components/voting/ReadinessCheckModal';
@@ -43,10 +45,9 @@ export default function DienBienPhienHopPage() {
         currentVotingIssue, votingResultData,
         currentSpeaker,
         meetingContents, availableDocuments, availableContents,
-        mockDelegates, meetingParticipants,
+        mockDelegates, meetingParticipants, availableSpeakerParticipants,
         isAddSpeakerModalOpen, setIsAddSpeakerModalOpen,
         isAttendanceModalOpen, setIsAttendanceModalOpen,
-        isAddOpinionModalOpen, setIsAddOpinionModalOpen,
         isStartContentModalOpen, setIsStartContentModalOpen,
         isApproveContentModalOpen, setIsApproveContentModalOpen,
         isAddOpinionForContentModalOpen, setIsAddOpinionForContentModalOpen,
@@ -56,16 +57,23 @@ export default function DienBienPhienHopPage() {
         isVotingModalOpen, setIsVotingModalOpen,
         isPauseVotingModalOpen, setIsPauseVotingModalOpen,
         isVotingResultModalOpen, setIsVotingResultModalOpen,
+        isDurationModalOpen, setIsDurationModalOpen,
+        isViewOpinionModalOpen, setIsViewOpinionModalOpen,
+        selectedViewOpinion,
+        speakingDuration, setSpeakingDuration,
+        handleConfirmDuration,
         handleAddSpeakers, handleEndSpeaking,
         handlePrepareSpeech, handleAssignSpeech, handleRejectSpeech,
-        handleAddOpinion,
+        handleReorderSpeaker,
         handleToggleBroadcast, handleConfirmBroadcast,
         handleProceedFromReadiness, handleConfirmVotingTime,
         handleVote, handlePauseVoting, handleConfirmPause,
-        handleRevote, handleViewVotingResult,
+        handleRevote, handleViewVotingResult, handleToggleVotingList,
         handleStartContent, handleApproveContent,
         handleAddOpinionForContent,
         handleOpenStartContent, handleOpenApproveContent, handleOpenAddOpinionForContent,
+        handleViewOpinion,
+        handleCloseViewOpinion,
         meeting,
         loading,
         error,
@@ -79,6 +87,8 @@ export default function DienBienPhienHopPage() {
         checkAttendance,
         isAttendee,
     } = useDienBienPhienHop(guestToken);
+
+    const [isNotesModalOpen, setIsNotesModalOpen] = React.useState(false);
 
     const errorCode = error?.response?.data?.code;
 
@@ -184,7 +194,7 @@ export default function DienBienPhienHopPage() {
                 />
 
                 {/* Banner cảnh báo điểm danh */}
-                {!isSelfCheckedIn && isWithinCheckInWindow && (
+                {!isSelfCheckedIn && isWithinCheckInWindow && isAttendee && (
                     <div className="mb-6 bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-center justify-between shadow-sm">
                         <div className="flex items-center gap-3">
                             <Clock className="h-5 w-5 text-amber-600 flex-shrink-0 animate-pulse" />
@@ -237,6 +247,7 @@ export default function DienBienPhienHopPage() {
                             meetingStatus={meeting?.status}
                             isChairOrSecretary={isChairOrSecretary}
                             isAttendee={isAttendee}
+                            meeting={meeting}
                         />
                     </div>
 
@@ -256,6 +267,8 @@ export default function DienBienPhienHopPage() {
                         onPrepareSpeech={handlePrepareSpeech}
                         onAssignSpeech={handleAssignSpeech}
                         onRejectSpeech={handleRejectSpeech}
+                        onReorderSpeech={handleReorderSpeaker}
+                        onEndSpeaking={handleEndSpeaking}
                         isGuest={isGuest}
                         meetingStatus={meeting?.status}
                         isChairOrSecretary={isChairOrSecretary}
@@ -273,7 +286,14 @@ export default function DienBienPhienHopPage() {
                         meetingStatus={meeting?.status}
                         isChairOrSecretary={isChairOrSecretary}
                     />
-                    <OpinionSection opinions={opinions} onAddOpinion={() => { if (checkAttendance()) setIsAddOpinionModalOpen(true); }} isGuest={isGuest} meetingStatus={meeting?.status} isAttendee={isAttendee} />
+                    <OpinionSection 
+                        opinions={opinions} 
+                        onAddOpinion={handleOpenAddOpinionForContent} 
+                        onViewOpinion={handleViewOpinion}
+                        isGuest={isGuest} 
+                        meetingStatus={meeting?.status} 
+                        isAttendee={isAttendee} 
+                    />
                 </div>
             </div>
 
@@ -282,8 +302,8 @@ export default function DienBienPhienHopPage() {
                 isOpen={isAddSpeakerModalOpen}
                 onClose={() => setIsAddSpeakerModalOpen(false)}
                 onSelect={handleAddSpeakers}
-                participants={meetingParticipants}
-                existingSpeakerIds={speakers.map((s) => s.id)}
+                participants={availableSpeakerParticipants}
+                existingSpeakerIds={[]}
                 allowMultiple={true}
             />
 
@@ -294,11 +314,11 @@ export default function DienBienPhienHopPage() {
                 guestToken={guestToken}
             />
 
-            <AddOpinionModal
-                isOpen={isAddOpinionModalOpen}
-                onClose={() => setIsAddOpinionModalOpen(false)}
-                onAdd={handleAddOpinion}
-                documents={availableDocuments}
+            <ViewOpinionModal
+                isOpen={isViewOpinionModalOpen}
+                onClose={handleCloseViewOpinion}
+                opinion={selectedViewOpinion}
+                guestToken={guestToken}
             />
 
             {/* Inline Start Content Modal */}
@@ -383,7 +403,88 @@ export default function DienBienPhienHopPage() {
                 results={votingResultData?.results || { agree: 0, disagree: 0, other: 0, notVoted: 0 }}
                 votedDelegates={votingResultData?.votedDelegates || []}
                 notVotedDelegates={votingResultData?.notVotedDelegates || []}
+                isAdmin={isChairOrSecretary}
+                showVotingListSetting={votingResultData?.showVotingList || false}
+                onToggleVotingList={(show) => currentVotingIssue && handleToggleVotingList(currentVotingIssue.id, show)}
             />
+
+            {!isGuest && (
+                <>
+                    {/* Floating Book Button */}
+                    <div className="fixed right-6 bottom-24 z-40 group">
+                        <button
+                            type="button"
+                            onClick={() => setIsNotesModalOpen(true)}
+                            className="w-14 h-14 bg-gradient-to-tr from-[#C8102E] to-[#E53E3E] text-white rounded-full flex items-center justify-center shadow-xl hover:scale-110 active:scale-95 transition-all duration-300 relative border border-red-500/25"
+                        >
+                            <BookOpen className="h-6 w-6" />
+                        </button>
+                        {/* Tooltip */}
+                        <div className="absolute right-16 top-1/2 -translate-y-1/2 hidden group-hover:block z-50 animate-in fade-in-0 slide-in-from-right-3 duration-200">
+                            <div className="bg-gray-900 text-white text-xs rounded-xl px-3.5 py-2.5 whitespace-nowrap shadow-xl border border-gray-800 font-medium">
+                                Ghi chú cuộc họp
+                                <div className="absolute top-1/2 left-full -translate-y-1/2 border-4 border-transparent border-l-gray-900"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <PersonalNotesModal
+                        isOpen={isNotesModalOpen}
+                        onClose={() => setIsNotesModalOpen(false)}
+                        meetingId={id || ""}
+                        meetingTitle={meeting?.title || "Phiên họp"}
+                        agendaItems={meetingContents.map((c) => ({
+                            id: String(c.id),
+                            title: c.title,
+                            description: c.description,
+                        }))}
+                    />
+                </>
+            )}
+
+            {/* Speaking Duration Modal */}
+            <Dialog open={isDurationModalOpen} onOpenChange={setIsDurationModalOpen}>
+                <DialogContent className="max-w-md rounded-2xl p-6 bg-white">
+                    <DialogHeader>
+                        <DialogTitle className="text-lg font-semibold text-gray-900">
+                            Thiết lập thời gian phát biểu
+                        </DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 mt-4">
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium text-gray-700">
+                                Thời gian phát biểu (phút) <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                                type="number"
+                                min="1"
+                                className="w-full p-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#C8102E]/20 focus:border-[#C8102E] text-sm"
+                                placeholder="Nhập số phút phát biểu..."
+                                value={speakingDuration}
+                                onChange={(e) => setSpeakingDuration(e.target.value)}
+                            />
+                        </div>
+                        <div className="flex justify-end gap-3 pt-2">
+                            <Button
+                                variant="outline"
+                                className="rounded-full"
+                                onClick={() => {
+                                    setIsDurationModalOpen(false);
+                                }}
+                            >
+                                Hủy
+                            </Button>
+                            <Button
+                                variant="primary"
+                                className="bg-[#C8102E] hover:bg-[#a80d26] rounded-full text-white"
+                                onClick={handleConfirmDuration}
+                            >
+                                Xác nhận
+                            </Button>
+                        </div>
+                    </div>
+                </DialogContent>
+            </Dialog>
         </>
     );
 }

@@ -123,4 +123,14 @@ public class MotionController {
                 .data(motionService.getVoteStatistics(id))
                 .message("Lấy thống kê biểu quyết thành công").build());
     }
+
+    @Operation(summary = "Cho phép/Không cho phép xem danh sách biểu quyết",
+               description = "Bật/tắt việc xem danh sách chi tiết các đại biểu đã biểu quyết. Chỉ Chủ trì/Thư ký được gọi.")
+    @PutMapping("/motions/{id}/toggle-voting-list")
+    public ResponseEntity<ApiResponse<VoteStatisticsResponse>> toggleVotingList(
+            @PathVariable UUID id, @RequestParam boolean show) {
+        return ResponseEntity.ok(ApiResponse.<VoteStatisticsResponse>builder()
+                .data(motionService.toggleVotingList(id, show))
+                .message("Đã cập nhật trạng thái hiển thị danh sách biểu quyết").build());
+    }
 }

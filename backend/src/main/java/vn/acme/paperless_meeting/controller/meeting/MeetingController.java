@@ -37,6 +37,7 @@ import vn.acme.paperless_meeting.dto.request.meeting.MeetingInvitationPreviewReq
 import vn.acme.paperless_meeting.dto.response.meeting.MeetingResponse;
 import vn.acme.paperless_meeting.dto.response.meeting.MeetingInvitationPreviewResponse;
 import vn.acme.paperless_meeting.entity.enums.MeetingStatus;
+import vn.acme.paperless_meeting.entity.enums.InviteStatus;
 import vn.acme.paperless_meeting.service.meeting.MeetingService;
 
 @RestController
@@ -54,11 +55,13 @@ public class MeetingController {
     public ResponseEntity<ApiResponse<PageResponse<MeetingResponse>>> findAll(
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) List<MeetingStatus> statuses,
+            @RequestParam(required = false) InviteStatus inviteStatus,
+            @RequestParam(required = false) Boolean onlyMyMeetings,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime fromDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime toDate,
             @PageableDefault(sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
 
-        PageResponse<MeetingResponse> response = meetingService.findAll(keyword, statuses, fromDate, toDate, pageable);
+        PageResponse<MeetingResponse> response = meetingService.findAll(keyword, statuses, inviteStatus, onlyMyMeetings, fromDate, toDate, pageable);
         return ResponseEntity.ok(ApiResponse.<PageResponse<MeetingResponse>>builder()
                 .success(true)
                 .data(response)
@@ -78,6 +81,26 @@ public class MeetingController {
         return ResponseEntity.ok(ApiResponse.<List<MeetingResponse>>builder()
                 .success(true)
                 .data(response)
+                .build());
+    }
+
+    @Operation(summary = "Sidebar: Cuộc họp chờ phê duyệt",
+               description = "Trả về danh sách cuộc họp đang ở trạng thái PENDING_APPROVAL mà user hiện tại có quyền phê duyệt.")
+    @GetMapping("/sidebar/approval")
+    public ResponseEntity<ApiResponse<List<MeetingResponse>>> getSidebarApprovalMeetings() {
+        return ResponseEntity.ok(ApiResponse.<List<MeetingResponse>>builder()
+                .success(true)
+                .data(meetingService.findSidebarApprovalMeetings())
+                .build());
+    }
+
+    @Operation(summary = "Sidebar: Tài liệu cần xử lý",
+               description = "Trả về danh sách cuộc họp mà user cần tải lên tài liệu (preparer) hoặc phê duyệt tài liệu (creator).")
+    @GetMapping("/sidebar/doc-tasks")
+    public ResponseEntity<ApiResponse<List<MeetingResponse>>> getSidebarDocTaskMeetings() {
+        return ResponseEntity.ok(ApiResponse.<List<MeetingResponse>>builder()
+                .success(true)
+                .data(meetingService.findSidebarDocTaskMeetings())
                 .build());
     }
 

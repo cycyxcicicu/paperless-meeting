@@ -201,7 +201,8 @@ public enum ErrorCode implements BaseErrorCode {
         MEETING_ALREADY_CLOSED(1252, "Cuộc họp đã kết thúc hoặc đã bị hủy", HttpStatus.BAD_REQUEST),
         MEETING_PARTICIPANT_ALREADY_CONFIRMED(1253, "Yêu cầu xác nhận không hợp lệ: Đồng chí đã xác nhận tham dự cuộc họp này trước đó.", HttpStatus.BAD_REQUEST),
         MEETING_LOCATION_CAPACITY_EXCEEDED(1254, "Số lượng người tham dự vượt quá sức chứa của phòng họp", HttpStatus.BAD_REQUEST),
-        MEETING_POSTPONE_TIME_INVALID(1255, "Thời gian bắt đầu mới phải sau thời gian bắt đầu hiện tại của phiên họp", HttpStatus.BAD_REQUEST);
+        MEETING_POSTPONE_TIME_INVALID(1255, "Thời gian bắt đầu mới phải sau thời gian bắt đầu hiện tại của phiên họp", HttpStatus.BAD_REQUEST),
+        SPEAKER_ALREADY_SPEAKING(2016, "Hiện đang có đại biểu khác phát biểu. Vui lòng kết thúc lượt phát biểu hiện tại trước khi chỉ định lượt mới.", HttpStatus.BAD_REQUEST);
 
         int code;
         String message;

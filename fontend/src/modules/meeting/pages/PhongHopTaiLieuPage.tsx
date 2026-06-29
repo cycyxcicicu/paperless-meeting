@@ -246,7 +246,7 @@ const PhongHopTaiLieuPage = () => {
                                         <th className="px-6 py-4 text-xs heading text-gray-500 uppercase tracking-wider w-[120px]">
                                             Ngày đăng
                                         </th>
-                                        <th className="px-6 py-4 text-xs heading text-gray-500 uppercase tracking-wider text-right w-[100px]">
+                                        <th className="px-6 py-4 text-xs heading text-gray-500 uppercase tracking-wider text-right w-[320px]">
                                             Thao tác
                                         </th>
                                     </tr>
@@ -293,12 +293,14 @@ const PhongHopTaiLieuPage = () => {
                                                     {doc.uploadDate}
                                                 </td>
                                                 <td className="px-6 py-4">
-                                                    <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                        <button className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
-                                                            <Eye className="w-4 h-4" />
+                                                    <div className="flex items-center justify-end gap-2 flex-wrap">
+                                                        <button className="px-2 py-1 text-blue-600 hover:text-blue-700 hover:bg-blue-50 border border-blue-100 rounded-lg transition-colors flex items-center gap-1.5 text-xs font-semibold">
+                                                            <Eye className="w-3.5 h-3.5" />
+                                                            <span>Xem</span>
                                                         </button>
-                                                        <button className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors">
-                                                            <Download className="w-4 h-4" />
+                                                        <button className="px-2 py-1 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 border border-emerald-100 rounded-lg transition-colors flex items-center gap-1.5 text-xs font-semibold">
+                                                            <Download className="w-3.5 h-3.5" />
+                                                            <span>Tải</span>
                                                         </button>
                                                         <button
                                                             onClick={(e) => {
@@ -310,9 +312,9 @@ const PhongHopTaiLieuPage = () => {
                                                                     true,
                                                                 );
                                                             }}
-                                                            className="p-1.5 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
-                                                        >
-                                                            <Edit className="w-4 h-4" />
+                                                            className="px-2 py-1 text-amber-600 hover:text-amber-700 hover:bg-amber-50 border border-amber-100 rounded-lg transition-colors flex items-center gap-1.5 text-xs font-semibold">
+                                                            <Edit className="w-3.5 h-3.5" />
+                                                            <span>Sửa</span>
                                                         </button>
                                                         <button
                                                             onClick={(e) => {
@@ -324,9 +326,9 @@ const PhongHopTaiLieuPage = () => {
                                                                     true,
                                                                 );
                                                             }}
-                                                            className="p-1.5 text-gray-400 hover:text-[#C8102E] hover:bg-red-50 rounded-lg transition-colors"
-                                                        >
-                                                            <Trash2 className="w-4 h-4" />
+                                                            className="px-2 py-1 text-red-500 hover:text-red-700 hover:bg-red-50 border border-red-100 rounded-lg transition-colors flex items-center gap-1.5 text-xs font-semibold">
+                                                            <Trash2 className="w-3.5 h-3.5" />
+                                                            <span>Xóa</span>
                                                         </button>
                                                     </div>
                                                 </td>

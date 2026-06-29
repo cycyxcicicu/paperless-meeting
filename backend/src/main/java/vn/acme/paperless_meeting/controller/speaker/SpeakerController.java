@@ -73,6 +73,15 @@ public class SpeakerController {
         return ApiResponse.<Void>builder().build();
     }
 
+    @PostMapping("/prepare/{queueId}")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DEPARTMENT_ADMIN', 'USER')")
+    public ApiResponse<Void> prepareSpeaker(
+            @PathVariable UUID meetingId,
+            @PathVariable UUID queueId) {
+        speakerService.prepareSpeaker(meetingId, queueId);
+        return ApiResponse.<Void>builder().build();
+    }
+
     @PostMapping("/start-turn/{queueId}")
     @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'DEPARTMENT_ADMIN', 'USER')")
     public ApiResponse<SpeakerTurnResponse> startTurn(

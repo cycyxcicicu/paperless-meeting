@@ -13,6 +13,8 @@ import {
     Shield,
     Users,
     Vote,
+    Bookmark,
+    BookOpen,
 } from 'lucide-react';
 
 interface SidebarItem {
@@ -31,12 +33,11 @@ export const PHIEN_HOP_SIDEBAR_ITEMS: SidebarItem[] = [
   },
   {
     name: 'Tài liệu',
-    path: '/phien-hop/tai-lieu',
+    path: '/ca-nhan/phien-hop-luu',
     icon: FileText,
     subItems: [
-      { name: 'Nghị quyết', path: '/phien-hop/tai-lieu/nghi-quyet' },
-      { name: 'Báo cáo', path: '/phien-hop/tai-lieu/bao-cao' },
-      { name: 'Tờ trình', path: '/phien-hop/tai-lieu/to-trinh' },
+      { name: 'Phiên họp đã lưu', path: '/ca-nhan/phien-hop-luu' },
+      { name: 'Ghi chú của tôi', path: '/ca-nhan/ghi-chu' },
     ],
   },
   {

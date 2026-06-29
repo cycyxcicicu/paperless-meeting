@@ -33,6 +33,8 @@ import { MeetingSpeakerRegistrationSection } from "../components/chi-tiet/Meetin
 import { MeetingOpinionSection } from "../components/chi-tiet/MeetingOpinionSection";
 import { MeetingFooterActions } from "../components/chi-tiet/MeetingFooterActions";
 import { useMeetingState } from "../hooks/useMeetingState";
+import { AddOpinionForContentModal } from "../components/AddOpinionForContentModal";
+import { ViewOpinionModal } from "../components/ViewOpinionModal";
 import { mapMeetingStatusVi } from "../utils/meetingHelpers";
 import { getRemainingTimeVi } from "@/common/utils/timeHelpers";
 import { LoadingOverlay } from "@/common/components/ui/LoadingOverlay";
@@ -84,8 +86,60 @@ export default function PhienHopChiTietPage() {
     const [opinionDetail, setOpinionDetail] = useState("");
     const [selectedAgendaItemId, setSelectedAgendaItemId] = useState("");
     const [isOpinionModalOpen, setIsOpinionModalOpen] = useState(false);
+    const [selectedViewOpinion, setSelectedViewOpinion] = useState<any | null>(null);
+    const [isViewOpinionModalOpen, setIsViewOpinionModalOpen] = useState(false);
+
+    const availableDocuments = useMemo(() => {
+        const list = agendaItems.flatMap((item: any) => 
+            (item.documents || []).map((doc: any) => ({
+                value: doc.documentId || doc.id,
+                label: doc.title || doc.fileName || ""
+            }))
+        );
+        if (meetingDetail?.agendaFile) {
+            list.unshift({
+                value: meetingDetail.agendaFile.id,
+                label: meetingDetail.agendaFile.name || "Chương trình họp"
+            });
+        }
+        return list;
+    }, [agendaItems, meetingDetail]);
+
+    const availableContents = useMemo(() => {
+        return agendaItems.map((item: any) => ({
+            value: item.id.toString(),
+            label: item.title
+        }));
+    }, [agendaItems]);
+
+    const mappedOpinions = useMemo(() => {
+        return opinions.map((op: any) => {
+            const documentName = op.documentName || undefined;
+            const attachments = (op.attachments || [])
+                .map((att: any) => ({
+                    name: att.fileName || att.title || "",
+                    size: att.fileSize || 0,
+                    documentId: att.documentId,
+                    fileUrl: att.fileUrl
+                }))
+                .filter((att: any) => att.name !== documentName);
+
+            return {
+                id: op.id,
+                userName: op.delegateName || op.userName || "",
+                userPosition: op.position || "-",
+                documentName,
+                opinionDetail: op.content || "",
+                attachments,
+                createdAt: op.time ? new Date(op.time).toLocaleString("vi-VN") : ""
+            };
+        });
+    }, [opinions]);
     const [isManageParticipantsOpen, setIsManageParticipantsOpen] = useState(false);
     const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false);
+    const [isDurationModalOpen, setIsDurationModalOpen] = useState(false);
+    const [speakingDuration, setSpeakingDuration] = useState("5");
+    const [durationTargetQueueId, setDurationTargetQueueId] = useState<string | number | null>(null);
     const [participantsData, setParticipantsData] = useState<ThanhPhanThamDuData>({
         donVi: [],
         caNhan: [],
@@ -105,6 +159,10 @@ export default function PhienHopChiTietPage() {
 
     const rejectedSpeakers = useMemo(() => {
         return speakersQueue.filter((s: any) => s.queueStatus === "REJECTED");
+    }, [speakersQueue]);
+
+    const spokenSpeakers = useMemo(() => {
+        return speakersQueue.filter((s: any) => s.queueStatus === "SPEAKING" || s.queueStatus === "DONE");
     }, [speakersQueue]);
 
     // Track active speaker states for current user
@@ -330,40 +388,31 @@ export default function PhienHopChiTietPage() {
         }
     };
 
-    const handleCreateOpinion = async () => {
+    const handleAddOpinionForContent = async (data: any) => {
         if (!id) return;
-        if (!opinionDetail.trim()) {
-            toast.error("Vui lòng nhập chi tiết góp ý");
-            return;
-        }
         try {
-            let docName = "";
-            let docIds: string[] = [];
-            if (selectedAgendaItemId) {
-                const selectedItem = agendaItems.find(
-                    (item: any) => item.id === selectedAgendaItemId,
-                );
-                if (selectedItem) {
-                    docName = selectedItem.title || "";
-                    if (selectedItem.documents) {
-                        docIds = selectedItem.documents
-                            .map((doc: any) => doc.documentId || doc.id)
-                            .filter(Boolean);
-                    }
-                }
+            let documentIds: string[] = [];
+            if (data.attachments && data.attachments.length > 0) {
+                const uploadPromises = data.attachments.map((file: any) => meetingApi.uploadDocument(file));
+                const uploadResponses = await Promise.all(uploadPromises);
+                documentIds = uploadResponses
+                    .filter(res => res.success && res.data)
+                    .map(res => res.data!.id);
             }
 
+            const documentName = data.documentId
+                ? availableDocuments.find((doc) => doc.value === data.documentId)?.label
+                : undefined;
+
             const res = await meetingApi.createOpinion(id, {
-                opinionDetail,
-                documentName: docName || undefined,
-                documentIds: docIds.length > 0 ? docIds : undefined,
+                opinionDetail: data.opinionDetail,
+                documentName,
+                documentIds: documentIds.length > 0 ? documentIds : undefined
             });
 
             if (res.success) {
                 toast.success("Đã gửi ý kiến góp ý thành công");
                 setIsOpinionModalOpen(false);
-                setOpinionDetail("");
-                setSelectedAgendaItemId("");
                 loadData();
             } else {
                 toast.error(res.message || "Không thể gửi ý kiến góp ý");
@@ -372,6 +421,11 @@ export default function PhienHopChiTietPage() {
             console.error("Error creating opinion:", error);
             toast.error("Đã xảy ra lỗi khi gửi ý kiến góp ý");
         }
+    };
+
+    const handleViewOpinion = (opinion: any) => {
+        setSelectedViewOpinion(opinion);
+        setIsViewOpinionModalOpen(true);
     };
 
     const handleSubmitApproval = async () => {
@@ -502,11 +556,25 @@ export default function PhienHopChiTietPage() {
 
     const handleStartSpeakerTurn = async (queueId: string | number) => {
         if (!id) return;
+        setDurationTargetQueueId(queueId);
+        setSpeakingDuration("5");
+        setIsDurationModalOpen(true);
+    };
+
+    const handleConfirmDuration = async () => {
+        if (!id || !durationTargetQueueId) return;
+        const minutes = parseInt(speakingDuration, 10);
+        if (isNaN(minutes) || minutes <= 0) {
+            toast.error("Thời gian phát biểu không hợp lệ (phải là số nguyên lớn hơn 0)");
+            return;
+        }
         try {
-            const res = await meetingApi.startSpeakerTurn(id, queueId.toString());
+            const res = await meetingApi.startSpeakerTurn(id, durationTargetQueueId.toString(), minutes);
             if (res.success) {
                 toast.success("Đã bắt đầu lượt phát biểu");
                 loadData();
+                setIsDurationModalOpen(false);
+                setDurationTargetQueueId(null);
             } else {
                 toast.error(res.message || "Không thể cho phát biểu");
             }
@@ -537,12 +605,13 @@ export default function PhienHopChiTietPage() {
             const res = await meetingApi.getVoteStatistics(motion.id);
             if (res.success && res.data) {
                 const stats = res.data;
-                const total = stats.yesCount + stats.noCount;
+                const total = stats.yesCount + stats.noCount + (stats.otherCount || 0);
                 const yesPercentage = total > 0 ? Math.round((stats.yesCount / total) * 100) : 0;
                 setVoteStats({
                     ...stats,
                     yesVotes: stats.yesCount,
                     noVotes: stats.noCount,
+                    otherVotes: stats.otherCount || 0,
                     yesPercentage: yesPercentage
                 });
                 setSelectedMotionForStats(motion);
@@ -718,6 +787,7 @@ export default function PhienHopChiTietPage() {
                             agendaItems={agendaItems}
                             viewDocument={(docId) => viewDocument(docId, guestToken)}
                             downloadDocument={(docId, title) => downloadDocument(docId, title, guestToken)}
+                            agendaFile={meetingDetail?.agendaFile}
                         />
 
                         {/* 3. Voting Items Section */}
@@ -732,7 +802,7 @@ export default function PhienHopChiTietPage() {
                         {/* 4. Speaker Queue Registration List Section */}
                         {!isGuest && (
                             <MeetingSpeakerRegistrationSection
-                                waitingSpeakers={waitingSpeakers}
+                                spokenSpeakers={spokenSpeakers}
                                 rejectedSpeakers={rejectedSpeakers}
                                 meetingDetail={meetingDetail}
                                 handleStartSpeakerTurn={handleStartSpeakerTurn}
@@ -743,9 +813,10 @@ export default function PhienHopChiTietPage() {
                         {/* 5. Opinions Feedback Section */}
                         {!isGuest && (
                             <MeetingOpinionSection
-                                opinions={opinions}
-                                setIsOpinionModalOpen={setIsOpinionModalOpen}
-                                viewDocument={viewDocument}
+                                opinions={mappedOpinions}
+                                onAddOpinion={() => setIsOpinionModalOpen(true)}
+                                onViewOpinion={handleViewOpinion}
+                                disabled={meetingDetail?.status === "CLOSED" || meetingDetail?.status === "CANCELLED"}
                             />
                         )}
 
@@ -812,21 +883,29 @@ export default function PhienHopChiTietPage() {
                                     {selectedMotionForStats.title || selectedMotionForStats.content}
                                 </p>
                             </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="p-4 border border-green-100 bg-green-50/30 rounded-xl text-center">
-                                    <span className="text-sm text-green-700 font-medium">
+                             <div className="grid grid-cols-3 gap-3">
+                                <div className="p-3 border border-green-100 bg-green-50/30 rounded-xl text-center">
+                                    <span className="text-xs text-green-700 font-medium">
                                         Đồng ý
                                     </span>
-                                    <p className="text-2xl font-bold text-green-600 mt-1">
+                                    <p className="text-xl font-bold text-green-600 mt-1">
                                         {voteStats.yesVotes}
                                     </p>
                                 </div>
-                                <div className="p-4 border border-red-100 bg-red-50/10 rounded-xl text-center">
-                                    <span className="text-sm text-red-700 font-medium">
+                                <div className="p-3 border border-red-100 bg-red-50/10 rounded-xl text-center">
+                                    <span className="text-xs text-red-700 font-medium">
                                         Không đồng ý
                                     </span>
-                                    <p className="text-2xl font-bold text-red-600 mt-1">
+                                    <p className="text-xl font-bold text-red-600 mt-1">
                                         {voteStats.noVotes}
+                                    </p>
+                                </div>
+                                <div className="p-3 border border-amber-100 bg-amber-50/20 rounded-xl text-center">
+                                    <span className="text-xs text-amber-700 font-medium">
+                                        Ý kiến khác
+                                    </span>
+                                    <p className="text-xl font-bold text-amber-600 mt-1">
+                                        {voteStats.otherVotes || 0}
                                     </p>
                                 </div>
                             </div>
@@ -904,62 +983,65 @@ export default function PhienHopChiTietPage() {
             </Dialog>
 
             {/* Add Opinion Modal */}
-            <Dialog open={isOpinionModalOpen} onOpenChange={setIsOpinionModalOpen}>
+            <AddOpinionForContentModal
+                isOpen={isOpinionModalOpen}
+                onClose={() => setIsOpinionModalOpen(false)}
+                onSubmit={handleAddOpinionForContent}
+                contents={availableContents}
+                documents={availableDocuments}
+            />
+
+            {/* View Opinion Modal */}
+            <ViewOpinionModal
+                isOpen={isViewOpinionModalOpen}
+                onClose={() => {
+                    setIsViewOpinionModalOpen(false);
+                    setSelectedViewOpinion(null);
+                }}
+                opinion={selectedViewOpinion}
+                guestToken={guestToken}
+            />
+
+            {/* Speaking Duration Modal */}
+            <Dialog open={isDurationModalOpen} onOpenChange={setIsDurationModalOpen}>
                 <DialogContent className="max-w-md rounded-2xl p-6 bg-white">
                     <DialogHeader>
                         <DialogTitle className="text-lg font-semibold text-gray-900">
-                            Thêm ý kiến góp ý
+                            Thiết lập thời gian phát biểu
                         </DialogTitle>
                     </DialogHeader>
                     <div className="space-y-4 mt-4">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-750 mb-1">
-                                Nội dung góp ý <span className="text-red-500">*</span>
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium text-gray-700">
+                                Thời gian phát biểu (phút) <span className="text-red-500">*</span>
                             </label>
-                            <textarea
-                                className="w-full min-h-[100px] p-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-[#C8102E] focus:border-[#C8102E]"
-                                placeholder="Nhập nội dung góp ý của bạn..."
-                                value={opinionDetail}
-                                onChange={(e) => setOpinionDetail(e.target.value)}
+                            <input
+                                type="number"
+                                min="1"
+                                className="w-full p-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#C8102E]/20 focus:border-[#C8102E] text-sm"
+                                placeholder="Nhập số phút phát biểu..."
+                                value={speakingDuration}
+                                onChange={(e) => setSpeakingDuration(e.target.value)}
                             />
                         </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-750 mb-1">
-                                Nội dung góp ý (Tùy chọn)
-                            </label>
-                            <select
-                                className="w-full p-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-[#C8102E] focus:border-[#C8102E] bg-white"
-                                value={selectedAgendaItemId}
-                                onChange={(e) => setSelectedAgendaItemId(e.target.value)}
+                        <div className="flex justify-end gap-3 pt-2">
+                            <Button
+                                variant="outline"
+                                className="rounded-full"
+                                onClick={() => {
+                                    setIsDurationModalOpen(false);
+                                }}
                             >
-                                <option value="">-- Chọn nội dung góp ý --</option>
-                                {agendaItems.map((item: any) => (
-                                    <option key={item.id} value={item.id}>
-                                        {item.orderNo ? `${item.orderNo}. ` : ""}{item.title}
-                                    </option>
-                                ))}
-                            </select>
+                                Hủy
+                            </Button>
+                            <Button
+                                variant="primary"
+                                className="bg-[#C8102E] hover:bg-[#a80d26] rounded-full text-white"
+                                onClick={handleConfirmDuration}
+                            >
+                                Xác nhận
+                            </Button>
                         </div>
-                    </div>
-                    <div className="flex justify-end gap-3 mt-6">
-                        <Button
-                            variant="outline"
-                            className="rounded-full px-5"
-                            onClick={() => {
-                                setIsOpinionModalOpen(false);
-                                setOpinionDetail("");
-                                setSelectedAgendaItemId("");
-                            }}
-                        >
-                            Hủy
-                        </Button>
-                        <Button
-                            variant="primary"
-                            className="bg-[#C8102E] hover:bg-[#a80d26] rounded-full px-5 text-white"
-                            onClick={handleCreateOpinion}
-                        >
-                            Gửi góp ý
-                        </Button>
                     </div>
                 </DialogContent>
             </Dialog>

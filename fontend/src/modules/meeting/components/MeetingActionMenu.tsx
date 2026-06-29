@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MoreVertical, Edit, Copy, Clock, XCircle, Send, FileUp, CheckSquare } from 'lucide-react';
+import { MoreVertical, Edit, Copy, Clock, XCircle, Send, FileUp, CheckSquare, Bookmark } from 'lucide-react';
 import { cn } from '@/common/utils/cn';
 
 interface MeetingActionMenuProps {
@@ -12,6 +12,9 @@ interface MeetingActionMenuProps {
   canUploadDocs?: boolean;
   canCopy?: boolean;
   canApprove?: boolean;
+  status?: string;
+  isSaved?: boolean;
+  onToggleSave?: (id: string) => void;
   onViewDetail: (id: string) => void;
   onUpdate: (id: string) => void;
   onCopy: (id: string) => void;
@@ -29,6 +32,9 @@ export const MeetingActionMenu: React.FC<MeetingActionMenuProps> = ({
   canUploadDocs,
   canCopy,
   canApprove,
+  status,
+  isSaved,
+  onToggleSave,
   onViewDetail,
   onUpdate,
   onCopy,
@@ -115,6 +121,16 @@ export const MeetingActionMenu: React.FC<MeetingActionMenuProps> = ({
         label: 'Sao chép phiên họp',
         onClick: () => onCopy(meetingId),
         variant: 'default'
+      });
+    }
+
+    // 8. Quyền lưu tài liệu phiên họp
+    if (status === 'IN_PROGRESS') {
+      actions.push({
+        icon: Bookmark,
+        label: isSaved ? 'Hủy lưu tài liệu' : 'Lưu tài liệu phiên họp',
+        onClick: () => onToggleSave?.(meetingId),
+        variant: isSaved ? 'danger' : 'primary'
       });
     }
 

@@ -34,6 +34,9 @@ interface VotingResultModalProps {
   results: VotingResult;
   votedDelegates: VotedDelegate[];
   notVotedDelegates: NotVotedDelegate[];
+  isAdmin?: boolean;
+  showVotingListSetting?: boolean;
+  onToggleVotingList?: (show: boolean) => void;
 }
 
 export const VotingResultModal: React.FC<VotingResultModalProps> = ({
@@ -43,9 +46,11 @@ export const VotingResultModal: React.FC<VotingResultModalProps> = ({
   results,
   votedDelegates,
   notVotedDelegates,
+  isAdmin = false,
+  showVotingListSetting = false,
+  onToggleVotingList,
 }) => {
   const [activeTab, setActiveTab] = useState<'voted' | 'not-voted'>('voted');
-  const [showDelegateList, setShowDelegateList] = useState(false);
 
   if (!isOpen) return null;
 
@@ -213,32 +218,33 @@ export const VotingResultModal: React.FC<VotingResultModalProps> = ({
             </div>
           </div>
 
-          {/* Toggle Show Delegate List */}
-          <div className="mb-4">
-            <label className="flex items-center gap-3 cursor-pointer">
+          {/* Admin Toggle: Cho phép xem danh sách biểu quyết */}
+          {isAdmin && (
+            <div className="mb-5 p-4 bg-gray-50 rounded-xl border border-gray-200 flex items-center justify-between">
+              <div>
+                <h4 className="text-sm font-semibold text-gray-900">Công khai danh sách biểu quyết</h4>
+                <p className="text-xs text-gray-500 mt-0.5">Cho phép tất cả đại biểu xem chi tiết lựa chọn của từng người</p>
+              </div>
               <button
                 type="button"
-                onClick={() => setShowDelegateList(!showDelegateList)}
+                onClick={() => onToggleVotingList?.(!showVotingListSetting)}
                 className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 ${
-                  showDelegateList
-                    ? 'bg-[#C8102E] focus:ring-[#C8102E]'
+                  showVotingListSetting
+                    ? 'bg-green-600 focus:ring-green-500'
                     : 'bg-gray-300 focus:ring-gray-400'
                 }`}
               >
                 <span
                   className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                    showDelegateList ? 'translate-x-6' : 'translate-x-1'
+                    showVotingListSetting ? 'translate-x-6' : 'translate-x-1'
                   }`}
                 />
               </button>
-              <span className="text-sm body text-gray-900">
-                Cho phép xem danh sách biểu quyết
-              </span>
-            </label>
-          </div>
+            </div>
+          )}
 
-          {/* Delegate List */}
-          {showDelegateList && (
+          {/* Delegate List — visible for admin always, for others only when setting is on */}
+          {(isAdmin || showVotingListSetting) ? (
             <div className="border border-gray-200 rounded-xl overflow-hidden">
               {/* Tabs */}
               <div className="flex items-center gap-6 border-b border-gray-200 bg-gray-50 px-4">
@@ -336,6 +342,10 @@ export const VotingResultModal: React.FC<VotingResultModalProps> = ({
                   </table>
                 )}
               </div>
+            </div>
+          ) : (
+            <div className="text-center p-6 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+              <p className="text-sm text-gray-500">Danh sách biểu quyết chi tiết chưa được công khai.</p>
             </div>
           )}
         </div>

@@ -93,10 +93,12 @@ public class MotionService {
                 throw new AppException(ErrorCode.MOTION_MODIFICATION_FORBIDDEN);
             }
         } else if (meeting.getStatus() == MeetingStatus.IN_PROGRESS) {
-            // Trong cuộc họp: Chỉ Chủ tọa (CHAIR) mới được tạo biểu quyết phát sinh
+            // Trong cuộc họp: Chủ tọa (CHAIR) hoặc Thư ký (SECRETARY) mới được tạo biểu quyết phát sinh
             boolean isChair = meetingParticipantRepository.existsByMeetingIdAndUserIdAndParticipantRole(
                     meeting.getId(), caller.getId(), ParticipantRole.CHAIR);
-            if (!isChair) {
+            boolean isSecretary = meetingParticipantRepository.existsByMeetingIdAndUserIdAndParticipantRole(
+                    meeting.getId(), caller.getId(), ParticipantRole.SECRETARY);
+            if (!isChair && !isSecretary) {
                 throw new AppException(ErrorCode.MOTION_MODIFICATION_FORBIDDEN);
             }
         } else {
@@ -145,7 +147,9 @@ public class MotionService {
         } else if (meeting.getStatus() == MeetingStatus.IN_PROGRESS) {
             boolean isChair = meetingParticipantRepository.existsByMeetingIdAndUserIdAndParticipantRole(
                     meeting.getId(), caller.getId(), ParticipantRole.CHAIR);
-            if (!isChair) {
+            boolean isSecretary = meetingParticipantRepository.existsByMeetingIdAndUserIdAndParticipantRole(
+                    meeting.getId(), caller.getId(), ParticipantRole.SECRETARY);
+            if (!isChair && !isSecretary) {
                 throw new AppException(ErrorCode.MOTION_MODIFICATION_FORBIDDEN);
             }
         } else {
@@ -193,7 +197,9 @@ public class MotionService {
         } else if (meeting.getStatus() == MeetingStatus.IN_PROGRESS) {
             boolean isChair = meetingParticipantRepository.existsByMeetingIdAndUserIdAndParticipantRole(
                     meeting.getId(), caller.getId(), ParticipantRole.CHAIR);
-            if (!isChair) {
+            boolean isSecretary = meetingParticipantRepository.existsByMeetingIdAndUserIdAndParticipantRole(
+                    meeting.getId(), caller.getId(), ParticipantRole.SECRETARY);
+            if (!isChair && !isSecretary) {
                 throw new AppException(ErrorCode.MOTION_MODIFICATION_FORBIDDEN);
             }
         } else {
@@ -311,11 +317,11 @@ public class MotionService {
         Meeting meeting = motion.getMeeting();
         User caller = currentUserService.getCurrentActiveUser();
 
-        // Phải là chủ tọa (CHAIR) mới được phát lệnh biểu quyết
-        boolean isChair = meetingParticipantRepository.findByMeetingIdAndUserId(meeting.getId(), caller.getId())
-                .map(p -> p.getParticipantRole() == ParticipantRole.CHAIR)
+        // Phải là chủ tọa (CHAIR) hoặc thư ký (SECRETARY) mới được phát lệnh biểu quyết
+        boolean isAuthorized = meetingParticipantRepository.findByMeetingIdAndUserId(meeting.getId(), caller.getId())
+                .map(p -> p.getParticipantRole() == ParticipantRole.CHAIR || p.getParticipantRole() == ParticipantRole.SECRETARY)
                 .orElse(false);
-        if (!isChair) {
+        if (!isAuthorized) {
             throw new AppException(ErrorCode.UNAUTHOZIZED);
         }
 
@@ -324,11 +330,11 @@ public class MotionService {
             throw new AppException(ErrorCode.MEETING_STATUS_TRANSITION_INVALID);
         }
 
-        // Tạo mới một phiên biểu quyết (YES_NO)
+        // Tạo mới một phiên biểu quyết (YES_NO_ABSTAIN)
         VoteSession session = new VoteSession();
         session.setOpenedAt(LocalDateTime.now());
         session.setStatus(VoteSessionStatus.OPEN);
-        session.setVoteType(VoteType.YES_NO);
+        session.setVoteType(VoteType.YES_NO_ABSTAIN);
         session.setIsAnonymous(false);
         session.setAllowChangeVote(false);
         session.setMeeting(meeting);
@@ -337,7 +343,7 @@ public class MotionService {
         session.setDurationMinutes(durationMinutes);
         VoteSession savedSession = voteSessionRepository.save(session);
 
-        // Tạo 2 Option CÓ / KHÔNG
+        // Tạo 3 Option CÓ / KHÔNG / Ý KIẾN KHÁC
         VoteOption optYes = new VoteOption();
         optYes.setLabel("CÓ");
         optYes.setOrderNo(1);
@@ -349,6 +355,12 @@ public class MotionService {
         optNo.setOrderNo(2);
         optNo.setVoteSession(savedSession);
         voteOptionRepository.save(optNo);
+
+        VoteOption optOther = new VoteOption();
+        optOther.setLabel("Ý KIẾN KHÁC");
+        optOther.setOrderNo(3);
+        optOther.setVoteSession(savedSession);
+        voteOptionRepository.save(optOther);
 
         motion.setStatus(MotionStatus.SUBMITTED);
         Motion savedMotion = motionRepository.save(motion);
@@ -383,10 +395,10 @@ public class MotionService {
         Meeting meeting = motion.getMeeting();
         User caller = currentUserService.getCurrentActiveUser();
 
-        boolean isChair = meetingParticipantRepository.findByMeetingIdAndUserId(meeting.getId(), caller.getId())
-                .map(p -> p.getParticipantRole() == ParticipantRole.CHAIR)
+        boolean isAuthorized = meetingParticipantRepository.findByMeetingIdAndUserId(meeting.getId(), caller.getId())
+                .map(p -> p.getParticipantRole() == ParticipantRole.CHAIR || p.getParticipantRole() == ParticipantRole.SECRETARY)
                 .orElse(false);
-        if (!isChair) {
+        if (!isAuthorized) {
             throw new AppException(ErrorCode.UNAUTHOZIZED);
         }
 
@@ -459,7 +471,6 @@ public class MotionService {
         // 1. Lưu VoteResult
         VoteStatisticsResponse stats = getVoteStatisticsInternal(activeSession, motion);
         VoteResult result = new VoteResult();
-        result.setId(activeSession.getId());
         result.setVoteSession(activeSession);
         result.setTotalEligible((long) stats.getTotalVoters());
         result.setTotalCast((long) stats.getVotedCount());
@@ -520,7 +531,7 @@ public class MotionService {
             throw new AppException(ErrorCode.PARTICIPANT_NOT_PRESENT);
         }
 
-        // Chỉ có SECRETARY bị loại trừ khỏi quyền biểu quyết
+        // Thư ký (SECRETARY) bị loại trừ khỏi quyền biểu quyết
         if (participant.getParticipantRole() == ParticipantRole.SECRETARY) {
             throw new AppException(ErrorCode.VOTE_ROLE_NOT_ALLOWED);
         }
@@ -710,7 +721,7 @@ public class MotionService {
     }
 
     /**
-     * Lấy thống kê biểu quyết bảo mật (không lộ danh tính cử tri)
+     * Lấy thống kê biểu quyết bảo mật (không lộ danh tính cử tri trừ khi được bật)
      */
     @Transactional(readOnly = true)
     public VoteStatisticsResponse getVoteStatistics(UUID id) {
@@ -732,8 +743,41 @@ public class MotionService {
 
         if (session == null) {
             return VoteStatisticsResponse.builder()
-                    .totalVoters(0).votedCount(0).notVotedCount(0).yesCount(0).noCount(0).build();
+                    .totalVoters(0).votedCount(0).notVotedCount(0).yesCount(0).noCount(0).otherCount(0).showVotingList(false).build();
         }
+
+        return getVoteStatisticsInternal(session, motion);
+    }
+
+    @Transactional
+    public VoteStatisticsResponse toggleVotingList(UUID id, boolean show) {
+        Motion motion = motionRepository.findById(id)
+                .orElseThrow(() -> new AppException(ErrorCode.MOTION_NOT_FOUND));
+
+        User caller = currentUserService.getCurrentActiveUser();
+
+        // Chỉ Chủ trì (CHAIR) hoặc Thư ký (SECRETARY) mới có quyền chỉnh sửa cài đặt này
+        boolean isAuthorized = meetingParticipantRepository.findByMeetingIdAndUserId(motion.getMeeting().getId(), caller.getId())
+                .map(p -> p.getParticipantRole() == ParticipantRole.CHAIR || p.getParticipantRole() == ParticipantRole.SECRETARY)
+                .orElse(false);
+        if (!isAuthorized) {
+            throw new AppException(ErrorCode.UNAUTHOZIZED);
+        }
+
+        VoteSession session = motion.getVoteSessionList().stream()
+                .filter(s -> s.getStatus() == VoteSessionStatus.OPEN || s.getStatus() == VoteSessionStatus.CLOSED)
+                .findFirst()
+                .orElseThrow(() -> new AppException(ErrorCode.BAD_REQUEST));
+
+        session.setShowVotingList(show);
+        voteSessionRepository.save(session);
+
+        // Phát WebSocket cập nhật trạng thái hiển thị
+        webSocketNotificationService.sendToTopic("/topic/meeting/" + motion.getMeeting().getId() + "/motions", Map.of(
+                "action", "TOGGLE_VOTING_LIST",
+                "motionId", motion.getId().toString(),
+                "showVotingList", show
+        ));
 
         return getVoteStatisticsInternal(session, motion);
     }
@@ -791,11 +835,124 @@ public class MotionService {
         // 4. Đếm chi tiết vote
         int yesCount = 0;
         int noCount = 0;
+        int otherCount = 0;
         List<VoteOption> options = voteOptionRepository.findByVoteSessionIdOrderByOrderNoAsc(session.getId());
         for (VoteOption option : options) {
             long count = voteBallotChoiceRepository.countValidChoicesByOption(option.getId());
             if (Integer.valueOf(1).equals(option.getOrderNo())) yesCount = (int) count;
             else if (Integer.valueOf(2).equals(option.getOrderNo())) noCount = (int) count;
+            else if (Integer.valueOf(3).equals(option.getOrderNo())) otherCount = (int) count;
+        }
+
+        boolean showVotingList = session.getShowVotingList() != null && session.getShowVotingList();
+
+        List<VoteStatisticsResponse.VotedDelegateDto> votedDelegates = new java.util.ArrayList<>();
+        List<VoteStatisticsResponse.NotVotedDelegateDto> notVotedDelegates = new java.util.ArrayList<>();
+
+        // Check if current user is Chair or Secretary
+        User caller = null;
+        try {
+            caller = currentUserService.getCurrentActiveUser();
+        } catch (Exception e) {
+            // Ignore if not logged in (e.g. guest token access)
+        }
+        boolean isAdmin = false;
+        if (caller != null) {
+            isAdmin = meetingParticipantRepository.findByMeetingIdAndUserId(motion.getMeeting().getId(), caller.getId())
+                    .map(p -> p.getParticipantRole() == ParticipantRole.CHAIR || p.getParticipantRole() == ParticipantRole.SECRETARY)
+                    .orElse(false);
+        }
+
+        // Chỉ hiển thị danh sách biểu quyết nếu: hoặc user là Admin (Chủ trì/Thư ký), hoặc cài đặt showVotingList được bật (đại biểu được xem)
+        if (isAdmin || showVotingList) {
+            java.util.List<VoteBallot> ballots = voteBallotRepository.findByVoteSessionId(session.getId());
+            java.util.Map<UUID, VoteBallot> userBallotMap = new java.util.HashMap<>();
+            java.util.Map<UUID, VoteBallot> guestBallotMap = new java.util.HashMap<>();
+            for (VoteBallot b : ballots) {
+                if (b.getIsValid() != null && !b.getIsValid()) {
+                    continue;
+                }
+                if (b.getUser() != null) {
+                    userBallotMap.put(b.getUser().getId(), b);
+                }
+                if (b.getGuest() != null && b.getGuest().getSubstituteForParticipantId() != null) {
+                    guestBallotMap.put(b.getGuest().getSubstituteForParticipantId(), b);
+                }
+            }
+
+            UUID meetingId = motion.getMeeting().getId();
+            List<MeetingParticipant> participants = meetingParticipantRepository.findByMeetingId(meetingId);
+            UUID agendaItemId = motion.getAgendaItem() != null ? motion.getAgendaItem().getId() : null;
+
+            for (MeetingParticipant p : participants) {
+                if (p.getParticipantRole() == ParticipantRole.SECRETARY) {
+                    continue;
+                }
+
+                // Check if they are absent for this specific motion
+                boolean isAbsent = false;
+                if (p.getInviteStatus() == InviteStatus.DECLINED) {
+                    if (p.getIsFullSession() == null || p.getIsFullSession()) {
+                        isAbsent = true;
+                    } else if (agendaItemId != null && p.getAbsentAgendaItemIds() != null && p.getAbsentAgendaItemIds().contains(agendaItemId)) {
+                        isAbsent = true;
+                    }
+                }
+
+                VoteBallot ballot = null;
+                if (p.getUser() != null) {
+                    ballot = userBallotMap.get(p.getUser().getId());
+                }
+                if (ballot == null) {
+                    ballot = guestBallotMap.get(p.getId());
+                }
+
+                if (isAbsent && ballot == null) {
+                    boolean hasSubstitute = false;
+                    if (p.getSubstituteUser() != null) {
+                        hasSubstitute = true;
+                    } else if (p.getSubstituteName() != null && !p.getSubstituteName().trim().isEmpty()) {
+                        hasSubstitute = true;
+                    }
+                    if (!hasSubstitute) {
+                        continue;
+                    }
+                }
+
+                if (ballot != null) {
+                    String choiceStr = "other";
+                    if (ballot.getVoteBallotChoiceList() != null && !ballot.getVoteBallotChoiceList().isEmpty()) {
+                        VoteOption opt = ballot.getVoteBallotChoiceList().get(0).getOption();
+                        if (opt != null && opt.getOrderNo() != null) {
+                            if (opt.getOrderNo() == 1) choiceStr = "agree";
+                            else if (opt.getOrderNo() == 2) choiceStr = "disagree";
+                        }
+                    }
+
+                    String name = ballot.getGuest() != null ? ballot.getGuest().getFullName() : (p.getUser() != null ? p.getUser().getFullName() : p.getSubstituteName());
+                    String position = ballot.getGuest() != null ? ballot.getGuest().getPosition() : (p.getUser() != null && p.getUser().getPosition() != null ? p.getUser().getPosition().getPositionName() : p.getSubstitutePosition());
+                    String unit = ballot.getGuest() != null ? ballot.getGuest().getCompany() : (p.getUser() != null && p.getUser().getDepartment() != null ? p.getUser().getDepartment().getDeptName() : p.getSubstituteDepartment());
+
+                    votedDelegates.add(VoteStatisticsResponse.VotedDelegateDto.builder()
+                            .id(p.getId().toString())
+                            .name(name)
+                            .position(position)
+                            .unit(unit)
+                            .vote(choiceStr)
+                            .build());
+                } else {
+                    String name = p.getUser() != null ? p.getUser().getFullName() : p.getSubstituteName();
+                    String position = p.getUser() != null && p.getUser().getPosition() != null ? p.getUser().getPosition().getPositionName() : p.getSubstitutePosition();
+                    String unit = p.getUser() != null && p.getUser().getDepartment() != null ? p.getUser().getDepartment().getDeptName() : p.getSubstituteDepartment();
+
+                    notVotedDelegates.add(VoteStatisticsResponse.NotVotedDelegateDto.builder()
+                            .id(p.getId().toString())
+                            .name(name)
+                            .position(position)
+                            .unit(unit)
+                            .build());
+                }
+            }
         }
 
         return VoteStatisticsResponse.builder()
@@ -804,6 +961,10 @@ public class MotionService {
                 .notVotedCount(notVotedCount)
                 .yesCount(yesCount)
                 .noCount(noCount)
+                .otherCount(otherCount)
+                .showVotingList(showVotingList)
+                .votedDelegates(votedDelegates)
+                .notVotedDelegates(notVotedDelegates)
                 .build();
     }
 
@@ -831,7 +992,7 @@ public class MotionService {
 
         if (session == null) {
             return VoteStatisticsResponse.builder()
-                    .totalVoters(0).votedCount(0).notVotedCount(0).yesCount(0).noCount(0).build();
+                    .totalVoters(0).votedCount(0).notVotedCount(0).yesCount(0).noCount(0).otherCount(0).build();
         }
 
         return getVoteStatisticsInternal(session, motion);

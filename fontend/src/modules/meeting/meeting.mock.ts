@@ -9,6 +9,9 @@ export interface Speaker {
     startTime?: string;
     status: "waiting" | "speaking" | "finished" | "rejected";
     addedTime: string;
+    activeTurnId?: string;
+    speakingStartAt?: string;
+    durationSeconds?: number;
 }
 
 export interface Opinion {
@@ -17,7 +20,7 @@ export interface Opinion {
     userPosition: string;
     documentName?: string;
     opinionDetail: string;
-    attachments: { name: string; size: number }[];
+    attachments: { name: string; size?: number; documentId?: string; fileUrl?: string }[];
     createdAt: string;
 }
 

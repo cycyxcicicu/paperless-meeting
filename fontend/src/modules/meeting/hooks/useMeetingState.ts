@@ -224,7 +224,10 @@ export function useMeetingState(meetingId: string | undefined, guestToken?: stri
         });
 
         // Subscribing to speaker queue changes
-        const unsubSpeakers = subscribe(`/topic/meeting/${meetingId}/speakers`, () => {
+        const unsubSpeakers = subscribe(`/topic/meeting/${meetingId}/speakers`, (msg: any) => {
+            if (msg && msg.action === "PREPARE_SPEECH") {
+                toast.info(`Chủ trì yêu cầu đại biểu ${msg.userName || ""} chuẩn bị phát biểu`);
+            }
             if (speakersTimeout) clearTimeout(speakersTimeout);
             speakersTimeout = setTimeout(() => refreshSpeakersOnly(), 300);
         });
@@ -236,6 +239,9 @@ export function useMeetingState(meetingId: string | undefined, guestToken?: stri
                     toast.info(`Chủ trì bắt đầu biểu quyết: ${msg.motionTitle || ""}`);
                 } else if (msg.action === "STOP_VOTE") {
                     toast.success(`Đã kết thúc biểu quyết: ${msg.motionTitle || ""}`);
+                } else if (msg.action === "TOGGLE_VOTING_LIST") {
+                    const isShown = msg.showVotingList;
+                    toast.info(isShown ? "Danh sách biểu quyết đã được công khai" : "Danh sách biểu quyết đã bị ẩn");
                 }
             }
             if (motionsTimeout) clearTimeout(motionsTimeout);
