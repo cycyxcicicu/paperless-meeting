@@ -853,44 +853,7 @@ const HomePage = () => {
               </div>
             </div>
 
-            {/* Widget 3: Lối tắt quản trị (Dành riêng cho SUPER_ADMIN) */}
-            {isSuperAdmin && (
-              <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 space-y-4">
-                <h3 className="text-base font-bold text-gray-900 flex items-center gap-2 border-b border-gray-100 pb-3">
-                  <Shield className="h-5 w-5 text-[#C8102E]" /> Quản trị hệ thống
-                </h3>
-                <div className="grid grid-cols-2 gap-3">
-                  <Link
-                    to="/nguoi-dung"
-                    className="p-3 bg-gray-50 rounded-xl border border-gray-100 hover:border-[#C8102E]/30 hover:bg-[#C8102E]/5 text-center transition-all duration-200 block"
-                  >
-                    <Users className="h-5 w-5 text-gray-600 mx-auto mb-2" />
-                    <span className="text-xs font-semibold text-gray-800">Người dùng</span>
-                  </Link>
-                  <Link
-                    to="/nguoi-dung/don-vi"
-                    className="p-3 bg-gray-50 rounded-xl border border-gray-100 hover:border-[#C8102E]/30 hover:bg-[#C8102E]/5 text-center transition-all duration-200 block"
-                  >
-                    <Landmark className="h-5 w-5 text-gray-600 mx-auto mb-2" />
-                    <span className="text-xs font-semibold text-gray-800">Đơn vị</span>
-                  </Link>
-                  <Link
-                    to="/phong-hop/dia-diem"
-                    className="p-3 bg-gray-50 rounded-xl border border-gray-100 hover:border-[#C8102E]/30 hover:bg-[#C8102E]/5 text-center transition-all duration-200 block"
-                  >
-                    <MapPin className="h-5 w-5 text-gray-600 mx-auto mb-2" />
-                    <span className="text-xs font-semibold text-gray-800">Phòng họp</span>
-                  </Link>
-                  <Link
-                    to="/nguoi-dung/lich-su"
-                    className="p-3 bg-gray-50 rounded-xl border border-gray-100 hover:border-[#C8102E]/30 hover:bg-[#C8102E]/5 text-center transition-all duration-200 block"
-                  >
-                    <Clock className="h-5 w-5 text-gray-600 mx-auto mb-2" />
-                    <span className="text-xs font-semibold text-gray-800">Audit logs</span>
-                  </Link>
-                </div>
-              </div>
-            )}
+
             
           </div>
         </div>
