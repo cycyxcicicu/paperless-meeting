@@ -31,6 +31,8 @@ public interface UserRepository extends JpaRepository<User, UUID>, JpaSpecificat
 
         boolean existsByUsername(String username);
 
+        Optional<User> findByUsername(String username);
+
         boolean existsByUsernameAndIdNot(String username, UUID id);
 
         boolean existsByRole_Id(UUID roleId);

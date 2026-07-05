@@ -78,6 +78,8 @@ app:
       backend: ${APP_BACKEND_URL:http://localhost:8081/PaperlessMeeting}
     seed:
         enabled: false
+    init:
+        enabled: true
     security:
         frontend-origin: "http://localhost:3000"
         cookie-domain: ""
