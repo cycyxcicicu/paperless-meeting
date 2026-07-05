@@ -3,7 +3,6 @@ import { MainLayout } from '@/common/components/layout/MainLayout';
 import { ProtectedRoute } from "./ProtectedRoute";
 
 import AuditLogPage from '@/modules/audit/pages/AuditLogPage';
-import CauHinhPage from '@/modules/settings/pages/CauHinhPage';
 import ChucVuPage from '@/modules/positions/pages/ChucVuPage';
 import DienBienPhienHopPage from '@/modules/meeting/pages/DienBienPhienHopPage';
 import DonViPage from '@/modules/organization/pages/DonViPage';
@@ -45,7 +44,6 @@ export const router = createBrowserRouter([
             { path: "nguoi-dung/lich-su", Component: AuditLogPage },
             { path: "lich-hop", element: <Navigate to="/phong-hop" replace /> },
             { path: "quan-tri", element: <Navigate to="/" replace /> },
-            { path: "cau-hinh", Component: CauHinhPage },
             { path: "phong-hop", Component: LichHopPage },
             { path: "phong-hop/dia-diem", Component: PhongHopPage },
             { path: "phong-hop/tai-lieu", Component: PhongHopTaiLieuPage },

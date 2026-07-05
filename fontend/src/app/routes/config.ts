@@ -16,12 +16,10 @@ export const hasRoutePermission = (user: User | null, path: string): boolean => 
     return true; 
   }
   
-  // 2. DEPARTMENT_ADMIN (Trang chủ, Quản lý (ngoại trừ Vai trò và Cấu hình hệ thống), Phòng họp, Phiên họp)
+  // 2. DEPARTMENT_ADMIN (Trang chủ, Quản lý (ngoại trừ Vai trò), Phòng họp, Phiên họp)
   if (role === 'DEPARTMENT_ADMIN') {
     // Chặn danh sách vai trò
     if (path === '/nguoi-dung/vai-tro' || path.startsWith('/nguoi-dung/vai-tro/')) return false;
-    // Chặn cấu hình hệ thống
-    if (path === '/cau-hinh' || path.startsWith('/cau-hinh/')) return false;
     
     const allowedPrefixes = ['/', '/nguoi-dung', '/phong-hop', '/phien-hop'];
     return allowedPrefixes.some(prefix => {

@@ -73,11 +73,6 @@ export const QUAN_TRI_SIDEBAR_ITEMS: SidebarItem[] = [
     path: '/nguoi-dung/lich-su',
     icon: History,
   },
-  {
-    name: 'Cấu hình hệ thống',
-    path: '/cau-hinh',
-    icon: Settings,
-  },
 ];
 
 export const LICH_HOP_SIDEBAR_ITEMS: SidebarItem[] = [

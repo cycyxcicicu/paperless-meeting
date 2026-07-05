@@ -23,7 +23,7 @@ const MainLayout: React.FC = () => {
     // Xác định sidebar items dựa trên route
     let sidebarItems = PHIEN_HOP_SIDEBAR_ITEMS; // Mặc định
 
-    if (pathname.startsWith('/nguoi-dung') || pathname.startsWith('/cau-hinh')) {
+    if (pathname.startsWith('/nguoi-dung')) {
         sidebarItems = QUAN_TRI_SIDEBAR_ITEMS;
     } else if (pathname.startsWith('/phong-hop')) {
         sidebarItems = PHONG_HOP_SIDEBAR_ITEMS;
