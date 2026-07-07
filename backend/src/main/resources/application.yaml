@@ -64,6 +64,15 @@ minio:
   secret-key: ${MINIO_SECRET_KEY}
   bucket: ${MINIO_BUCKET}
 
+# Trợ lý AI diễn biến cuộc họp (multi-agent, OpenAI API)
+openai:
+  api-key: ${OPENAI_API_KEY:}
+  router-model: ${OPENAI_MODEL:gpt-4o-mini}
+  agent-model: ${OPENAI_MODEL:gpt-4o-mini}
+  synthesis-model: ${OPENAI_MODEL:gpt-4o-mini}
+  max-doc-chars: 60000
+  rate-limit-per-minute: 10
+
 server:
     port: ${SERVER_PORT}
     servlet:

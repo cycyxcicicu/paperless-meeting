@@ -36,6 +36,8 @@ import vn.acme.paperless_meeting.repository.PositionRepository;
 import vn.acme.paperless_meeting.repository.RolePermissionRepository;
 import vn.acme.paperless_meeting.repository.RoleRepository;
 import vn.acme.paperless_meeting.repository.UserRepository;
+import vn.acme.paperless_meeting.entity.Location;
+import vn.acme.paperless_meeting.repository.LocationRepository;
 
 @Component
 @RequiredArgsConstructor
@@ -54,6 +56,7 @@ public class SystemInitializer implements CommandLineRunner {
     PermissionRepository permissionRepository;
     RolePermissionRepository rolePermissionRepository;
     UserRepository userRepository;
+    LocationRepository locationRepository;
     PasswordEncoder passwordEncoder;
 
     static final List<DepartmentBlueprint> DEPARTMENT_BLUEPRINTS = List.of(
@@ -93,6 +96,7 @@ public class SystemInitializer implements CommandLineRunner {
         
         ensureSuperAdmin(departmentByPath, positionByCode, roleByCode);
         ensureDepartmentUsers(departmentByPath, positionByCode, roleByCode);
+        ensureLocations(departmentByPath);
         
         log.info("Hoàn thành khởi tạo dữ liệu hệ thống chạy lần đầu thành công!");
     }
@@ -232,17 +236,10 @@ public class SystemInitializer implements CommandLineRunner {
                 if (deptCode != null) {
                     String specCode = deptCode + "_spec_custom";
                     String specName = getCustomPositionName(deptCode);
-                    String secretaryCode = deptCode + "_thu_ky";
-                    String secretaryName = "Thư ký " + department.getDeptName();
                     
-                    List<PositionSeed> unitSpecificSeeds = List.of(
-                        new PositionSeed(specCode, specName, "Chức vụ đặc thù cho đơn vị " + department.getDeptName(), 18, false, PositionRole.SPECIALIST),
-                        new PositionSeed(secretaryCode, secretaryName, "Thư ký hội họp cho đơn vị " + department.getDeptName(), 19, false, PositionRole.SPECIALIST)
-                    );
-                    for (PositionSeed seed : unitSpecificSeeds) {
-                        Position saved = upsertPosition(seed, department, existingByCode);
-                        result.put(seed.code(), saved);
-                    }
+                    PositionSeed seed = new PositionSeed(specCode, specName, "Chức vụ đặc thù cho đơn vị " + department.getDeptName(), 18, false, PositionRole.SPECIALIST);
+                    Position saved = upsertPosition(seed, department, existingByCode);
+                    result.put(seed.code(), saved);
                 }
             }
         }
@@ -289,7 +286,7 @@ public class SystemInitializer implements CommandLineRunner {
         position.setRankOrder(seed.rankOrder());
         position.setIsLeadership(seed.isLeadership());
         position.setPositionRole(seed.positionRole());
-        position.setDepartment(null); // System-wide standard positions
+        position.setDepartment(department); // System-wide positions will pass null, department-specific will pass department
         position.setUpdatedAt(INITIALIZATION_TIME);
         position.setIsDeleted(false);
 
@@ -451,14 +448,10 @@ public class SystemInitializer implements CommandLineRunner {
             user.setEmail("admin@paperless.gov.vn");
             user.setPhone("0900000000");
             user.setStatus(UserStatus.ACTIVE);
-            user.setIsFirstLogin(true);
+            user.setIsFirstLogin(false);
             user.setPassword(passwordEncoder.encode(DEFAULT_PASSWORD));
             
-            Position position = positionByCode.get("CHU_TICH");
-            if (position == null) {
-                throw new IllegalStateException("Không tìm thấy chức vụ CHU_TICH để gán cho admin");
-            }
-            user.setPosition(position);
+            user.setPosition(null); // Technical admin has no position!
 
             Department dept = departmentByPath.get(ROOT_DEPARTMENT_NAME);
             if (dept == null) {
@@ -482,6 +475,10 @@ public class SystemInitializer implements CommandLineRunner {
                 user.setRole(role);
                 changed = true;
             }
+            if (user.getPosition() != null) {
+                user.setPosition(null);
+                changed = true;
+            }
             if (user.getStatus() != UserStatus.ACTIVE) {
                 user.setStatus(UserStatus.ACTIVE);
                 changed = true;
@@ -492,8 +489,25 @@ public class SystemInitializer implements CommandLineRunner {
         }
     }
 
+    private String generateRealisticVietnameseName(String username, int index) {
+        String[] hos = {"Nguyễn", "Trần", "Lê", "Phạm", "Hoàng", "Huỳnh", "Phan", "Vũ", "Võ", "Đặng", "Bùi", "Đỗ", "Hồ", "Ngô", "Dương", "Lý"};
+        String[] dems = {"Văn", "Đức", "Minh", "Hồng", "Tuấn", "Anh", "Hoài", "Khánh", "Thanh", "Ngọc", "Quang", "Mạnh", "Xuân", "Kim"};
+        String[] tens = {"Hùng", "Hải", "Nam", "Sơn", "Tùng", "Cường", "Trang", "Lan", "Hương", "Linh", "Hòa", "Phương", "Bình", "Dũng", "Tuấn", "Vy", "Hà", "Minh", "Tâm", "Đạt", "Phúc", "Thành", "Vinh", "Khánh", "Duy", "Hoàng", "Quân", "Long", "Phong"};
+        
+        int hash = Math.abs((username + index).hashCode());
+        String ho = hos[hash % hos.length];
+        String dem = dems[(hash / hos.length) % dems.length];
+        String ten = tens[(hash / (hos.length * dems.length)) % tens.length];
+        
+        if (username.contains("thuky") || username.contains("thu_ky") || ten.equals("Trang") || ten.equals("Lan") || ten.equals("Hương") || ten.equals("Linh") || ten.equals("Vy") || ten.equals("Hà")) {
+            dem = "Thị";
+        }
+        
+        return ho + " " + dem + " " + ten;
+    }
+
     private void ensureDepartmentUsers(Map<String, Department> departmentByPath, Map<String, Position> positionByCode, Map<String, Role> roleByCode) {
-        log.info("Đang khởi tạo các tài khoản quản trị và thư ký cho từng Sở ban ngành...");
+        log.info("Đang khởi tạo các tài khoản cán bộ cho từng đơn vị và phòng ban...");
         
         Role deptAdminRole = roleByCode.get("DEPARTMENT_ADMIN");
         Role userRole = roleByCode.get("USER");
@@ -501,62 +515,176 @@ public class SystemInitializer implements CommandLineRunner {
             throw new IllegalStateException("Không tìm thấy vai trò DEPARTMENT_ADMIN hoặc USER để gán");
         }
 
-        int index = 1;
+        Position posChutich = positionByCode.get("CHU_TICH");
+        Position posPct = positionByCode.get("PHO_CHU_TICH");
+        Position posGiamDoc = positionByCode.get("GIAM_DOC");
+        Position posPgd = positionByCode.get("PHO_GIAM_DOC");
+        Position posTruongPhong = positionByCode.get("TRUONG_PHONG");
+        Position posPhoTruongPhong = positionByCode.get("PHO_TRUONG_PHONG");
+        Position posThuKy = positionByCode.get("THU_KY");
+        Position posChuyenVien = positionByCode.get("CHUYEN_VIEN");
+
+        String passwordHash = passwordEncoder.encode(DEFAULT_PASSWORD);
+
+        // 1. Seed 10 cán bộ cho UBND thành phố (root level)
+        Department rootDept = departmentByPath.get(ROOT_DEPARTMENT_NAME);
+        if (rootDept != null) {
+            for (int i = 1; i <= 10; i++) {
+                String username;
+                Position position;
+                if (i == 1) {
+                    username = "ubndhp_chutich";
+                    position = posChutich;
+                } else if (i <= 6) {
+                    int pctIdx = i - 1;
+                    username = "ubndhp_pct" + pctIdx;
+                    position = posPct;
+                } else if (i == 7) {
+                    username = "ubndhp_thuky";
+                    position = posThuKy;
+                } else {
+                    int cvIdx = i - 7;
+                    username = "ubndhp_cv" + cvIdx;
+                    position = posChuyenVien;
+                }
+
+                if (!userRepository.findByUsername(username).isPresent()) {
+                    User u = new User();
+                    u.setUsername(username);
+                    u.setFullName(generateRealisticVietnameseName(username, i));
+                    u.setEmail(username + "@paperless.gov.vn");
+                    u.setPhone(String.format("09000101%02d", i));
+                    u.setStatus(UserStatus.ACTIVE);
+                    u.setIsFirstLogin(true);
+                    u.setPassword(passwordHash);
+                    u.setDepartment(rootDept);
+                    u.setRole(userRole);
+                    u.setPosition(position);
+                    userRepository.save(u);
+                }
+            }
+        }
+
+        // 2. Duyệt qua từng blueprint sở ban ngành
+        int deptIndex = 1;
         for (DepartmentBlueprint blueprint : DEPARTMENT_BLUEPRINTS) {
+            String deptCode = blueprint.slug();
             Department department = departmentByPath.get(blueprint.topLevelPath());
             if (department == null) {
                 continue;
             }
-            
-            String deptCode = blueprint.slug();
-            String passwordHash = passwordEncoder.encode(DEFAULT_PASSWORD);
-            
-            // 1. Tạo tài khoản Lãnh đạo đơn vị
+
+            boolean isSonv = "sonv".equalsIgnoreCase(deptCode);
+
+            // A. Seed tài khoản Admin đơn vị (không chức vụ, DEPARTMENT_ADMIN role)
             String adminUsername = deptCode + "_admin";
             if (!userRepository.findByUsername(adminUsername).isPresent()) {
                 User deptAdmin = new User();
                 deptAdmin.setUsername(adminUsername);
-                deptAdmin.setFullName("Lãnh đạo " + blueprint.name());
-                deptAdmin.setEmail(deptCode + "_admin@paperless.gov.vn");
-                deptAdmin.setPhone(String.format("0912%06d", index));
+                deptAdmin.setFullName("Quản trị viên " + blueprint.name());
+                deptAdmin.setEmail(adminUsername + "@paperless.gov.vn");
+                deptAdmin.setPhone(String.format("0912%02d0000", deptIndex));
                 deptAdmin.setStatus(UserStatus.ACTIVE);
-                deptAdmin.setIsFirstLogin(true);
+                deptAdmin.setIsFirstLogin(!isSonv); // tích đã qua lần đầu đăng nhập nếu là Sở Nội vụ (isFirstLogin = false)
                 deptAdmin.setPassword(passwordHash);
                 deptAdmin.setDepartment(department);
                 deptAdmin.setRole(deptAdminRole);
-                
-                Position pos = positionByCode.get("GIAM_DOC");
-                if (pos != null) {
-                    deptAdmin.setPosition(pos);
-                }
+                deptAdmin.setPosition(null); // No position for technical admin!
                 userRepository.save(deptAdmin);
             }
-            
-            // 2. Tạo tài khoản Thư ký đơn vị
-            String secretaryUsername = deptCode + "_thuky";
-            if (!userRepository.findByUsername(secretaryUsername).isPresent()) {
-                User deptSecretary = new User();
-                deptSecretary.setUsername(secretaryUsername);
-                deptSecretary.setFullName("Thư ký " + blueprint.name());
-                deptSecretary.setEmail(deptCode + "_thuky@paperless.gov.vn");
-                deptSecretary.setPhone(String.format("0913%06d", index));
-                deptSecretary.setStatus(UserStatus.ACTIVE);
-                deptSecretary.setIsFirstLogin(true);
-                deptSecretary.setPassword(passwordHash);
-                deptSecretary.setDepartment(department);
-                deptSecretary.setRole(userRole);
-                
-                Position pos = positionByCode.get(deptCode + "_thu_ky");
-                if (pos == null) {
-                    pos = positionByCode.get("THU_KY"); // Fallback
+
+            // B. Seed 10 cán bộ nghiệp vụ cho Sở
+            for (int i = 1; i <= 10; i++) {
+                String username;
+                Position position;
+
+                if (i == 1) {
+                    username = deptCode + "_giamdoc";
+                    position = posGiamDoc;
+                } else if (i == 2) {
+                    username = deptCode + "_thuky";
+                    position = posThuKy;
+                } else if (i == 3) {
+                    username = deptCode + "_pgd1";
+                    position = posPgd;
+                } else if (i == 4) {
+                    username = deptCode + "_pgd2";
+                    position = posPgd;
+                } else if (i == 5) {
+                    username = deptCode + "_cv_dacthu";
+                    position = positionByCode.get(deptCode + "_spec_custom");
+                    if (position == null) {
+                        position = posChuyenVien;
+                    }
+                } else {
+                    int cvIndex = i - 5;
+                    username = deptCode + "_cv" + cvIndex;
+                    position = posChuyenVien;
                 }
-                if (pos != null) {
-                    deptSecretary.setPosition(pos);
+
+                if (!userRepository.findByUsername(username).isPresent()) {
+                    User u = new User();
+                    u.setUsername(username);
+                    u.setFullName(generateRealisticVietnameseName(username, i));
+                    u.setEmail(username + "@paperless.gov.vn");
+                    u.setPhone(String.format("0912%02d01%02d", deptIndex, i));
+                    u.setStatus(UserStatus.ACTIVE);
+                    u.setIsFirstLogin(!isSonv); // tích đã qua lần đầu đăng nhập nếu là Sở Nội vụ (isFirstLogin = false)
+                    u.setPassword(passwordHash);
+                    u.setDepartment(department);
+                    u.setRole(userRole);
+                    u.setPosition(position);
+                    userRepository.save(u);
                 }
-                userRepository.save(deptSecretary);
             }
-            
-            index++;
+
+            // C. Seed 10 cán bộ nghiệp vụ cho từng phòng trực thuộc
+            int childIndex = 1;
+            for (String childUnit : blueprint.childUnits()) {
+                Department childDept = departmentByPath.get(blueprint.childPath(childUnit));
+                if (childDept == null) {
+                    continue;
+                }
+
+                String childCode = deptCode + "_" + slugify(childUnit).replace("-", "_");
+
+                for (int i = 1; i <= 10; i++) {
+                    String username;
+                    Position position;
+
+                    if (i == 1) {
+                        username = childCode + "_tp";
+                        position = posTruongPhong;
+                    } else if (i == 2) {
+                        username = childCode + "_ptp1";
+                        position = posPhoTruongPhong;
+                    } else if (i == 3) {
+                        username = childCode + "_ptp2";
+                        position = posPhoTruongPhong;
+                    } else {
+                        int cvIndex = i - 3;
+                        username = childCode + "_cv" + cvIndex;
+                        position = posChuyenVien;
+                    }
+
+                    if (!userRepository.findByUsername(username).isPresent()) {
+                        User u = new User();
+                        u.setUsername(username);
+                        u.setFullName(generateRealisticVietnameseName(username, i));
+                        u.setEmail(username + "@paperless.gov.vn");
+                        u.setPhone(String.format("0912%02d%02d%02d", deptIndex, childIndex + 1, i));
+                        u.setStatus(UserStatus.ACTIVE);
+                        u.setIsFirstLogin(!isSonv); // tích đã qua lần đầu đăng nhập nếu là Sở Nội vụ (isFirstLogin = false)
+                        u.setPassword(passwordHash);
+                        u.setDepartment(childDept);
+                        u.setRole(userRole);
+                        u.setPosition(position);
+                        userRepository.save(u);
+                    }
+                }
+                childIndex++;
+            }
+            deptIndex++;
         }
     }
 
@@ -569,6 +697,52 @@ public class SystemInitializer implements CommandLineRunner {
             }
         }
         return result;
+    }
+
+    private void ensureLocations(Map<String, Department> departmentByPath) {
+        log.info("Đang khởi tạo danh mục địa điểm/phòng họp...");
+        
+        List<Location> existingLocations = locationRepository.findAll();
+        
+        // 1. UBND thành phố Hải Phòng (Các phòng họp dùng chung cấp Thành phố do Admin quản lý - department = null)
+        createOrUpdateLocation(existingLocations, "Phòng họp số 1 - UBND Thành phố", "Tầng 2, Số 18 Hoàng Diệu, Hồng Bàng, Hải Phòng", "ubndhp_PH1", 40, null);
+        createOrUpdateLocation(existingLocations, "Phòng họp số 2 - UBND Thành phố", "Tầng 3, Số 18 Hoàng Diệu, Hồng Bàng, Hải Phòng", "ubndhp_PH2", 60, null);
+        createOrUpdateLocation(existingLocations, "Hội trường lớn - UBND Thành phố", "Tầng 1, Số 18 Hoàng Diệu, Hồng Bàng, Hải Phòng", "ubndhp_HT", 150, null);
+        
+        // 2. Từng Sở/Ban/Ngành
+        for (DepartmentBlueprint blueprint : DEPARTMENT_BLUEPRINTS) {
+            Department department = departmentByPath.get(blueprint.topLevelPath());
+            if (department == null) {
+                continue;
+            }
+            String deptCode = blueprint.slug();
+            String deptName = blueprint.name();
+            
+            createOrUpdateLocation(existingLocations, "Phòng họp số 1 - " + deptName, "Tầng 2, Trụ sở " + deptName, deptCode + "_PH1", 30, department);
+            createOrUpdateLocation(existingLocations, "Phòng họp số 2 - " + deptName, "Tầng 3, Trụ sở " + deptName, deptCode + "_PH2", 50, department);
+            createOrUpdateLocation(existingLocations, "Hội trường lớn - " + deptName, "Tầng 1, Trụ sở " + deptName, deptCode + "_HT", 100, department);
+        }
+    }
+
+    private void createOrUpdateLocation(List<Location> existing, String name, String address, String roomCode, int capacity, Department department) {
+        Location loc = existing.stream()
+                .filter(l -> l.getRoomCode() != null && l.getRoomCode().equalsIgnoreCase(roomCode))
+                .findFirst()
+                .orElse(null);
+                
+        if (loc == null) {
+            loc = new Location();
+            loc.setRoomCode(roomCode);
+            existing.add(loc);
+        }
+        
+        loc.setName(name);
+        loc.setAddress(address);
+        loc.setCapacity(capacity);
+        loc.setDepartment(department);
+        loc.setIsActive(true);
+        
+        locationRepository.save(loc);
     }
 
     private record DepartmentSeed(String path, String parentPath) {

@@ -18,6 +18,7 @@ export const createChiTietHopFormSchema = (phongHopOptions: { value: string; lab
         label: 'Thời gian bắt đầu',
         required: true,
         showTime: true,
+        disablePastDates: true,
       },
       {
         key: 'thoiGianKetThuc',
@@ -25,6 +26,7 @@ export const createChiTietHopFormSchema = (phongHopOptions: { value: string; lab
         label: 'Thời gian kết thúc',
         required: true,
         showTime: true,
+        disablePastDates: true,
       },
       {
         key: 'diaDiem',

@@ -23,6 +23,7 @@ export interface FormDatePickerProps {
   className?: string
   disabled?: boolean
   disableFutureDates?: boolean
+  disablePastDates?: boolean
   showTime?: boolean
 }
 
@@ -35,6 +36,7 @@ export const FormDatePicker = ({
   className,
   disabled,
   disableFutureDates,
+  disablePastDates,
   showTime,
 }: FormDatePickerProps) => {
   const { control, formState: { errors } } = useFormContext()
@@ -76,6 +78,7 @@ export const FormDatePicker = ({
                 value={field.value ? new Date(field.value) : undefined}
                 onChange={(date) => field.onChange(date.toISOString())}
                 disableFutureDates={disableFutureDates}
+                disablePastDates={disablePastDates}
                 showTime={showTime}
               />
             </PopoverContent>

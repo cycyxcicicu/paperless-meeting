@@ -397,6 +397,46 @@ class MeetingParticipantServiceTest {
     }
 
     // =====================================================================
+    // BỔ SUNG: removeAttendee — chặn attendee thuộc meeting khác
+    // =====================================================================
+
+    @Test
+    void removeAttendee_WhenInternalAttendeeBelongsToAnotherMeeting_ShouldThrowBadRequest() {
+        Meeting otherMeeting = new Meeting();
+        otherMeeting.setId(UUID.randomUUID());
+
+        participant.setMeeting(otherMeeting);
+
+        when(meetingRepository.findById(meetingId)).thenReturn(Optional.of(meeting));
+        when(currentUserService.getCurrentActiveUser()).thenReturn(caller);
+        when(meetingParticipantRepository.findById(participant.getId())).thenReturn(Optional.of(participant));
+
+        AppException ex = assertThrows(AppException.class, () -> {
+            meetingParticipantService.removeAttendee(meetingId, participant.getId(), "INTERNAL");
+        });
+        assertEquals(ErrorCode.BAD_REQUEST, ex.getErrorCode());
+        verify(meetingParticipantRepository, never()).delete(participant);
+    }
+
+    @Test
+    void removeAttendee_WhenGuestBelongsToAnotherMeeting_ShouldThrowBadRequest() {
+        Meeting otherMeeting = new Meeting();
+        otherMeeting.setId(UUID.randomUUID());
+
+        guest.setMeeting(otherMeeting);
+
+        when(meetingRepository.findById(meetingId)).thenReturn(Optional.of(meeting));
+        when(currentUserService.getCurrentActiveUser()).thenReturn(caller);
+        when(meetingGuestRepository.findById(guestId)).thenReturn(Optional.of(guest));
+
+        AppException ex = assertThrows(AppException.class, () -> {
+            meetingParticipantService.removeAttendee(meetingId, guestId, "GUEST");
+        });
+        assertEquals(ErrorCode.BAD_REQUEST, ex.getErrorCode());
+        verify(meetingGuestRepository, never()).delete(guest);
+    }
+
+    // =====================================================================
     // BỔ SUNG: addParticipants — validate IN_PROGRESS
     // =====================================================================
 

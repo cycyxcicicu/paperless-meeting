@@ -1009,6 +1009,10 @@ public class MeetingParticipantService {
             MeetingParticipant participant = meetingParticipantRepository.findById(attendeeId)
                     .orElseThrow(() -> new AppException(ErrorCode.MEETING_PARTICIPANT_NOT_FOUND));
 
+            if (participant.getMeeting() == null || !participant.getMeeting().getId().equals(meetingId)) {
+                throw new AppException(ErrorCode.BAD_REQUEST);
+            }
+
             // RÀNG BUỘC PARTICIPANT-06 & 07: Không cho phép xoá Chủ tọa (CHAIR) hoặc Thư ký (SECRETARY) cuối cùng của cuộc họp để tránh lỗi mồ côi
             if (participant.getParticipantRole() == ParticipantRole.CHAIR) {
                 long chairCount = meetingParticipantRepository.countByMeetingIdAndParticipantRole(meetingId, ParticipantRole.CHAIR);
@@ -1039,6 +1043,11 @@ public class MeetingParticipantService {
         } else {
             MeetingGuest guest = meetingGuestRepository.findById(attendeeId)
                     .orElseThrow(() -> new AppException(ErrorCode.MEETING_PARTICIPANT_NOT_FOUND));
+
+            if (guest.getMeeting() == null || !guest.getMeeting().getId().equals(meetingId)) {
+                throw new AppException(ErrorCode.BAD_REQUEST);
+            }
+
             meetingGuestRepository.delete(guest);
 
             auditLogPublisher.publish(
@@ -1256,7 +1265,7 @@ public class MeetingParticipantService {
         MeetingGuest guest = meetingGuestRepository.findByGuestToken(guestToken)
                 .orElseThrow(() -> new AppException(ErrorCode.MEETING_PARTICIPANT_NOT_FOUND));
         validateGuestMeetingTimeAccess(guest);
-        return opinionService.publicCreateOpinion(guest.getMeeting().getId(), guest.getFullName(), request);
+        return opinionService.publicCreateOpinion(guest, request);
     }
 
     @Transactional

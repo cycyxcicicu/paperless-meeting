@@ -203,6 +203,20 @@
 		<artifactId>spring-boot-starter-mail</artifactId>
 	</dependency>
 
+	<!-- OpenAI Java SDK - trợ lý AI diễn biến cuộc họp -->
+	<dependency>
+		<groupId>com.openai</groupId>
+		<artifactId>openai-java</artifactId>
+		<version>4.41.0</version>
+	</dependency>
+
+	<!-- Apache PDFBox - trích xuất text từ tài liệu PDF cho trợ lý AI -->
+	<dependency>
+		<groupId>org.apache.pdfbox</groupId>
+		<artifactId>pdfbox</artifactId>
+		<version>3.0.7</version>
+	</dependency>
+
 </dependencies>
 
 	 <build>

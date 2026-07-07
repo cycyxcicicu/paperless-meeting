@@ -18,11 +18,17 @@ import vn.acme.paperless_meeting.dto.response.opinion.OpinionAttachmentResponse;
 import vn.acme.paperless_meeting.dto.response.opinion.OpinionResponse;
 import vn.acme.paperless_meeting.entity.Document;
 import vn.acme.paperless_meeting.entity.Meeting;
+import vn.acme.paperless_meeting.entity.MeetingGuest;
+import vn.acme.paperless_meeting.entity.MeetingParticipant;
 import vn.acme.paperless_meeting.entity.Opinion;
 import vn.acme.paperless_meeting.entity.User;
+import vn.acme.paperless_meeting.entity.enums.AttendanceStatus;
+import vn.acme.paperless_meeting.entity.enums.MeetingStatus;
 import vn.acme.paperless_meeting.exceptions.AppException;
 import vn.acme.paperless_meeting.exceptions.ErrorCode;
 import vn.acme.paperless_meeting.repository.DocumentRepository;
+import vn.acme.paperless_meeting.repository.MeetingDocumentRepository;
+import vn.acme.paperless_meeting.repository.MeetingParticipantRepository;
 import vn.acme.paperless_meeting.repository.MeetingRepository;
 import vn.acme.paperless_meeting.repository.OpinionRepository;
 import vn.acme.paperless_meeting.service.auth.CurrentUserService;
@@ -35,6 +41,8 @@ public class OpinionService {
     OpinionRepository opinionRepository;
     MeetingRepository meetingRepository;
     DocumentRepository documentRepository;
+    MeetingDocumentRepository meetingDocumentRepository;
+    MeetingParticipantRepository meetingParticipantRepository;
     CurrentUserService currentUserService;
 
     @Transactional(readOnly = true)
@@ -54,10 +62,11 @@ public class OpinionService {
 
     @Transactional
     public OpinionResponse createOpinion(UUID meetingId, OpinionRequest request) {
-        Meeting meeting = meetingRepository.findById(meetingId)
-                .orElseThrow(() -> new AppException(ErrorCode.MEETING_NOT_EXIST));
+        Meeting meeting = getMeeting(meetingId);
+        validateMeetingAllowsOpinion(meeting);
 
         User caller = currentUserService.getCurrentActiveUser();
+        ensureParticipantPresent(meetingId, caller.getId());
 
         Opinion opinion = Opinion.builder()
                 .meeting(meeting)
@@ -67,11 +76,8 @@ public class OpinionService {
                 .createdAt(LocalDateTime.now())
                 .build();
 
-        if (request.getDocumentIds() != null && !request.getDocumentIds().isEmpty()) {
-            List<Document> docs = documentRepository.findAllById(request.getDocumentIds());
-            if (docs.size() != request.getDocumentIds().size()) {
-                throw new AppException(ErrorCode.DOCUMENT_NOT_FOUND);
-            }
+        List<Document> docs = resolveMeetingAttachments(meetingId, request.getDocumentIds());
+        if (!docs.isEmpty()) {
             opinion.setAttachments(docs);
         }
 
@@ -126,14 +132,21 @@ public class OpinionService {
     }
 
     @Transactional
-    public OpinionResponse publicCreateOpinion(UUID meetingId, String guestName, OpinionRequest request) {
-        Meeting meeting = meetingRepository.findById(meetingId)
-                .orElseThrow(() -> new AppException(ErrorCode.MEETING_NOT_EXIST));
+    public OpinionResponse publicCreateOpinion(MeetingGuest guest, OpinionRequest request) {
+        if (guest == null || guest.getMeeting() == null) {
+            throw new AppException(ErrorCode.MEETING_PARTICIPANT_NOT_FOUND);
+        }
+
+        Meeting meeting = guest.getMeeting();
+        validateMeetingAllowsOpinion(meeting);
+        if (guest.getAttendanceStatus() != AttendanceStatus.PRESENT) {
+            throw new AppException(ErrorCode.PARTICIPANT_NOT_PRESENT);
+        }
 
         Opinion opinion = Opinion.builder()
                 .meeting(meeting)
                 .user(null)
-                .guestName(guestName)
+                .guestName(guest.getFullName())
                 .opinionDetail(request.getOpinionDetail())
                 .documentName(request.getDocumentName())
                 .createdAt(LocalDateTime.now())
@@ -141,5 +154,45 @@ public class OpinionService {
 
         Opinion saved = opinionRepository.save(opinion);
         return mapToResponse(saved);
+    }
+
+    private Meeting getMeeting(UUID meetingId) {
+        return meetingRepository.findById(meetingId)
+                .orElseThrow(() -> new AppException(ErrorCode.MEETING_NOT_EXIST));
+    }
+
+    private void validateMeetingAllowsOpinion(Meeting meeting) {
+        if (meeting.getStatus() != MeetingStatus.IN_PROGRESS) {
+            throw new AppException(ErrorCode.MEETING_STATUS_TRANSITION_INVALID);
+        }
+    }
+
+    private void ensureParticipantPresent(UUID meetingId, UUID userId) {
+        MeetingParticipant participant = meetingParticipantRepository.findByMeetingIdAndUserId(meetingId, userId)
+                .orElseThrow(() -> new AppException(ErrorCode.UNAUTHOZIZED));
+
+        if (participant.getAttendanceStatus() != AttendanceStatus.PRESENT) {
+            throw new AppException(ErrorCode.PARTICIPANT_NOT_PRESENT);
+        }
+    }
+
+    private List<Document> resolveMeetingAttachments(UUID meetingId, List<UUID> documentIds) {
+        if (documentIds == null || documentIds.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        // Opinions may only reference documents already attached to the same meeting.
+        List<Document> docs = documentRepository.findAllById(documentIds);
+        if (docs.size() != documentIds.size()) {
+            throw new AppException(ErrorCode.DOCUMENT_NOT_FOUND);
+        }
+
+        for (Document doc : docs) {
+            if (!meetingDocumentRepository.existsByMeetingIdAndDocumentId(meetingId, doc.getId())) {
+                throw new AppException(ErrorCode.DOCUMENT_MEETING_NOT_FOUND);
+            }
+        }
+
+        return docs;
     }
 }

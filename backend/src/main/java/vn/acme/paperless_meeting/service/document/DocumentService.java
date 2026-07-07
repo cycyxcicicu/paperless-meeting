@@ -22,16 +22,17 @@ import vn.acme.paperless_meeting.entity.DocumentVersion;
 import vn.acme.paperless_meeting.entity.Meeting;
 import vn.acme.paperless_meeting.entity.MeetingDocument;
 import vn.acme.paperless_meeting.entity.User;
-import vn.acme.paperless_meeting.entity.enums.DocumentStatus;
-import vn.acme.paperless_meeting.entity.enums.DocumentType;
-import vn.acme.paperless_meeting.entity.enums.MeetingStatus;
-import vn.acme.paperless_meeting.entity.enums.MeetingDocumentUsageType;
 import vn.acme.paperless_meeting.entity.enums.AgendaItemStatus;
 import vn.acme.paperless_meeting.entity.enums.AuditAction;
+import vn.acme.paperless_meeting.entity.enums.DocumentStatus;
+import vn.acme.paperless_meeting.entity.enums.DocumentType;
+import vn.acme.paperless_meeting.entity.enums.MeetingDocumentUsageType;
+import vn.acme.paperless_meeting.entity.enums.MeetingStatus;
+import vn.acme.paperless_meeting.entity.enums.ParticipantRole;
 import vn.acme.paperless_meeting.entity.enums.ResourceType;
+import vn.acme.paperless_meeting.entity.enums.RoleName;
 import vn.acme.paperless_meeting.event.audit.AuditLogPublisher;
 import java.util.Map;
-import vn.acme.paperless_meeting.entity.enums.MeetingStatus;
 import vn.acme.paperless_meeting.exceptions.AppException;
 import vn.acme.paperless_meeting.exceptions.ErrorCode;
 import vn.acme.paperless_meeting.mapper.document.DocumentMapper;
@@ -44,7 +45,6 @@ import vn.acme.paperless_meeting.repository.MeetingRepository;
 import vn.acme.paperless_meeting.repository.MeetingParticipantRepository;
 import vn.acme.paperless_meeting.service.auth.CurrentUserService;
 import vn.acme.paperless_meeting.service.approval.ApprovalService;
-import vn.acme.paperless_meeting.entity.enums.RoleName;
 
 @Service
 @RequiredArgsConstructor
@@ -324,13 +324,9 @@ public class DocumentService {
      */
     @Transactional
     public MeetingDocumentResponse attachToMeeting(UUID meetingId, AttachDocumentRequest request) {
-        Meeting meeting = meetingRepository.findById(meetingId)
-                .orElseThrow(() -> new AppException(ErrorCode.MEETING_NOT_EXIST));
-
-        // Không cho gắn vào meeting đã kết thúc/hủy
-        if (meeting.getStatus() == MeetingStatus.CLOSED || meeting.getStatus() == MeetingStatus.CANCELLED) {
-            throw new AppException(ErrorCode.MEETING_ALREADY_CLOSED_OR_CANCELLED);
-        }
+        Meeting meeting = getMeeting(meetingId);
+        validateMeetingOpenForDocumentMutation(meeting);
+        requireMeetingEditPermission(meeting);
 
         Document document = documentRepository.findById(request.getDocumentId())
                 .orElseThrow(() -> new AppException(ErrorCode.DOCUMENT_NOT_FOUND));
@@ -400,12 +396,13 @@ public class DocumentService {
      */
     @Transactional
     public void detachFromMeeting(UUID meetingId, UUID meetingDocId) {
-        Meeting meeting = meetingRepository.findById(meetingId)
-                .orElseThrow(() -> new AppException(ErrorCode.MEETING_NOT_EXIST));
+        Meeting meeting = getMeeting(meetingId);
         
-        if (meeting.getStatus() == MeetingStatus.IN_PROGRESS || meeting.getStatus() == MeetingStatus.CLOSED) {
+        if (meeting.getStatus() == MeetingStatus.IN_PROGRESS) {
             throw new AppException(ErrorCode.MEETING_STATUS_TRANSITION_INVALID);
         }
+        validateMeetingOpenForDocumentMutation(meeting);
+        requireMeetingEditPermission(meeting);
 
         MeetingDocument meetingDoc = meetingDocumentRepository.findByMeetingIdAndId(meetingId, meetingDocId)
                 .orElseThrow(() -> new AppException(ErrorCode.DOCUMENT_MEETING_NOT_FOUND));
@@ -434,6 +431,10 @@ public class DocumentService {
      */
     @Transactional
     public MeetingDocumentResponse updateMeetingDocument(UUID meetingId, UUID meetingDocId, AttachDocumentRequest request) {
+        Meeting meeting = getMeeting(meetingId);
+        validateMeetingOpenForDocumentMutation(meeting);
+        requireMeetingEditPermission(meeting);
+
         MeetingDocument meetingDoc = meetingDocumentRepository.findByMeetingIdAndId(meetingId, meetingDocId)
                 .orElseThrow(() -> new AppException(ErrorCode.DOCUMENT_MEETING_NOT_FOUND));
 
@@ -477,6 +478,37 @@ public class DocumentService {
     }
 
     // ========== Private helpers ==========
+
+    private Meeting getMeeting(UUID meetingId) {
+        return meetingRepository.findById(meetingId)
+                .orElseThrow(() -> new AppException(ErrorCode.MEETING_NOT_EXIST));
+    }
+
+    private void validateMeetingOpenForDocumentMutation(Meeting meeting) {
+        if (meeting.getStatus() == MeetingStatus.CLOSED || meeting.getStatus() == MeetingStatus.CANCELLED) {
+            throw new AppException(ErrorCode.MEETING_ALREADY_CLOSED_OR_CANCELLED);
+        }
+    }
+
+    private void requireMeetingEditPermission(Meeting meeting) {
+        User caller = currentUserService.getCurrentActiveUser();
+        if (currentUserService.hasRole(RoleName.SUPER_ADMIN)) {
+            return;
+        }
+        if (meeting.getCreatedBy() != null && meeting.getCreatedBy().getId().equals(caller.getId())) {
+            return;
+        }
+
+        boolean isChairOrSecretary = meetingParticipantRepository.existsByMeetingIdAndUserIdAndParticipantRole(
+                meeting.getId(), caller.getId(), ParticipantRole.CHAIR)
+                || meetingParticipantRepository.existsByMeetingIdAndUserIdAndParticipantRole(
+                        meeting.getId(), caller.getId(), ParticipantRole.SECRETARY);
+        if (isChairOrSecretary) {
+            return;
+        }
+
+        throw new AppException(ErrorCode.UNAUTHOZIZED);
+    }
 
     private DocumentType parseDocType(String docType) {
         if (docType == null || docType.isBlank()) {

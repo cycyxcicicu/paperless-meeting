@@ -597,6 +597,7 @@ const NoiDungHopStep: React.FC<NoiDungHopStepProps> = ({
                         handleUpdateContent(activeContentId, { thoiGianBatDau: date.toISOString() })
                       }
                       showTime={true}
+                      disablePastDates={true}
                     />
                   </PopoverContent>
                 </Popover>
@@ -635,6 +636,7 @@ const NoiDungHopStep: React.FC<NoiDungHopStepProps> = ({
                         handleUpdateContent(activeContentId, { thoiGianKetThuc: date.toISOString() })
                       }
                       showTime={true}
+                      disablePastDates={true}
                     />
                   </PopoverContent>
                 </Popover>
@@ -933,6 +935,7 @@ const NoiDungHopStep: React.FC<NoiDungHopStepProps> = ({
                       setPrepModal(prev => prev ? { ...prev, deadline: date.toISOString() } : null)
                     }
                     showTime={true}
+                    disablePastDates={true}
                   />
                 </PopoverContent>
               </Popover>

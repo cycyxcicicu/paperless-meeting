@@ -42,6 +42,7 @@ export interface FormFieldConfig {
   placeholder?: string;
   showPlaceholder?: boolean; // undefined/true = tự sinh placeholder, false = ẩn placeholder
   disableFutureDates?: boolean;
+  disablePastDates?: boolean;
   showTime?: boolean;
   
   // Validation & Rules

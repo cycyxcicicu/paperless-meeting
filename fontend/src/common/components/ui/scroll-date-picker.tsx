@@ -6,6 +6,7 @@ interface ScrollDatePickerProps {
   value?: Date;
   onChange?: (date: Date) => void;
   disableFutureDates?: boolean;
+  disablePastDates?: boolean;
   showTime?: boolean;
 }
 
@@ -78,6 +79,7 @@ export const ScrollDatePicker: React.FC<ScrollDatePickerProps> = ({
   value,
   onChange,
   disableFutureDates = false,
+  disablePastDates = false,
   showTime = false,
 }) => {
   const now = new Date();
@@ -139,11 +141,31 @@ export const ScrollDatePicker: React.FC<ScrollDatePickerProps> = ({
   }, [showTime]);
 
   // Disable logic
-  const isYearDisabled = (y: number) => disableFutureDates && y > now.getFullYear();
-  const isMonthDisabled = (m: number) => disableFutureDates && selectedYear === now.getFullYear() && m > now.getMonth() + 1;
-  const isDayDisabled = (d: number) => disableFutureDates && selectedYear === now.getFullYear() && selectedMonth === now.getMonth() + 1 && d > now.getDate();
-  const isHourDisabled = (h: number) => disableFutureDates && selectedYear === now.getFullYear() && selectedMonth === now.getMonth() + 1 && selectedDay === now.getDate() && h > now.getHours();
-  const isMinuteDisabled = (m: number) => disableFutureDates && selectedYear === now.getFullYear() && selectedMonth === now.getMonth() + 1 && selectedDay === now.getDate() && selectedHour === now.getHours() && m > now.getMinutes();
+  const isYearDisabled = (y: number) => {
+    if (disableFutureDates && y > now.getFullYear()) return true;
+    if (disablePastDates && y < now.getFullYear()) return true;
+    return false;
+  };
+  const isMonthDisabled = (m: number) => {
+    if (disableFutureDates && selectedYear === now.getFullYear() && m > now.getMonth() + 1) return true;
+    if (disablePastDates && selectedYear === now.getFullYear() && m < now.getMonth() + 1) return true;
+    return false;
+  };
+  const isDayDisabled = (d: number) => {
+    if (disableFutureDates && selectedYear === now.getFullYear() && selectedMonth === now.getMonth() + 1 && d > now.getDate()) return true;
+    if (disablePastDates && selectedYear === now.getFullYear() && selectedMonth === now.getMonth() + 1 && d < now.getDate()) return true;
+    return false;
+  };
+  const isHourDisabled = (h: number) => {
+    if (disableFutureDates && selectedYear === now.getFullYear() && selectedMonth === now.getMonth() + 1 && selectedDay === now.getDate() && h > now.getHours()) return true;
+    if (disablePastDates && selectedYear === now.getFullYear() && selectedMonth === now.getMonth() + 1 && selectedDay === now.getDate() && h < now.getHours()) return true;
+    return false;
+  };
+  const isMinuteDisabled = (m: number) => {
+    if (disableFutureDates && selectedYear === now.getFullYear() && selectedMonth === now.getMonth() + 1 && selectedDay === now.getDate() && selectedHour === now.getHours() && m > now.getMinutes()) return true;
+    if (disablePastDates && selectedYear === now.getFullYear() && selectedMonth === now.getMonth() + 1 && selectedDay === now.getDate() && selectedHour === now.getHours() && m < now.getMinutes()) return true;
+    return false;
+  };
 
   const handleSelect = (type: 'year'|'month'|'day'|'hour'|'minute', val: number) => {
     let y = selectedYear;
@@ -169,6 +191,18 @@ export const ScrollDatePicker: React.FC<ScrollDatePickerProps> = ({
       if (showTime && y === now.getFullYear() && m === now.getMonth() + 1 && d === now.getDate()) {
         if (h > now.getHours()) h = now.getHours();
         if (h === now.getHours() && min > now.getMinutes()) min = now.getMinutes();
+      }
+    } else if (disablePastDates) {
+      if (y < now.getFullYear()) y = now.getFullYear();
+      if (y === now.getFullYear() && m < now.getMonth() + 1) m = now.getMonth() + 1;
+      
+      const maxD = getDaysInMonth(new Date(y, m - 1));
+      if (d > maxD) d = maxD;
+      if (y === now.getFullYear() && m === now.getMonth() + 1 && d < now.getDate()) d = now.getDate();
+      
+      if (showTime && y === now.getFullYear() && m === now.getMonth() + 1 && d === now.getDate()) {
+        if (h < now.getHours()) h = now.getHours();
+        if (h === now.getHours() && min < now.getMinutes()) min = now.getMinutes();
       }
     } else {
       const maxD = getDaysInMonth(new Date(y, m - 1));

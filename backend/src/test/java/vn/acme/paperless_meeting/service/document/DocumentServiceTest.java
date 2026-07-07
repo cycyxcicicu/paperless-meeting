@@ -94,6 +94,7 @@ class DocumentServiceTest {
         meeting = new Meeting();
         meeting.setId(meetingId);
         meeting.setStatus(MeetingStatus.DRAFT);
+        meeting.setCreatedBy(caller);
 
         version = new DocumentVersion();
         version.setId(UUID.randomUUID());
@@ -333,6 +334,22 @@ class DocumentServiceTest {
     }
 
     @Test
+    void attachToMeeting_WhenCallerCannotEditMeeting_ShouldThrowUnauthorized() {
+        User meetingOwner = new User();
+        meetingOwner.setId(UUID.randomUUID());
+        meeting.setCreatedBy(meetingOwner);
+
+        when(meetingRepository.findById(meetingId)).thenReturn(Optional.of(meeting));
+
+        AttachDocumentRequest request = new AttachDocumentRequest();
+        request.setDocumentId(documentId);
+
+        AppException ex = assertThrows(AppException.class,
+                () -> documentService.attachToMeeting(meetingId, request));
+        assertEquals(ErrorCode.UNAUTHOZIZED, ex.getErrorCode());
+    }
+
+    @Test
     void attachToMeeting_WithAgendaItem_WrongMeeting_ThrowsException() {
         UUID agendaItemId = UUID.randomUUID();
         UUID differentMeetingId = UUID.randomUUID();
@@ -417,6 +434,7 @@ class DocumentServiceTest {
 
     @Test
     void updateMeetingDocument_Success() {
+        when(meetingRepository.findById(meetingId)).thenReturn(Optional.of(meeting));
         when(meetingDocumentRepository.findByMeetingIdAndId(meetingId, meetingDocId))
                 .thenReturn(Optional.of(meetingDoc));
         when(meetingDocumentRepository.save(any(MeetingDocument.class))).thenReturn(meetingDoc);
@@ -442,12 +460,36 @@ class DocumentServiceTest {
 
     @Test
     void updateMeetingDocument_NotFound_ThrowsException() {
+        when(meetingRepository.findById(meetingId)).thenReturn(Optional.of(meeting));
         when(meetingDocumentRepository.findByMeetingIdAndId(meetingId, meetingDocId))
                 .thenReturn(Optional.empty());
 
         AppException ex = assertThrows(AppException.class,
                 () -> documentService.updateMeetingDocument(meetingId, meetingDocId, new AttachDocumentRequest()));
         assertEquals(ErrorCode.DOCUMENT_MEETING_NOT_FOUND, ex.getErrorCode());
+    }
+
+    @Test
+    void updateMeetingDocument_WhenCallerCannotEditMeeting_ShouldThrowUnauthorized() {
+        User meetingOwner = new User();
+        meetingOwner.setId(UUID.randomUUID());
+        meeting.setCreatedBy(meetingOwner);
+
+        when(meetingRepository.findById(meetingId)).thenReturn(Optional.of(meeting));
+
+        AppException ex = assertThrows(AppException.class,
+                () -> documentService.updateMeetingDocument(meetingId, meetingDocId, new AttachDocumentRequest()));
+        assertEquals(ErrorCode.UNAUTHOZIZED, ex.getErrorCode());
+    }
+
+    @Test
+    void updateMeetingDocument_WhenMeetingCancelled_ShouldThrowException() {
+        meeting.setStatus(MeetingStatus.CANCELLED);
+        when(meetingRepository.findById(meetingId)).thenReturn(Optional.of(meeting));
+
+        AppException ex = assertThrows(AppException.class,
+                () -> documentService.updateMeetingDocument(meetingId, meetingDocId, new AttachDocumentRequest()));
+        assertEquals(ErrorCode.MEETING_ALREADY_CLOSED_OR_CANCELLED, ex.getErrorCode());
     }
 
     @Test

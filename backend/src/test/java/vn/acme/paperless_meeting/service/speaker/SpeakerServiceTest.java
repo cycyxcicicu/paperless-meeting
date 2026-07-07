@@ -126,6 +126,18 @@ class SpeakerServiceTest {
     }
 
     @Test
+    void requestToSpeak_WhenParticipantNotPresent_ShouldThrowException() {
+        MeetingParticipant participant = meetingParticipantRepository.findByMeetingIdAndUserId(meetingId, userId)
+                .orElseThrow();
+        participant.setAttendanceStatus(AttendanceStatus.NOT_CHECKED_IN);
+
+        AppException ex = assertThrows(AppException.class, () -> {
+            speakerService.requestToSpeak(meetingId, null);
+        });
+        assertEquals(ErrorCode.PARTICIPANT_NOT_PRESENT, ex.getErrorCode());
+    }
+
+    @Test
     void requestToSpeak_WhenAlreadyInQueue_ShouldThrowBadRequest() {
         when(speakerQueueRepository.existsByMeetingIdAndUserIdAndQueueStatus(meetingId, userId, SpeakerQueueStatus.QUEUED)).thenReturn(true);
 

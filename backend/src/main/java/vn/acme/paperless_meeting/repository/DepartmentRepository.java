@@ -13,6 +13,8 @@ import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 
 public interface DepartmentRepository extends JpaRepository<Department, UUID>, JpaSpecificationExecutor<Department> {
+	java.util.Optional<Department> findByCode(String code);
+
 	boolean existsByDeptNameAndParentDepartment_Id(String deptName, UUID parentDepartmentId);
 
 	boolean existsByDeptNameAndParentDepartmentIsNull(String deptName);

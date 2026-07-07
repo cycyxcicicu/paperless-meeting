@@ -124,6 +124,7 @@ export const FieldRenderer: React.FC<FieldRendererProps> = ({ field, mode, value
           placeholder={autoPlaceholder}
           disabled={commonProps.disabled}
           disableFutureDates={field.disableFutureDates}
+          disablePastDates={field.disablePastDates}
           showTime={field.showTime}
         />
       );

@@ -111,6 +111,9 @@ public class SpeakerService {
         User caller = currentUserService.getCurrentActiveUser();
         MeetingParticipant participant = meetingParticipantRepository.findByMeetingIdAndUserId(meetingId, caller.getId())
                 .orElseThrow(() -> new AppException(ErrorCode.UNAUTHOZIZED));
+        if (participant.getAttendanceStatus() != AttendanceStatus.PRESENT) {
+            throw new AppException(ErrorCode.PARTICIPANT_NOT_PRESENT);
+        }
 
         AgendaItem agendaItem = null;
         if (agendaItemId != null) {

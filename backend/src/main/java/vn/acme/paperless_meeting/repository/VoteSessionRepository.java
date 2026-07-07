@@ -19,4 +19,13 @@ public interface VoteSessionRepository extends JpaRepository<VoteSession, UUID> 
     List<VoteSession> findByStatusWithMotion(@Param("status") VoteSessionStatus status);
 
     List<VoteSession> findByMeetingIdAndStatus(UUID meetingId, VoteSessionStatus status);
+
+    @Query("SELECT DISTINCT s FROM VoteSession s " +
+           "LEFT JOIN FETCH s.motion m " +
+           "LEFT JOIN FETCH m.agendaItem " +
+           "LEFT JOIN FETCH s.voteResult " +
+           "LEFT JOIN FETCH s.voteResultOptionList vro " +
+           "LEFT JOIN FETCH vro.option " +
+           "WHERE s.meeting.id = :meetingId")
+    List<VoteSession> findByMeetingIdWithMotionAndResult(@Param("meetingId") UUID meetingId);
 }
