@@ -4,21 +4,80 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+  packages: write
+
 jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Backend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          tags: ghcr.io/cycyxcicicu/paperless-meeting/backend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push Frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./fontend
+          file: ./fontend/Dockerfile
+          push: true
+          tags: ghcr.io/cycyxcicicu/paperless-meeting/frontend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
   deploy:
     runs-on: ubuntu-latest
-
+    needs: build-and-push
     steps:
       - name: SSH vào VPS và deploy
         uses: appleboy/ssh-action@v1.0.3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_ACTOR: ${{ github.actor }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           script_stop: true
+          envs: GITHUB_TOKEN,GITHUB_ACTOR
           script: |
             cd "${{ secrets.VPS_PROJECT_PATH }}"
+            
+            # Cập nhật cấu hình docker-compose.yml mới nhất từ git
             git fetch origin main
             git reset --hard origin/main
-            docker compose up --build -d
+            
+            # Đăng nhập vào GHCR trên VPS bằng token tạm thời của GitHub Actions
+            echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+            
+            # Tải các image mới đã build sẵn về VPS
+            docker compose pull
+            
+            # Khởi chạy lại các container ứng dụng
+            docker compose up -d
+            
+            # Dọn dẹp các docker image cũ, không còn sử dụng để giải phóng dung lượng ổ cứng VPS
             docker image prune -f
+            
+            # Đăng xuất để bảo mật
+            docker logout ghcr.io

@@ -52,6 +52,7 @@ services:
 
   backend:
     build: ./backend
+    image: ghcr.io/cycyxcicicu/paperless-meeting/backend:latest
     container_name: backend
     env_file: .env
     environment:
@@ -75,6 +76,7 @@ services:
 
   frontend:
     build: ./fontend
+    image: ghcr.io/cycyxcicicu/paperless-meeting/frontend:latest
     container_name: frontend
     ports:
       - "80:80"
