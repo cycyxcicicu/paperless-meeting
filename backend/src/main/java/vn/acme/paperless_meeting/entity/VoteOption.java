@@ -26,7 +26,7 @@ import lombok.Setter;
 @AllArgsConstructor
 @Entity
 @Table(name = "vote_options", uniqueConstraints = {
-                @UniqueConstraint(columnNames = { "vote_session_id", "order_no" }, name = "uk_voteoption_session_order")
+                @UniqueConstraint(columnNames = { "vote_session_id", "orderNo" }, name = "uk_voteoption_session_order")
 }, indexes = {
                 @Index(columnList = "vote_session_id", name = "idx_voteoption_session")
                

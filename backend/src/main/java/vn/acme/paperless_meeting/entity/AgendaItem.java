@@ -37,7 +37,7 @@ import vn.acme.paperless_meeting.entity.enums.AgendaItemStatus;
 @Entity
 @SQLDelete(sql = "UPDATE agenda_items SET is_deleted = true, deleted_at = CURRENT_TIMESTAMP WHERE id = ? AND is_deleted = false")
 @Table(name = "agenda_items", uniqueConstraints = {
-                @UniqueConstraint(columnNames = { "meeting_id", "order_no",
+                @UniqueConstraint(columnNames = { "meeting_id", "orderNo",
                                 "is_deleted" }, name = "uk_agenda_meeting_order")
 }, indexes = {
                 @Index(columnList = "meeting_id", name = "idx_agenda_meeting"),
