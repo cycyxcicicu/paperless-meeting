@@ -60,6 +60,9 @@ import vn.acme.paperless_meeting.service.websocket.WebSocketNotificationService;
 import vn.acme.paperless_meeting.entity.enums.RoleName;
 import vn.acme.paperless_meeting.entity.enums.PositionCode;
 import vn.acme.paperless_meeting.service.department.DepartmentService;
+import vn.acme.paperless_meeting.event.audit.AuditLogPublisher;
+import vn.acme.paperless_meeting.entity.enums.AuditAction;
+import vn.acme.paperless_meeting.entity.enums.ResourceType;
 
 @Service
 @RequiredArgsConstructor
@@ -80,6 +83,7 @@ public class AgendaItemService {
     MotionMapper motionMapper;
     WebSocketNotificationService webSocketNotificationService;
     DepartmentService departmentService;
+    AuditLogPublisher auditLogPublisher;
 
     /**
      * Xóa nội dung cuộc họp
@@ -765,6 +769,14 @@ public class AgendaItemService {
         webSocketNotificationService.sendToTopic(
             "/topic/meeting/" + meetingId,
             Map.of("action", "REFRESH_AGENDA")
+        );
+
+        auditLogPublisher.publish(
+                caller,
+                AuditAction.UPDATE_AGENDA,
+                ResourceType.MEETING,
+                meetingId,
+                Map.of("meetingId", String.valueOf(meetingId), "title", meeting.getTitle())
         );
  
         return responses;

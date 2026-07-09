@@ -12,6 +12,7 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
+import jakarta.servlet.DispatcherType;
 import lombok.RequiredArgsConstructor;
 import vn.acme.paperless_meeting.enums.PublicEndpoint;
 import vn.acme.paperless_meeting.service.auth.JwtAuthenticationFilter;
@@ -54,6 +55,15 @@ public class SecurityConfig {
                         .accessDeniedHandler(securityExceptionHandlers.accessDeniedHandler()))
 
                 .authorizeHttpRequests(auth -> {
+                    // Endpoint streaming (SseEmitter, vd: trợ lý AI /assistant/chat/stream) khiến
+                    // servlet container tự dispatch lại request kiểu ASYNC/ERROR khi đóng luồng -
+                    // request gốc (REQUEST) đã được xác thực/phân quyền đầy đủ ở trên rồi, nhưng
+                    // JwtAuthenticationFilter (OncePerRequestFilter) không chạy lại ở dispatch phụ
+                    // này nên security context trống, làm AuthorizationFilter chặn nhầm SAU KHI
+                    // dữ liệu đã gửi xong cho client. Đây là hành vi đã biết của Spring Security
+                    // (xem spring-projects/spring-security#16266), không phải lỗ hổng bảo mật vì
+                    // client không thể tự tạo dispatch kiểu ASYNC/ERROR từ bên ngoài.
+                    auth.dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll();
                     auth.requestMatchers("/ws/**").permitAll();
                     for (PublicEndpoint endpoint : PublicEndpoint.all()) {
                         auth.requestMatchers(endpoint.getMethod(), endpoint.getPath()).permitAll();

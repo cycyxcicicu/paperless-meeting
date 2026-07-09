@@ -1,8 +1,8 @@
 import React from 'react';
-import { X, FileText, FileSpreadsheet, File as FileIcon, Download, Eye, Calendar, User, Briefcase } from 'lucide-react';
+import { X, FileText, Download, Eye, Calendar, User, Briefcase } from 'lucide-react';
 import { Button } from '@/common/components/ui/button';
 import { Opinion } from '../meeting.mock';
-import { downloadDocument, viewDocument } from '@/common/utils/fileHelpers';
+import { downloadDocument, viewDocument, getFileIconStyle } from '@/common/utils/fileHelpers';
 
 interface ViewOpinionModalProps {
   isOpen: boolean;
@@ -10,36 +10,6 @@ interface ViewOpinionModalProps {
   opinion: Opinion | null;
   guestToken?: string | null;
 }
-
-const getFileIconStyle = (fileName?: string) => {
-  const ext = fileName?.split('.').pop()?.toLowerCase();
-  if (ext === 'pdf') {
-    return {
-      bg: 'bg-red-50',
-      text: 'text-[#C8102E]',
-      icon: FileText
-    };
-  }
-  if (ext === 'doc' || ext === 'docx') {
-    return {
-      bg: 'bg-blue-50',
-      text: 'text-blue-600',
-      icon: FileText
-    };
-  }
-  if (ext === 'xls' || ext === 'xlsx') {
-    return {
-      bg: 'bg-emerald-50',
-      text: 'text-emerald-600',
-      icon: FileSpreadsheet
-    };
-  }
-  return {
-    bg: 'bg-gray-50',
-    text: 'text-gray-600',
-    icon: FileIcon
-  };
-};
 
 export const ViewOpinionModal: React.FC<ViewOpinionModalProps> = ({
   isOpen,

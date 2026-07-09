@@ -1,5 +1,6 @@
 import { UserFormModal } from "@/modules/user/components/UserFormModal";
 import { ChangePasswordModal } from "@/modules/user/components/ChangePasswordModal";
+import { toast } from "sonner";
 import {
     Bell,
     ChevronDown,
@@ -21,6 +22,7 @@ import { LazyScrollContainer } from "@/common/components/ui/LazyScrollContainer"
 import { useAuth } from "@/app/context/AuthContext";
 import { hasRoutePermission } from "@/app/routes/config";
 import { api } from '@/lib/api/axios';
+import { userApi } from "@/modules/user/services/user.api";
 
 const TopBar = () => {
     const location = useLocation();
@@ -30,8 +32,7 @@ const TopBar = () => {
     // Modal states
     const [showProfile, setShowProfile] = useState(false);
     const [showChangePassword, setShowChangePassword] = useState(false);
-
-    const { user, logout } = useAuth();
+    const { user, logout, fetchUser } = useAuth();
 
     // Dữ liệu người dùng thực tế lấy từ Context (bọc fallback để tránh lỗi layout)
     const currentUser: any = user || {
@@ -358,12 +359,20 @@ const TopBar = () => {
                             )}
                         >
                             <div className="relative">
-                                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#C8102E] via-[#B80F28] to-[#A90F14] flex items-center justify-center shadow-md shadow-red-500/20">
-                                    <User
-                                        className="h-4.5 w-4.5 text-white"
-                                        strokeWidth={2.5}
+                                {currentUser.avatar ? (
+                                    <img
+                                        src={currentUser.avatar}
+                                        alt="Avatar"
+                                        className="w-9 h-9 rounded-xl object-cover shadow-md shadow-red-500/20"
                                     />
-                                </div>
+                                ) : (
+                                    <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#C8102E] via-[#B80F28] to-[#A90F14] flex items-center justify-center shadow-md shadow-red-500/20">
+                                        <User
+                                            className="h-4.5 w-4.5 text-white"
+                                            strokeWidth={2.5}
+                                        />
+                                    </div>
+                                )}
                                 <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 rounded-full border-2 border-white" />
                             </div>
                             <div className="hidden lg:flex flex-col items-start text-left">
@@ -393,12 +402,20 @@ const TopBar = () => {
                                 >
                                     <div className="p-4 bg-gradient-to-br from-gray-50 via-white to-gray-50 border-b border-gray-100">
                                         <div className="flex items-center gap-3">
-                                            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#C8102E] to-[#A90F14] flex items-center justify-center shadow-lg">
-                                                <User
-                                                    className="h-6 w-6 text-white"
-                                                    strokeWidth={2.5}
+                                            {currentUser.avatar ? (
+                                                <img
+                                                    src={currentUser.avatar}
+                                                    alt="Avatar"
+                                                    className="w-12 h-12 rounded-xl object-cover shadow-lg"
                                                 />
-                                            </div>
+                                            ) : (
+                                                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#C8102E] to-[#A90F14] flex items-center justify-center shadow-lg">
+                                                    <User
+                                                        className="h-6 w-6 text-white"
+                                                        strokeWidth={2.5}
+                                                    />
+                                                </div>
+                                            )}
                                             <div className="flex-1 min-w-0">
                                                 <p className="text-sm heading text-gray-900 truncate">
                                                     {currentUser.fullName}
@@ -445,15 +462,26 @@ const TopBar = () => {
                 </div>
             </div>
 
-            {/* Global User Modals */}
             <UserFormModal 
                 isOpen={showProfile} 
                 onClose={() => setShowProfile(false)} 
                 mode="edit"
                 initialData={currentUser}
                 isSelfProfile={true}
-                onSubmit={(data) => {
-                    console.log("Updating self profile...", data);
+                onSubmit={async (data) => {
+                    try {
+                        const response = await userApi.updateUser(currentUser.id, data);
+                        if (response.success) {
+                            toast.success("Cập nhật thông tin cá nhân thành công");
+                            await fetchUser();
+                            setShowProfile(false);
+                        } else {
+                            toast.error(response.message || "Cập nhật thất bại");
+                        }
+                    } catch (e: any) {
+                        console.error("Lỗi cập nhật hồ sơ:", e);
+                        toast.error(e?.response?.data?.message || "Cập nhật thất bại. Vui lòng thử lại.");
+                    }
                 }} 
             />
             <ChangePasswordModal 

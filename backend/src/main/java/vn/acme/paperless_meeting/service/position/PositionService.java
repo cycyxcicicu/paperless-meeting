@@ -32,6 +32,9 @@ import vn.acme.paperless_meeting.repository.PositionRepository;
 import vn.acme.paperless_meeting.repository.UserRepository;
 import vn.acme.paperless_meeting.service.auth.CurrentUserService;
 import vn.acme.paperless_meeting.service.department.DepartmentService;
+import vn.acme.paperless_meeting.event.audit.AuditLogPublisher;
+import vn.acme.paperless_meeting.entity.enums.AuditAction;
+import vn.acme.paperless_meeting.entity.enums.ResourceType;
 
 @Service
 @RequiredArgsConstructor
@@ -44,6 +47,7 @@ public class PositionService {
     PositionMapper positionMapper;
     CurrentUserService currentUserService;
     DepartmentService departmentService;
+    AuditLogPublisher auditLogPublisher;
 
     public PageResponse<PositionResponse> findAll(String search, Pageable pageable) {
         Page<Position> pageData;
@@ -163,7 +167,15 @@ public class PositionService {
         position.setUpdatedAt(LocalDateTime.now());
         position.setIsDeleted(false);
 
-        return positionMapper.toResponseWithDepartment(positionRepository.save(position));
+        Position saved = positionRepository.save(position);
+        auditLogPublisher.publish(
+                caller,
+                AuditAction.CREATE_POSITION,
+                ResourceType.POSITION,
+                saved.getId(),
+                Map.of("name", saved.getPositionName(), "code", saved.getPositionCode())
+        );
+        return positionMapper.toResponseWithDepartment(saved);
     }
 
 
@@ -217,7 +229,15 @@ public class PositionService {
         positionMapper.updateEntity(request, position);
         position.setUpdatedAt(LocalDateTime.now());
 
-        return positionMapper.toResponseWithDepartment(positionRepository.save(position));
+        Position saved = positionRepository.save(position);
+        auditLogPublisher.publish(
+                caller,
+                AuditAction.UPDATE_POSITION,
+                ResourceType.POSITION,
+                saved.getId(),
+                Map.of("name", saved.getPositionName(), "code", saved.getPositionCode())
+        );
+        return positionMapper.toResponseWithDepartment(saved);
     }
 
     @Transactional
@@ -239,6 +259,13 @@ public class PositionService {
         }
 
         positionRepository.delete(position);
+        auditLogPublisher.publish(
+                currentUserService.getCurrentActiveUser(),
+                AuditAction.DELETE_POSITION,
+                ResourceType.POSITION,
+                id,
+                Map.of("name", position.getPositionName(), "code", position.getPositionCode())
+        );
     }
 
     private Position getPosition(UUID id) {

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '@/common/components/ui/button';
 import { toast } from '@/lib/toast';
 import { meetingApi, AgendaItemFeedbackResponse } from '../services/meeting.api';
@@ -22,6 +22,14 @@ export const FeedbackChatSection: React.FC<FeedbackChatSectionProps> = ({
 }) => {
   const [chatInput, setChatInput] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Auto scroll to bottom when feedbacks change
+  useEffect(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [feedbacks]);
 
   const handleSendChat = async () => {
     if (!chatInput.trim() || isSending) return;
@@ -49,7 +57,7 @@ export const FeedbackChatSection: React.FC<FeedbackChatSectionProps> = ({
   return (
     <div className="space-y-2">
       <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider block">
-        Lịch sử trao đổi / Ý kiến phản hồi
+        Lịch sử trao đổi
       </span>
       <div className="border border-gray-100 rounded-xl bg-gray-50/50 p-3 space-y-3">
         {feedbacks && feedbacks.length > 0 ? (
@@ -95,6 +103,7 @@ export const FeedbackChatSection: React.FC<FeedbackChatSectionProps> = ({
                 </div>
               );
             })}
+            <div ref={messagesEndRef} />
           </div>
         ) : (
           <p className="text-xs text-gray-500 italic">Chưa có lịch sử trao đổi.</p>

@@ -1,6 +1,6 @@
 import * as z from 'zod';
 
-export const getUserFormValidationSchema = (hidePosition: boolean = false) => z.object({
+export const getUserFormValidationSchema = (roleOptions: { value: string; roleCode?: string }[] = []) => z.object({
   formMode: z.string().optional(),
   username: z.string()
     .min(1, 'Vui lòng nhập tên đăng nhập')
@@ -19,12 +19,26 @@ export const getUserFormValidationSchema = (hidePosition: boolean = false) => z.
     .min(1, 'Vui lòng nhập số điện thoại')
     .max(20, 'Số điện thoại không được vượt quá 20 ký tự')
     .regex(/^(0[35789])[0-9]{8}$/, 'Số điện thoại phải đúng 10 chữ số và bắt đầu bằng số 0 hợp lệ'),
-  position: hidePosition ? z.string().nullable().optional() : z.string().min(1, 'Vui lòng chọn chức vụ'),
+  position: z.string().nullable().optional(),
   department: z.string().min(1, 'Vui lòng chọn đơn vị'),
   role: z.any().optional(),
   status: z.enum(['active', 'inactive']),
   avatar: z.any().optional(),
 }).superRefine((data, ctx) => {
+  // Logic validation chức vụ động
+  const selectedRoleOption = roleOptions.find(o => o.value === data.role);
+  const isPositionHidden = selectedRoleOption?.roleCode === 'SUPER_ADMIN' || selectedRoleOption?.roleCode === 'DEPARTMENT_ADMIN';
+  
+  if (!isPositionHidden) {
+    if (!data.position || data.position.trim() === '') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Vui lòng chọn chức vụ',
+        path: ['position']
+      });
+    }
+  }
+
   // Logic validation đặc biệt: Mật khẩu chỉ bắt buộc khi create
   if (data.formMode !== 'edit' && data.formMode !== 'view') {
     if (!data.password || data.password.trim() === '') {

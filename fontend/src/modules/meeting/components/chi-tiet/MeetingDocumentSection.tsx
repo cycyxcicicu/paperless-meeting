@@ -1,7 +1,8 @@
 import React from 'react';
 import { Button } from '@/common/components/ui/button';
-import { Eye, Download, FileText } from 'lucide-react';
+import { Eye, Download } from 'lucide-react';
 import { CollapsibleSection } from '@/modules/meeting/components/CollapsibleSection';
+import { getFileIconStyle } from '@/common/utils/fileHelpers';
 
 interface MeetingDocumentSectionProps {
     agendaItems: any[];
@@ -9,6 +10,12 @@ interface MeetingDocumentSectionProps {
     downloadDocument: (docId: string, title: string) => void;
     agendaFile?: { id: string; name: string; url: string } | null;
 }
+
+const getFileIcon = (fileName?: string) => {
+    const style = getFileIconStyle(fileName);
+    const Icon = style.icon;
+    return <Icon className={`w-4 h-4 ${style.text} shrink-0`} />;
+};
 
 export const MeetingDocumentSection: React.FC<MeetingDocumentSectionProps> = ({
     agendaItems,
@@ -42,7 +49,7 @@ export const MeetingDocumentSection: React.FC<MeetingDocumentSectionProps> = ({
                         </div>
                         <div className="flex items-center justify-between p-2 rounded-lg bg-white border border-gray-100 hover:bg-gray-50 transition-colors">
                             <div className="flex items-center gap-2">
-                                <FileText className="w-4 h-4 text-red-500 shrink-0" />
+                                {getFileIcon(agendaFile.name)}
                                 <div className="text-xs">
                                     <span className="text-gray-800 font-medium">
                                         {agendaFile.name || "Chương trình họp"}
@@ -86,26 +93,16 @@ export const MeetingDocumentSection: React.FC<MeetingDocumentSectionProps> = ({
                             key={item.id}
                             className="p-4 bg-white border border-gray-200 rounded-xl hover:shadow-sm transition-shadow"
                         >
-                            <div className="flex flex-col md:flex-row md:items-start justify-between border-b border-gray-100 pb-3 mb-3 gap-2">
-                                <div>
-                                    <h4 className="font-semibold text-gray-900 text-[15px]">
-                                        {item.orderNo ? `${item.orderNo}. ` : ""}
-                                        {item.title}
-                                    </h4>
-                                    {item.content && (
-                                        <p className="text-sm text-gray-600 mt-1">
-                                            {item.content}
-                                        </p>
-                                    )}
-                                </div>
-                                <div className="text-xs text-gray-500 shrink-0 md:text-right">
-                                    <span className="font-medium text-gray-700">
-                                        Người chuẩn bị:{" "}
-                                    </span>
-                                    <span className="text-gray-900">
-                                        {item.preparedByFullName || "Chưa phân công"}
-                                    </span>
-                                </div>
+                            <div className="border-b border-gray-100 pb-3 mb-3">
+                                <h4 className="font-semibold text-gray-900 text-[15px]">
+                                    {item.orderNo ? `${item.orderNo}. ` : ""}
+                                    {item.title}
+                                </h4>
+                                {item.content && (
+                                    <p className="text-sm text-gray-600 mt-1">
+                                        {item.content}
+                                    </p>
+                                )}
                             </div>
 
                             {/* Documents attached */}
@@ -126,7 +123,7 @@ export const MeetingDocumentSection: React.FC<MeetingDocumentSectionProps> = ({
                                                 className="flex items-center justify-between p-2 rounded-lg bg-gray-50 border border-gray-100 hover:bg-gray-100/70 transition-colors"
                                             >
                                                 <div className="flex items-center gap-2">
-                                                    <FileText className="w-4 h-4 text-red-500 shrink-0" />
+                                                    {getFileIcon(doc.title || doc.fileName)}
                                                     <div className="text-xs">
                                                         <div className="text-gray-800 font-medium">
                                                             {doc.title || doc.fileName || "Tài liệu"}

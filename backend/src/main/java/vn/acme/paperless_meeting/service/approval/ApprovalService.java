@@ -395,6 +395,18 @@ public class ApprovalService {
                 minutes.setStatus(MinutesStatus.APPROVED);
                 minutes.setFinalizedAt(LocalDateTime.now());
                 minutesRepository.save(minutes);
+
+                auditLogPublisher.publish(
+                        approver,
+                        AuditAction.PUBLISH_MINUTES,
+                        ResourceType.MINUTES,
+                        resourceId,
+                        Map.of(
+                                "minutesId", String.valueOf(resourceId),
+                                "title", minutes.getMeeting().getTitle() != null ? minutes.getMeeting().getTitle() : "",
+                                "meetingId", minutes.getMeeting().getId() != null ? String.valueOf(minutes.getMeeting().getId()) : ""
+                        )
+                );
             }
             default -> throw new AppException(ErrorCode.APPROVAL_RESOURCE_TYPE_UNSUPPORTED);
         }

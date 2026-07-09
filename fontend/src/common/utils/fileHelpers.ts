@@ -1,3 +1,5 @@
+import { FileText, FileSpreadsheet, Presentation, File as FileIcon } from 'lucide-react';
+
 /**
  * Centralized utility functions for handling secure document viewing and downloading.
  */
@@ -40,3 +42,57 @@ export const downloadDocument = (
   link.click();
   document.body.removeChild(link);
 };
+
+export interface FileIconStyle {
+  bg: string;
+  text: string;
+  icon: any;
+}
+
+/**
+ * Returns unified styling and Lucide icon components based on the file name/extension.
+ */
+export const getFileIconStyle = (fileName?: string): FileIconStyle => {
+  const ext = fileName?.split('.').pop()?.toLowerCase();
+  if (ext === 'pdf') {
+    return {
+      bg: 'bg-red-50',
+      text: 'text-[#C8102E]',
+      icon: FileText
+    };
+  }
+  if (ext === 'doc' || ext === 'docx') {
+    return {
+      bg: 'bg-blue-50',
+      text: 'text-blue-600',
+      icon: FileText
+    };
+  }
+  if (ext === 'xls' || ext === 'xlsx') {
+    return {
+      bg: 'bg-emerald-50',
+      text: 'text-emerald-600',
+      icon: FileSpreadsheet
+    };
+  }
+  if (ext === 'ppt' || ext === 'pptx') {
+    return {
+      bg: 'bg-orange-50',
+      text: 'text-orange-600',
+      icon: Presentation
+    };
+  }
+  if (ext === 'txt') {
+    return {
+      bg: 'bg-slate-50',
+      text: 'text-slate-600',
+      icon: FileText
+    };
+  }
+  return {
+    bg: 'bg-gray-50',
+    text: 'text-gray-600',
+    icon: FileIcon
+  };
+};
+

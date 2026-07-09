@@ -44,11 +44,11 @@ public class DepartmentController {
     }
 
     @GetMapping("/tree")
-    public ApiResponse<List<DepartmentTreeResponse>> getTree() {
+    public ApiResponse<List<DepartmentTreeResponse>> getTree(@RequestParam(required = false, name = "full") Boolean full) {
         return ApiResponse.<List<DepartmentTreeResponse>>builder()
                 .success(true)
                 .message("Lấy cấu trúc phòng ban thành công")
-                .data(departmentService.getTree())
+                .data(departmentService.getTree(full))
                 .build();
     }
 

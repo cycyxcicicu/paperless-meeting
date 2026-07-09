@@ -30,6 +30,8 @@ import vn.acme.paperless_meeting.repository.PositionRepository;
 import vn.acme.paperless_meeting.repository.RolePermissionRepository;
 import vn.acme.paperless_meeting.repository.RoleRepository;
 import vn.acme.paperless_meeting.repository.UserRepository;
+import vn.acme.paperless_meeting.repository.LocationRepository;
+import vn.acme.paperless_meeting.entity.Location;
 
 @ExtendWith(MockitoExtension.class)
 class SystemInitializerTest {
@@ -46,6 +48,8 @@ class SystemInitializerTest {
     RolePermissionRepository rolePermissionRepository;
     @Mock
     UserRepository userRepository;
+    @Mock
+    LocationRepository locationRepository;
     @Mock
     PasswordEncoder passwordEncoder;
 
@@ -111,6 +115,14 @@ class SystemInitializerTest {
         lenient().when(rolePermissionRepository.findPermissionCodesByRoleId(any())).thenReturn(Collections.emptySet());
         lenient().when(userRepository.findByUsername("admin")).thenReturn(Optional.empty());
         lenient().when(passwordEncoder.encode(anyString())).thenReturn("hashed_password");
+        lenient().when(locationRepository.findAll()).thenReturn(new java.util.ArrayList<>());
+        lenient().when(locationRepository.save(any(Location.class))).thenAnswer(invocation -> {
+            Location loc = invocation.getArgument(0);
+            if (loc.getId() == null) {
+                loc.setId(UUID.randomUUID());
+            }
+            return loc;
+        });
     }
 
     @Test
@@ -128,12 +140,12 @@ class SystemInitializerTest {
         verify(permissionRepository, atLeast(15)).save(any(Permission.class));
         verify(rolePermissionRepository, atLeast(20)).save(any(RolePermission.class));
 
-        // 3. Verify positions are saved (8 global + 40 department-specific)
-        verify(positionRepository, times(48)).save(any(Position.class));
+        // 3. Verify positions are saved (8 global + 20 department-specific)
+        verify(positionRepository, times(28)).save(any(Position.class));
 
-        // 4. Verify Super Admin and department users are created (41 users in total)
+        // 4. Verify Super Admin and department users are created (1031 users in total)
         ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
-        verify(userRepository, times(41)).save(userCaptor.capture());
+        verify(userRepository, times(1031)).save(userCaptor.capture());
         
         User admin = userCaptor.getAllValues().get(0);
         assertEquals("admin", admin.getUsername());
@@ -142,16 +154,14 @@ class SystemInitializerTest {
         assertEquals("0900000000", admin.getPhone());
         assertEquals("hashed_password", admin.getPassword());
         assertEquals(UserStatus.ACTIVE, admin.getStatus());
-        assertTrue(admin.getIsFirstLogin());
+        assertFalse(admin.getIsFirstLogin());
         
         // Verify role is SUPER_ADMIN
         assertNotNull(admin.getRole());
         assertEquals("SUPER_ADMIN", admin.getRole().getRoleCode());
 
-        // Verify position is CHU_TICH
-        assertNotNull(admin.getPosition());
-        assertEquals("CHU_TICH", admin.getPosition().getPositionCode());
-        assertEquals(PositionRole.CHAIRMAN_CITY, admin.getPosition().getPositionRole());
+        // Verify position is null for technical admin
+        assertNull(admin.getPosition());
 
         // Verify department is root
         assertNotNull(admin.getDepartment());

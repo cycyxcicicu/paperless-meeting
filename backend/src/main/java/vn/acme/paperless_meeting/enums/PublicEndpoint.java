@@ -30,6 +30,9 @@ public enum PublicEndpoint {
     PUBLIC_VOTE(HttpMethod.POST, "/meetings/public/motions/*/vote"),
     PUBLIC_SPEAKERS_REQUEST(HttpMethod.POST, "/meetings/public/speakers/request"),
 
+    // Đường dẫn ảnh đại diện công khai
+    PUBLIC_AVATAR(HttpMethod.GET, "/users/avatar/view/**"),
+
     // Cấu hình các route test
     TEST_EMAIL(HttpMethod.POST, "/test/email/**");
 

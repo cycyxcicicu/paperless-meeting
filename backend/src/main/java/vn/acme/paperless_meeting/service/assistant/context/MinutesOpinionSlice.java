@@ -99,24 +99,30 @@ public class MinutesOpinionSlice {
         sb.append("</danh_sach_phat_bieu>\n");
     }
 
+    // Đặt tên thẻ KHÔNG dùng chữ "góp ý"/"ý kiến" (trùng từ vựng với <danh_sach_y_kien> ở
+    // trên, khiến model dễ lẫn 2 khái niệm khác nhau): đây là kênh trao đổi công việc
+    // CHUẨN BỊ TÀI LIỆU giữa người giao việc và người chuẩn bị cho 1 nội dung cụ thể,
+    // KHÔNG PHẢI ý kiến đóng góp tại phiên họp.
     private void appendAgendaFeedback(StringBuilder sb, List<AgendaItem> agendaItems, Map<UUID, AgendaItem> agendaItemsById) {
         List<UUID> agendaIds = agendaItems.stream().map(AgendaItem::getId).collect(Collectors.toList());
         List<AgendaItemFeedback> feedbacks = agendaIds.isEmpty() ? List.of()
                 : agendaItemFeedbackRepository.findByAgendaItemIdInWithAuthor(agendaIds);
 
-        sb.append("<danh_sach_gop_y_noi_dung>\n");
+        sb.append("<danh_sach_trao_doi_chuan_bi_tai_lieu>\n");
         for (AgendaItemFeedback fb : feedbacks) {
             AgendaItem item = fb.getAgendaItem() != null ? agendaItemsById.get(fb.getAgendaItem().getId()) : null;
             String thuocNoiDung = item != null ? "Nội dung " + item.getOrderNo() + ": " + item.getTitle() : "-";
-            String loai = "REJECTION".equalsIgnoreCase(fb.getType()) ? "Từ chối"
-                    : "INSTRUCTION".equalsIgnoreCase(fb.getType()) ? "Hướng dẫn chỉnh sửa" : fb.getType();
-            sb.append("  <gop_y")
+            String loai = "REJECTION".equalsIgnoreCase(fb.getType()) ? "Từ chối duyệt tài liệu"
+                    : "INSTRUCTION".equalsIgnoreCase(fb.getType()) ? "Hướng dẫn chuẩn bị tài liệu"
+                    : "RESPONSE".equalsIgnoreCase(fb.getType()) ? "Phản hồi của người chuẩn bị"
+                    : fb.getType();
+            sb.append("  <trao_doi")
                     .append(" thuoc_noi_dung=\"").append(safe(thuocNoiDung)).append("\"")
                     .append(" nguoi=\"").append(fb.getAuthor() != null ? safe(fb.getAuthor().getFullName()) : "-").append("\"")
                     .append(" loai=\"").append(loai != null ? loai : "-").append("\"")
-                    .append(">").append(safe(fb.getContent())).append("</gop_y>\n");
+                    .append(">").append(safe(fb.getContent())).append("</trao_doi>\n");
         }
-        sb.append("</danh_sach_gop_y_noi_dung>\n");
+        sb.append("</danh_sach_trao_doi_chuan_bi_tai_lieu>\n");
     }
 
     private String safe(String value) {

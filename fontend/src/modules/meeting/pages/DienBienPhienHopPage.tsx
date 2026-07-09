@@ -1,6 +1,6 @@
 import React from "react";
 import { useNavigate, useParams, useLocation } from "react-router";
-import { ArrowLeft, Clock, Users, X, CalendarClock, CalendarX, BookOpen } from "lucide-react";
+import { ArrowLeft, Clock, Users, X, CalendarClock, CalendarX, BookOpen, Sparkles } from "lucide-react";
 import { PageHeader } from '@/common/components/layout/PageHeader';
 import { Button } from '@/common/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/common/components/ui/dialog";
@@ -9,6 +9,7 @@ import { AttendanceModal } from '@/modules/meeting/components/AttendanceModal';
 import { ViewOpinionModal } from '@/modules/meeting/components/ViewOpinionModal';
 import { AddOpinionForContentModal } from '@/modules/meeting/components/AddOpinionForContentModal';
 import { PersonalNotesModal } from '@/modules/meeting/components/PersonalNotesModal';
+import { AssistantChatPanel } from '@/modules/meeting/components/AssistantChatPanel';
 import { ConfirmBroadcastModal } from '@/modules/meeting/components/voting/ConfirmBroadcastModal';
 import { PauseVotingModal } from '@/modules/meeting/components/voting/PauseVotingModal';
 import { ReadinessCheckModal } from '@/modules/meeting/components/voting/ReadinessCheckModal';
@@ -89,6 +90,7 @@ export default function DienBienPhienHopPage() {
     } = useDienBienPhienHop(guestToken);
 
     const [isNotesModalOpen, setIsNotesModalOpen] = React.useState(false);
+    const [isAssistantOpen, setIsAssistantOpen] = React.useState(false);
 
     const errorCode = error?.response?.data?.code;
 
@@ -410,6 +412,31 @@ export default function DienBienPhienHopPage() {
 
             {!isGuest && (
                 <>
+                    {/* Floating AI Assistant Button */}
+                    <div className="fixed right-6 bottom-44 z-40 group">
+                        <button
+                            type="button"
+                            onClick={() => setIsAssistantOpen(true)}
+                            className="w-14 h-14 bg-gradient-to-tr from-indigo-600 to-violet-500 text-white rounded-full flex items-center justify-center shadow-xl hover:scale-110 active:scale-95 transition-all duration-300 relative border border-indigo-400/25"
+                        >
+                            <Sparkles className="h-6 w-6" />
+                        </button>
+                        {/* Tooltip */}
+                        <div className="absolute right-16 top-1/2 -translate-y-1/2 hidden group-hover:block z-50 animate-in fade-in-0 slide-in-from-right-3 duration-200">
+                            <div className="bg-gray-900 text-white text-xs rounded-xl px-3.5 py-2.5 whitespace-nowrap shadow-xl border border-gray-800 font-medium">
+                                Trợ lý AI cuộc họp
+                                <div className="absolute top-1/2 left-full -translate-y-1/2 border-4 border-transparent border-l-gray-900"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <AssistantChatPanel
+                        isOpen={isAssistantOpen}
+                        onClose={() => setIsAssistantOpen(false)}
+                        meetingId={id || ""}
+                        meetingTitle={meeting?.title || "Phiên họp"}
+                    />
+
                     {/* Floating Book Button */}
                     <div className="fixed right-6 bottom-24 z-40 group">
                         <button

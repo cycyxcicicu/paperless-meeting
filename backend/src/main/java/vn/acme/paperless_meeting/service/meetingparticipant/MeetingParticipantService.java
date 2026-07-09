@@ -893,6 +893,19 @@ public class MeetingParticipantService {
                 log.setLateMinutes(lateMinutes);
                 log.setNote(request.getNote());
                 log.setRecordedBy(isSelfCheckin ? null : caller);
+                User actorUser = caller != null ? caller : participant.getUser();
+                auditLogPublisher.publish(
+                        actorUser,
+                        AuditAction.PARTICIPANT_CHECK_IN,
+                        ResourceType.MEETING,
+                        meetingId,
+                        Map.of(
+                                "meetingId", String.valueOf(meetingId),
+                                "title", meeting.getTitle() != null ? meeting.getTitle() : "",
+                                "attendeeType", "INTERNAL",
+                                "attendeeName", participant.getUser().getFullName() != null ? participant.getUser().getFullName() : ""
+                        )
+                );
                 attendanceLogRepository.save(log);
             } else {
                 // Nếu đánh dấu vắng mặt/lý do khác, cập nhật log (nếu có)
@@ -931,6 +944,20 @@ public class MeetingParticipantService {
                 log.setLateMinutes(lateMinutes);
                 log.setNote(request.getNote());
                 log.setRecordedBy(caller);
+                if (caller != null) {
+                    auditLogPublisher.publish(
+                            caller,
+                            AuditAction.PARTICIPANT_CHECK_IN,
+                            ResourceType.MEETING,
+                            meetingId,
+                            Map.of(
+                                    "meetingId", String.valueOf(meetingId),
+                                    "title", meeting.getTitle() != null ? meeting.getTitle() : "",
+                                    "attendeeType", "EXTERNAL",
+                                    "attendeeName", guest.getFullName() != null ? guest.getFullName() : ""
+                            )
+                    );
+                }
                 attendanceLogRepository.save(log);
             } else {
                  attendanceLogRepository.findByMeetingIdAndGuestId(meetingId, guest.getId())

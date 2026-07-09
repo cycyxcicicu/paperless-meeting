@@ -4,16 +4,13 @@ import java.io.InputStream;
 import java.util.List;
 import java.util.UUID;
 
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.tags.Tag;
-
 import org.springframework.core.io.InputStreamResource;
+import org.springframework.core.io.Resource;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.http.ContentDisposition;
-import org.springframework.http.HttpHeaders;
-import vn.acme.paperless_meeting.entity.enums.MeetingDocumentUsageType;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -26,8 +23,8 @@ import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
-import org.springframework.core.io.Resource;
-
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
@@ -36,6 +33,7 @@ import vn.acme.paperless_meeting.dto.request.document.AttachDocumentRequest;
 import vn.acme.paperless_meeting.dto.response.document.DocumentResponse;
 import vn.acme.paperless_meeting.dto.response.document.MeetingDocumentResponse;
 import vn.acme.paperless_meeting.entity.DocumentVersion;
+import vn.acme.paperless_meeting.entity.enums.MeetingDocumentUsageType;
 import vn.acme.paperless_meeting.service.document.DocumentService;
 
 @RestController
@@ -49,8 +47,7 @@ public class DocumentController {
 
     // ========== NHÓM A — Document CRUD ==========
 
-    @Operation(summary = "Upload file tài liệu lên MinIO",
-               description = "Upload file (PDF/DOCX/XLSX/PPTX/PNG/JPG/ZIP, tối đa 20MB). Trả về Document đã tạo kèm URL file.")
+    @Operation(summary = "Upload file tài liệu lên MinIO", description = "Upload file (PDF/DOCX/XLSX/PPTX/PNG/JPG/ZIP, tối đa 20MB). Trả về Document đã tạo kèm URL file.")
     @PostMapping(value = "/documents/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<ApiResponse<DocumentResponse>> uploadDocument(
             @RequestPart("file") MultipartFile file,
@@ -103,8 +100,7 @@ public class DocumentController {
 
     // ========== NHÓM B — Meeting Document ==========
 
-    @Operation(summary = "Gắn tài liệu vào cuộc họp",
-               description = "Gắn Document đã upload vào Meeting. Có thể tùy chọn liên kết với Agenda Item cụ thể.")
+    @Operation(summary = "Gắn tài liệu vào cuộc họp", description = "Gắn Document đã upload vào Meeting. Có thể tùy chọn liên kết với Agenda Item cụ thể.")
     @PostMapping("/meetings/{meetingId}/documents")
     public ResponseEntity<ApiResponse<MeetingDocumentResponse>> attachToMeeting(
             @PathVariable UUID meetingId,
@@ -164,7 +160,7 @@ public class DocumentController {
     }
 
     // ========== NHÓM C — Advanced Features (Proxy/UploadAttach) ==========
-    
+
     @Operation(summary = "Lấy file qua liên kết bảo mật (Stream Redirect)", description = "Sử dụng Proxy/Redirect URL sau khi hệ thống đã check ACL và sở hữu file.")
     @GetMapping("/documents/{id}/download")
     public ResponseEntity<Resource> downloadDocument(
@@ -194,7 +190,7 @@ public class DocumentController {
         ContentDisposition contentDisposition = ContentDisposition.builder(dispositionType)
                 .filename(version.getFileName(), java.nio.charset.StandardCharsets.UTF_8)
                 .build();
- 
+
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(contentType))
                 .header(HttpHeaders.CONTENT_DISPOSITION, contentDisposition.toString())
@@ -214,7 +210,8 @@ public class DocumentController {
             @RequestParam(required = false) Boolean requiredBeforeMeeting,
             @RequestParam(required = false) Boolean isConfidential) {
 
-        MeetingDocumentResponse response = documentService.uploadAndAttach(meetingId, agendaItemId, file, title, docType, note, usageType, requiredBeforeMeeting, isConfidential);
+        MeetingDocumentResponse response = documentService.uploadAndAttach(meetingId, agendaItemId, file, title,
+                docType, note, usageType, requiredBeforeMeeting, isConfidential);
         return ResponseEntity.status(HttpStatus.CREATED).body(
                 ApiResponse.<MeetingDocumentResponse>builder()
                         .success(true)

@@ -217,6 +217,23 @@
 		<version>3.0.7</version>
 	</dependency>
 
+	<!-- Apache POI - trích xuất text từ .doc/.docx/.ppt/.pptx/.xls/.xlsx cho trợ lý AI -->
+	<dependency>
+		<groupId>org.apache.poi</groupId>
+		<artifactId>poi</artifactId>
+		<version>5.5.1</version>
+	</dependency>
+	<dependency>
+		<groupId>org.apache.poi</groupId>
+		<artifactId>poi-ooxml</artifactId>
+		<version>5.5.1</version>
+	</dependency>
+	<dependency>
+		<groupId>org.apache.poi</groupId>
+		<artifactId>poi-scratchpad</artifactId>
+		<version>5.5.1</version>
+	</dependency>
+
 </dependencies>
 
 	 <build>

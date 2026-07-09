@@ -46,7 +46,7 @@ public class MeetingInfoSlice {
     private final AttendanceLogRepository attendanceLogRepository;
     private final SpeakerTurnRepository speakerTurnRepository;
 
-    public String build(UUID meetingId) {
+    public String build(UUID meetingId, UUID callerId) {
         Meeting meeting = meetingRepository.findById(meetingId)
                 .orElseThrow(() -> new AppException(ErrorCode.MEETING_NOT_EXIST));
 
@@ -70,7 +70,7 @@ public class MeetingInfoSlice {
         StringBuilder sb = new StringBuilder();
         appendMeetingHeader(sb, meeting);
         appendAgenda(sb, agendaItems);
-        appendParticipants(sb, participants, guests, attendanceLogs, spokenUserIds, spokenGuestIds);
+        appendParticipants(sb, participants, guests, attendanceLogs, spokenUserIds, spokenGuestIds, callerId);
         return sb.toString();
     }
 
@@ -97,7 +97,7 @@ public class MeetingInfoSlice {
     }
 
     private void appendParticipants(StringBuilder sb, List<MeetingParticipant> participants, List<MeetingGuest> guests,
-            List<AttendanceLog> attendanceLogs, Set<UUID> spokenUserIds, Set<UUID> spokenGuestIds) {
+            List<AttendanceLog> attendanceLogs, Set<UUID> spokenUserIds, Set<UUID> spokenGuestIds, UUID callerId) {
 
         sb.append("<danh_sach_nguoi_tham_du>\n");
 
@@ -106,6 +106,7 @@ public class MeetingInfoSlice {
             AttendanceLog log = attendanceLogs.stream()
                     .filter(a -> a.getUser() != null && user != null && a.getUser().getId().equals(user.getId()))
                     .findFirst().orElse(null);
+            boolean isCaller = user != null && callerId != null && user.getId().equals(callerId);
 
             sb.append("  <nguoi_tham_du")
                     .append(" ho_ten=\"").append(user != null ? safe(user.getFullName()) : "-").append("\"")
@@ -117,6 +118,7 @@ public class MeetingInfoSlice {
                     .append(" gio_diem_danh=\"").append(log != null ? formatDateTime(log.getCheckinTime()) : "-").append("\"")
                     .append(" di_muon=\"").append(lateLabel(p.getAttendanceStatus(), log)).append("\"")
                     .append(" da_phat_bieu=\"").append(user != null && spokenUserIds.contains(user.getId()) ? "Đã phát biểu" : "Chưa phát biểu").append("\"")
+                    .append(" la_ban_hien_tai=\"").append(isCaller ? "Có" : "Không").append("\"")
                     .append("/>\n");
         }
 
@@ -135,6 +137,7 @@ public class MeetingInfoSlice {
                     .append(" gio_diem_danh=\"").append(log != null ? formatDateTime(log.getCheckinTime()) : "-").append("\"")
                     .append(" di_muon=\"").append(lateLabel(guest.getAttendanceStatus(), log)).append("\"")
                     .append(" da_phat_bieu=\"").append(spokenGuestIds.contains(guest.getId()) ? "Đã phát biểu" : "Chưa phát biểu").append("\"")
+                    .append(" la_ban_hien_tai=\"Không\"")
                     .append("/>\n");
         }
 

@@ -39,6 +39,9 @@ import vn.acme.paperless_meeting.repository.RoleRepository;
 import vn.acme.paperless_meeting.repository.UserRepository;
 import vn.acme.paperless_meeting.service.auth.CurrentUserService;
 import vn.acme.paperless_meeting.specification.user.UserSpecification;
+import vn.acme.paperless_meeting.event.audit.AuditLogPublisher;
+import vn.acme.paperless_meeting.entity.enums.AuditAction;
+import vn.acme.paperless_meeting.entity.enums.ResourceType;
 
 @Service
 @RequiredArgsConstructor
@@ -51,6 +54,7 @@ public class UserService {
     DepartmentRepository departmentRepository;
     PositionRepository positionRepository;
     CurrentUserService currentUserService;
+    AuditLogPublisher auditLogPublisher;
 
     record CreateUserValidatedData(
             Department department,
@@ -69,7 +73,15 @@ public class UserService {
         user.setPosition(validatedData.position());
         user.setRole(validatedData.role());
 
-        return userMapper.toResponse(userRepository.save(user));
+        User saved = userRepository.save(user);
+        auditLogPublisher.publish(
+                currentUserService.getCurrentActiveUser(),
+                AuditAction.CREATE_USER,
+                ResourceType.USER,
+                saved.getId(),
+                Map.of("username", saved.getUsername(), "fullName", saved.getFullName())
+        );
+        return userMapper.toResponse(saved);
     }
 
     private CreateUserValidatedData validateCreateFields(String username, String email, String phone,
@@ -444,7 +456,15 @@ public class UserService {
             user.setIsFirstLogin(true); // Đánh dấu để ép user đổi lại mật khẩu
         }
 
-        return userMapper.toResponse(userRepository.save(user));
+        User saved = userRepository.save(user);
+        auditLogPublisher.publish(
+                currentUserService.getCurrentActiveUser(),
+                AuditAction.UPDATE_USER,
+                ResourceType.USER,
+                saved.getId(),
+                Map.of("username", saved.getUsername(), "fullName", saved.getFullName())
+        );
+        return userMapper.toResponse(saved);
     }
 
     @Transactional(readOnly = true)
@@ -465,7 +485,14 @@ public class UserService {
         requireAdminAccessToDepartment(caller, user.getDepartment() != null ? user.getDepartment().getId() : null);
 
         user.softDelete(caller);
-        userRepository.save(user);
+        User saved = userRepository.save(user);
+        auditLogPublisher.publish(
+                caller,
+                AuditAction.DELETE_USER,
+                ResourceType.USER,
+                saved.getId(),
+                Map.of("username", saved.getUsername(), "fullName", saved.getFullName())
+        );
     }
 
     private User getUser(UUID id) {

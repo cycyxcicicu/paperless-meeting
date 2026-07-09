@@ -43,7 +43,9 @@ public class AuditLogService {
             AuditAction.DELETE_DOCUMENT,
             AuditAction.DELETE_MOTION,
             AuditAction.CANCEL_MEETING,
-            AuditAction.REJECT_RESOURCE
+            AuditAction.REJECT_RESOURCE,
+            AuditAction.DELETE_USER,
+            AuditAction.DELETE_DEPARTMENT
     );
 
     @Transactional(readOnly = true)
@@ -202,11 +204,18 @@ public class AuditLogService {
             case UPLOAD_DOCUMENT:
             case ADD_PARTICIPANT:
             case CREATE_MOTION:
+            case CREATE_USER:
+            case CREATE_DEPARTMENT:
+            case CREATE_POSITION:
+            case CREATE_OPINION:
                 return "create";
             case DELETE_MEETING:
             case DELETE_DOCUMENT:
             case DELETE_MOTION:
             case REMOVE_PARTICIPANT:
+            case DELETE_USER:
+            case DELETE_DEPARTMENT:
+            case DELETE_POSITION:
                 return "delete";
             case UPDATE_MEETING:
             case UPDATE_DOCUMENT:
@@ -227,8 +236,13 @@ public class AuditLogService {
             case OPEN_VOTE:
             case CLOSE_VOTE:
             case PUBLISH_MINUTES:
+            case UPDATE_USER:
+            case CHANGE_PASSWORD:
+            case UPDATE_DEPARTMENT:
+            case UPDATE_POSITION:
                 return "update";
             case LOGIN:
+            case LOGOUT:
             case CANCEL_MEETING:
             case CLOSE_MEETING:
             case OTHER:
@@ -243,9 +257,17 @@ public class AuditLogService {
             case DELETE_MEETING:
             case DELETE_DOCUMENT:
             case DELETE_MOTION:
+            case DELETE_USER:
+            case DELETE_DEPARTMENT:
+            case DELETE_POSITION:
                 return "high";
             case CANCEL_MEETING:
             case REJECT_RESOURCE:
+            case CREATE_USER:
+            case UPDATE_USER:
+            case CHANGE_PASSWORD:
+            case CREATE_DEPARTMENT:
+            case UPDATE_DEPARTMENT:
                 return "medium";
             case OTHER:
             default:

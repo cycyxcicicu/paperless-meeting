@@ -184,7 +184,7 @@ const SelectUnitModal: React.FC<SelectUnitModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       setIsTreeLoading(true);
-      departmentApi.getTree()
+      departmentApi.getTree({ full: true })
         .then(res => {
           if (res.success && res.data) {
             const mapped = mapDepartmentTree(res.data);

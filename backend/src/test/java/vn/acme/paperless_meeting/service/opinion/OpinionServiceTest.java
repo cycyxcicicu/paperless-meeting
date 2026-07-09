@@ -38,6 +38,7 @@ import vn.acme.paperless_meeting.repository.MeetingParticipantRepository;
 import vn.acme.paperless_meeting.repository.MeetingRepository;
 import vn.acme.paperless_meeting.repository.OpinionRepository;
 import vn.acme.paperless_meeting.service.auth.CurrentUserService;
+import vn.acme.paperless_meeting.event.audit.AuditLogPublisher;
 
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -55,6 +56,8 @@ class OpinionServiceTest {
     MeetingParticipantRepository meetingParticipantRepository;
     @Mock
     CurrentUserService currentUserService;
+    @Mock
+    AuditLogPublisher auditLogPublisher;
 
     @InjectMocks
     OpinionService opinionService;

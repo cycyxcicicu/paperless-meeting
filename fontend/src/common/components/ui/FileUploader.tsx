@@ -1,8 +1,8 @@
 import React from 'react';
-import { Upload, FileText, FileSpreadsheet, File as FileIcon, Trash2, Plus, Eye, X, Download } from 'lucide-react';
+import { Upload, Trash2, Plus, Eye, X, Download } from 'lucide-react';
 import { Label } from './label';
 import { toast } from '@/lib/toast';
-import { viewDocument, downloadDocument } from '@/common/utils/fileHelpers';
+import { viewDocument, downloadDocument, getFileIconStyle } from '@/common/utils/fileHelpers';
 import { TableTooltip } from '@/common/components/table-engine/TableTooltip';
 
 export interface FileUploaderProps {
@@ -19,17 +19,10 @@ export interface FileUploaderProps {
 }
 
 export const getFileIcon = (fileName: string) => {
-  const ext = fileName.split('.').pop()?.toLowerCase();
-  if (ext === 'pdf') {
-    return <FileText className="h-8 w-8 text-red-500 flex-shrink-0 animate-pulse" />;
-  }
-  if (['doc', 'docx'].includes(ext || '')) {
-    return <FileText className="h-8 w-8 text-blue-500 flex-shrink-0" />;
-  }
-  if (['xls', 'xlsx'].includes(ext || '')) {
-    return <FileSpreadsheet className="h-8 w-8 text-green-500 flex-shrink-0" />;
-  }
-  return <FileIcon className="h-8 w-8 text-gray-500 flex-shrink-0" />;
+  const style = getFileIconStyle(fileName);
+  const Icon = style.icon;
+  const pulseClass = fileName.toLowerCase().endsWith('.pdf') ? ' animate-pulse' : '';
+  return <Icon className={`h-8 w-8 ${style.text} flex-shrink-0${pulseClass}`} />;
 };
 
 export const formatFileSize = (bytes: number) => {
@@ -271,7 +264,7 @@ export const FileUploader: React.FC<FileUploaderProps> = ({
 
           {/* Elegant plus sign card to add more files if multiple is true */}
           {multiple && !disabled && (
-            <label className="flex items-center justify-center p-3 border-2 border-dashed border-gray-300 rounded-xl bg-gray-50/50 hover:bg-red-50/30 hover:border-[#C8102E]/60 transition-all cursor-pointer group h-[62px]">
+            <label className="flex items-center justify-center p-3 border-2 border-dashed border-gray-300 rounded-xl bg-gray-50/50 hover:bg-red-50/30 hover:border-[#C8102E]/60 transition-all cursor-pointer group h-full min-h-[62px]">
               <div className="flex items-center gap-2">
                 <Plus className="h-5 w-5 text-gray-400 group-hover:text-[#C8102E] transition-colors" />
                 <span className="text-sm font-semibold text-gray-600 group-hover:text-[#C8102E] transition-colors">

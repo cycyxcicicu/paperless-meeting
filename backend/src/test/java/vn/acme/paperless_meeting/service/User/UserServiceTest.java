@@ -13,6 +13,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import vn.acme.paperless_meeting.event.audit.AuditLogPublisher;
 
 import vn.acme.paperless_meeting.dto.request.user.UserCreateRequest;
 import vn.acme.paperless_meeting.dto.request.user.UserUpdateRequest;
@@ -50,6 +51,8 @@ class UserServiceTest {
     CurrentUserService currentUserService;
     @Mock
     RoleRepository roleRepository;
+    @Mock
+    AuditLogPublisher auditLogPublisher;
 
     @InjectMocks
     UserService userService;

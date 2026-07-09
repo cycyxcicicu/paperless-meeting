@@ -17,16 +17,27 @@ export default defineConfig({
   },
   server: {
     port: 3000, // Khớp với cấu hình allowed origin của Backend
+    strictPort: true,
     proxy: {
       '/api': {
         target: 'http://localhost:8081/PaperlessMeeting',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, '')
+        rewrite: (path) => path.replace(/^\/api/, ''),
+        configure: (proxy) => {
+          proxy.on('error', (err) => {
+            // Quietly catch API proxy errors
+          });
+        }
       },
       '/ws': {
         target: 'http://localhost:8081/PaperlessMeeting',
         ws: true,
-        changeOrigin: true
+        changeOrigin: true,
+        configure: (proxy) => {
+          proxy.on('error', (err) => {
+            // Quietly catch WebSocket proxy errors (e.g. ECONNABORTED)
+          });
+        }
       }
     }
   },

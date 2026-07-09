@@ -25,11 +25,15 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ templateData, se
 
   const handleSave = async () => {
     if (!templateData.tenMau || !templateData.tenMau.trim()) {
-      toast.error('Thiếu thông tin', 'Vui lòng nhập tên mẫu');
+      toast.error('Thiếu thông tin', 'Tên của thư mời không được để trống');
       return;
     }
     if (!templateData.maMau || !templateData.maMau.trim()) {
       toast.error('Thiếu thông tin', 'Vui lòng nhập mã mẫu');
+      return;
+    }
+    if (!templateData.tieuDe || !templateData.tieuDe.trim()) {
+      toast.error('Thiếu thông tin', 'Tiêu đề của thư mời không được để trống');
       return;
     }
 
@@ -210,7 +214,7 @@ export const TemplateEditor: React.FC<TemplateEditorProps> = ({ templateData, se
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-gray-700">Tên mẫu</label>
+                <label className="text-xs font-semibold text-gray-700">Tên thư mời</label>
                 <input 
                   value={templateData.tenMau}
                   onChange={e => setTemplateData({...templateData, tenMau: e.target.value})}

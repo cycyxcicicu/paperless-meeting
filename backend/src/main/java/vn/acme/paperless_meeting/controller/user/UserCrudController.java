@@ -17,13 +17,25 @@ import jakarta.validation.Valid;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
+import java.io.InputStream;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.InputStreamResource;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.RequestPart;
+import org.springframework.web.multipart.MultipartFile;
+import org.springframework.http.MediaType;
 import vn.acme.paperless_meeting.dto.base.ApiResponse;
 import vn.acme.paperless_meeting.dto.base.PageResponse;
 import vn.acme.paperless_meeting.dto.request.user.UserCreateRequest;
 import vn.acme.paperless_meeting.dto.request.user.UserUpdateRequest;
 import vn.acme.paperless_meeting.dto.response.user.UserResponse;
 import vn.acme.paperless_meeting.dto.response.user.UserStatsResponse;
+import vn.acme.paperless_meeting.dto.response.user.UserAvatarResponse;
 import vn.acme.paperless_meeting.service.User.UserService;
+import vn.acme.paperless_meeting.service.document.FileStorageService;
+import vn.acme.paperless_meeting.service.document.StorageResult;
+import vn.acme.paperless_meeting.exceptions.AppException;
+import vn.acme.paperless_meeting.exceptions.ErrorCode;
 
 @RestController
 @RequestMapping("/users")
@@ -31,6 +43,41 @@ import vn.acme.paperless_meeting.service.User.UserService;
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 public class UserCrudController {
     UserService userService;
+    FileStorageService fileStorageService;
+
+    @PostMapping(value = "/avatar/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ApiResponse<UserAvatarResponse> uploadAvatar(@RequestPart("file") MultipartFile file) {
+        String contentType = file.getContentType();
+        if (contentType == null || (!contentType.equals("image/png") && !contentType.equals("image/jpeg") && !contentType.equals("image/jpg"))) {
+            throw new AppException(ErrorCode.FILE_TYPE_NOT_ALLOWED);
+        }
+
+        StorageResult result = fileStorageService.store(file);
+        
+        return ApiResponse.<UserAvatarResponse>builder()
+                .success(true)
+                .message("Tải ảnh đại diện thành công")
+                .data(new UserAvatarResponse("/api/users/avatar/view/" + result.getStorageKey()))
+                .build();
+    }
+
+    @GetMapping("/avatar/view/{filename}")
+    public ResponseEntity<Resource> viewAvatar(@PathVariable String filename) {
+        InputStream stream = fileStorageService.getFileStream(filename);
+        Resource resource = new InputStreamResource(stream);
+
+        String contentType = "application/octet-stream";
+        String lowerName = filename.toLowerCase();
+        if (lowerName.endsWith(".png")) {
+            contentType = "image/png";
+        } else if (lowerName.endsWith(".jpg") || lowerName.endsWith(".jpeg")) {
+            contentType = "image/jpeg";
+        }
+
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(contentType))
+                .body(resource);
+    }
     
     @PostMapping("/register")
     public ApiResponse<UserResponse> create(@Valid @RequestBody UserCreateRequest request) {

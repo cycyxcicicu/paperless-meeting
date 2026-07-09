@@ -1,11 +1,15 @@
 package vn.acme.paperless_meeting.service.assistant;
 
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 
 import org.springframework.stereotype.Component;
 
 import com.openai.client.OpenAIClient;
+import com.openai.core.http.StreamResponse;
 import com.openai.models.chat.completions.ChatCompletion;
+import com.openai.models.chat.completions.ChatCompletionChunk;
 import com.openai.models.chat.completions.ChatCompletionCreateParams;
 import com.openai.models.chat.completions.StructuredChatCompletionCreateParams;
 import com.openai.models.moderations.ModerationCreateParams;
@@ -46,24 +50,10 @@ public class OpenAiChatClient {
     }
 
     public String chat(String model, String systemPrompt, List<ChatHistoryMessage> history, String userQuestion) {
-        ChatCompletionCreateParams.Builder builder = ChatCompletionCreateParams.builder()
-                .model(model)
-                .maxCompletionTokens(1024)
-                .addSystemMessage(systemPrompt);
-
-        if (history != null) {
-            for (ChatHistoryMessage msg : history) {
-                if ("assistant".equalsIgnoreCase(msg.getRole())) {
-                    builder.addAssistantMessage(msg.getContent());
-                } else {
-                    builder.addUserMessage(msg.getContent());
-                }
-            }
-        }
-        builder.addUserMessage(userQuestion);
+        ChatCompletionCreateParams params = buildParams(model, systemPrompt, history, userQuestion).build();
 
         try {
-            ChatCompletion completion = client.chat().completions().create(builder.build());
+            ChatCompletion completion = client.chat().completions().create(params);
             return completion.choices().stream()
                     .flatMap(choice -> choice.message().content().stream())
                     .findFirst()
@@ -72,6 +62,65 @@ public class OpenAiChatClient {
             log.error("Gọi OpenAI Chat Completions thất bại: {}", e.getMessage(), e);
             throw new AppException(ErrorCode.ASSISTANT_PROVIDER_ERROR);
         }
+    }
+
+    /**
+     * Giống {@link #chat}, nhưng phát từng đoạn chữ (delta) qua onDelta ngay khi model
+     * sinh ra, để giao diện hiện hiệu ứng trả lời từ từ. Trả về toàn bộ câu trả lời đã
+     * ghép (kể cả khi bị hủy giữa chừng, vẫn trả phần đã sinh được để lưu lại lịch sử).
+     * cancelled được kiểm tra sau mỗi đoạn - true thì đóng stream sớm (client đã bấm Dừng
+     * hoặc mất kết nối), không tốn thêm token sinh tiếp.
+     */
+    public String chatStream(String model, String systemPrompt, List<ChatHistoryMessage> history,
+            String userQuestion, Consumer<String> onDelta, AtomicBoolean cancelled) {
+        ChatCompletionCreateParams params = buildParams(model, systemPrompt, history, userQuestion).build();
+        StringBuilder full = new StringBuilder();
+
+        try (StreamResponse<ChatCompletionChunk> streamResponse = client.chat().completions().createStreaming(params)) {
+            streamResponse.stream()
+                    .flatMap(chunk -> chunk.choices().stream())
+                    .flatMap(choice -> choice.delta().content().stream())
+                    .forEach(delta -> {
+                        if (cancelled.get()) {
+                            streamResponse.close();
+                            return;
+                        }
+                        full.append(delta);
+                        onDelta.accept(delta);
+                    });
+        } catch (Exception e) {
+            if (!cancelled.get()) {
+                log.error("Gọi OpenAI Chat Completions (streaming) thất bại: {}", e.getMessage(), e);
+            }
+        }
+
+        return full.toString();
+    }
+
+    private ChatCompletionCreateParams.Builder buildParams(String model, String systemPrompt,
+            List<ChatHistoryMessage> history, String userQuestion) {
+        ChatCompletionCreateParams.Builder builder = ChatCompletionCreateParams.builder()
+                .model(model)
+                .maxCompletionTokens(1024)
+                .addSystemMessage(systemPrompt);
+
+        if (history != null) {
+            for (ChatHistoryMessage msg : history) {
+                // Bỏ qua tin lịch sử rỗng (vd: lượt trước bị dừng/lỗi trước khi có chữ nào) -
+                // OpenAI API cũng từ chối message content rỗng, nên phải lọc ở đây thay vì để
+                // cả request thất bại.
+                if (msg.getContent() == null || msg.getContent().isBlank()) {
+                    continue;
+                }
+                if ("assistant".equalsIgnoreCase(msg.getRole())) {
+                    builder.addAssistantMessage(msg.getContent());
+                } else {
+                    builder.addUserMessage(msg.getContent());
+                }
+            }
+        }
+        builder.addUserMessage(userQuestion);
+        return builder;
     }
 
     public <T> T structuredChat(String model, String systemPrompt, String userQuestion, Class<T> responseType) {

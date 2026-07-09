@@ -37,5 +37,16 @@ export const userApi = {
   // Xóa người dùng
   deleteUser: (id: number | string): Promise<ApiResponse<void>> => {
     return api.delete(`/users/${id}`);
+  },
+
+  // Upload ảnh đại diện
+  uploadAvatar: (file: File): Promise<ApiResponse<{ fileUrl: string }>> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post('/users/avatar/upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
   }
 };

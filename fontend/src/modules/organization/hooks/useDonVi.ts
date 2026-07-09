@@ -260,15 +260,15 @@ export function useDonVi() {
 
     let infoLabel = "Thông tin đơn vị";
     let childrenLabel = "Đơn vị trực thuộc";
-    let childUnitTypeLabel = "đơn vị trực thuộc";
+    let childUnitTypeLabel = "đơn vị";
     if (conceptualLevel === 1) {
         infoLabel = "Thông tin sở";
         childrenLabel = "Phòng ban trực thuộc";
-        childUnitTypeLabel = "phòng ban trực thuộc";
+        childUnitTypeLabel = "phòng ban";
     } else if (conceptualLevel === 2) {
         infoLabel = "Thông tin phòng ban";
         childrenLabel = "Bộ phận trực thuộc";
-        childUnitTypeLabel = "bộ phận trực thuộc";
+        childUnitTypeLabel = "bộ phận";
     } else if (conceptualLevel >= 3) {
         infoLabel = "Thông tin bộ phận";
     }

@@ -3,6 +3,7 @@ package vn.acme.paperless_meeting.service.document;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -32,7 +33,6 @@ import vn.acme.paperless_meeting.entity.enums.ParticipantRole;
 import vn.acme.paperless_meeting.entity.enums.ResourceType;
 import vn.acme.paperless_meeting.entity.enums.RoleName;
 import vn.acme.paperless_meeting.event.audit.AuditLogPublisher;
-import java.util.Map;
 import vn.acme.paperless_meeting.exceptions.AppException;
 import vn.acme.paperless_meeting.exceptions.ErrorCode;
 import vn.acme.paperless_meeting.mapper.document.DocumentMapper;
@@ -41,10 +41,10 @@ import vn.acme.paperless_meeting.repository.AgendaItemRepository;
 import vn.acme.paperless_meeting.repository.DocumentRepository;
 import vn.acme.paperless_meeting.repository.DocumentVersionRepository;
 import vn.acme.paperless_meeting.repository.MeetingDocumentRepository;
-import vn.acme.paperless_meeting.repository.MeetingRepository;
 import vn.acme.paperless_meeting.repository.MeetingParticipantRepository;
-import vn.acme.paperless_meeting.service.auth.CurrentUserService;
+import vn.acme.paperless_meeting.repository.MeetingRepository;
 import vn.acme.paperless_meeting.service.approval.ApprovalService;
+import vn.acme.paperless_meeting.service.auth.CurrentUserService;
 
 @Service
 @RequiredArgsConstructor
@@ -113,9 +113,7 @@ public class DocumentService {
                 Map.of(
                         "title", String.valueOf(savedDoc.getTitle()),
                         "docType", String.valueOf(savedDoc.getDocType()),
-                        "fileName", String.valueOf(savedVersion.getFileName())
-                )
-        );
+                        "fileName", String.valueOf(savedVersion.getFileName())));
 
         return documentMapper.toResponse(savedDoc);
     }
@@ -182,16 +180,16 @@ public class DocumentService {
                 ResourceType.DOCUMENT,
                 document.getId(),
                 Map.of(
-                        "title", String.valueOf(document.getTitle())
-                )
-        );
+                        "title", String.valueOf(document.getTitle())));
     }
 
     /**
      * Bọc thao tác Upload và Gắn vào Meeting trong 1 giao dịch.
      */
     @Transactional
-    public MeetingDocumentResponse uploadAndAttach(UUID meetingId, UUID agendaId, MultipartFile file, String title, String docType, String note, MeetingDocumentUsageType usageType, Boolean requiredBeforeMeeting, Boolean isConfidential) {
+    public MeetingDocumentResponse uploadAndAttach(UUID meetingId, UUID agendaId, MultipartFile file, String title,
+            String docType, String note, MeetingDocumentUsageType usageType, Boolean requiredBeforeMeeting,
+            Boolean isConfidential) {
         DocumentResponse docRes = uploadDocument(file, title, docType, note);
         AttachDocumentRequest req = new AttachDocumentRequest();
         req.setDocumentId(docRes.getId());
@@ -214,7 +212,8 @@ public class DocumentService {
         boolean isCreator = document.getCreatedBy() != null && document.getCreatedBy().getId().equals(caller.getId());
 
         if (!isCreator && !currentUserService.hasRole(RoleName.SUPER_ADMIN)) {
-            List<UUID> meetingIds = new ArrayList<>(meetingDocumentRepository.findMeetingIdsByDocumentId(document.getId()));
+            List<UUID> meetingIds = new ArrayList<>(
+                    meetingDocumentRepository.findMeetingIdsByDocumentId(document.getId()));
             List<String> agendaMeetingIds = meetingRepository.findMeetingIdsByAgendaFileId(document.getId().toString());
             if (agendaMeetingIds != null) {
                 for (String midStr : agendaMeetingIds) {
@@ -228,7 +227,8 @@ public class DocumentService {
             if (meetingIds.isEmpty()) {
                 throw new AppException(ErrorCode.UNAUTHOZIZED);
             }
-            boolean isParticipant = meetingParticipantRepository.isUserParticipantOfAnyMeeting(meetingIds, caller.getId());
+            boolean isParticipant = meetingParticipantRepository.isUserParticipantOfAnyMeeting(meetingIds,
+                    caller.getId());
             boolean hasApproval = false;
             if (!isParticipant) {
                 hasApproval = meetingIds.stream()
@@ -255,7 +255,8 @@ public class DocumentService {
         boolean isCreator = document.getCreatedBy() != null && document.getCreatedBy().getId().equals(caller.getId());
 
         if (!isCreator && !currentUserService.hasRole(RoleName.SUPER_ADMIN)) {
-            List<UUID> meetingIds = new ArrayList<>(meetingDocumentRepository.findMeetingIdsByDocumentId(document.getId()));
+            List<UUID> meetingIds = new ArrayList<>(
+                    meetingDocumentRepository.findMeetingIdsByDocumentId(document.getId()));
             List<String> agendaMeetingIds = meetingRepository.findMeetingIdsByAgendaFileId(document.getId().toString());
             if (agendaMeetingIds != null) {
                 for (String midStr : agendaMeetingIds) {
@@ -269,7 +270,8 @@ public class DocumentService {
             if (meetingIds.isEmpty()) {
                 throw new AppException(ErrorCode.UNAUTHOZIZED);
             }
-            boolean isParticipant = meetingParticipantRepository.isUserParticipantOfAnyMeeting(meetingIds, caller.getId());
+            boolean isParticipant = meetingParticipantRepository.isUserParticipantOfAnyMeeting(meetingIds,
+                    caller.getId());
             boolean hasApproval = false;
             if (!isParticipant) {
                 hasApproval = meetingIds.stream()
@@ -293,11 +295,13 @@ public class DocumentService {
                 .orElseThrow(() -> new AppException(ErrorCode.DOCUMENT_NOT_FOUND));
 
         boolean hasAccess = document.getMeetingDocumentList().stream()
-                .anyMatch(md -> md.getMeeting().getId().equals(meetingId) && (md.getIsConfidential() == null || !md.getIsConfidential()));
-        
+                .anyMatch(md -> md.getMeeting().getId().equals(meetingId)
+                        && (md.getIsConfidential() == null || !md.getIsConfidential()));
+
         if (!hasAccess) {
             Meeting meeting = meetingRepository.findById(meetingId).orElse(null);
-            if (meeting != null && meeting.getAgendaFile() != null && documentId.toString().equals(meeting.getAgendaFile().getId())) {
+            if (meeting != null && meeting.getAgendaFile() != null
+                    && documentId.toString().equals(meeting.getAgendaFile().getId())) {
                 hasAccess = true;
             }
         }
@@ -370,9 +374,7 @@ public class DocumentService {
                 document.getId(),
                 Map.of(
                         "meetingId", String.valueOf(meetingId),
-                        "usageType", String.valueOf(request.getUsageType())
-                )
-        );
+                        "usageType", String.valueOf(request.getUsageType())));
 
         return meetingDocumentMapper.toResponse(saved);
     }
@@ -392,12 +394,13 @@ public class DocumentService {
     }
 
     /**
-     * Gỡ tài liệu khỏi Meeting (xóa bản ghi MeetingDocument, không xóa Document gốc).
+     * Gỡ tài liệu khỏi Meeting (xóa bản ghi MeetingDocument, không xóa Document
+     * gốc).
      */
     @Transactional
     public void detachFromMeeting(UUID meetingId, UUID meetingDocId) {
         Meeting meeting = getMeeting(meetingId);
-        
+
         if (meeting.getStatus() == MeetingStatus.IN_PROGRESS) {
             throw new AppException(ErrorCode.MEETING_STATUS_TRANSITION_INVALID);
         }
@@ -408,8 +411,8 @@ public class DocumentService {
                 .orElseThrow(() -> new AppException(ErrorCode.DOCUMENT_MEETING_NOT_FOUND));
 
         User caller = currentUserService.getCurrentActiveUser();
-        if (meetingDoc.getDocument().getCreatedBy() == null || 
-            !meetingDoc.getDocument().getCreatedBy().getId().equals(caller.getId())) {
+        if (meetingDoc.getDocument().getCreatedBy() == null ||
+                !meetingDoc.getDocument().getCreatedBy().getId().equals(caller.getId())) {
             throw new AppException(ErrorCode.DOCUMENT_DETACH_FORBIDDEN);
         }
 
@@ -421,16 +424,16 @@ public class DocumentService {
                 ResourceType.DOCUMENT,
                 meetingDoc.getDocument().getId(),
                 Map.of(
-                        "meetingId", String.valueOf(meetingId)
-                )
-        );
+                        "meetingId", String.valueOf(meetingId)));
     }
 
     /**
-     * Cập nhật thông tin gắn tài liệu (usageType, requiredBeforeMeeting, agendaItem).
+     * Cập nhật thông tin gắn tài liệu (usageType, requiredBeforeMeeting,
+     * agendaItem).
      */
     @Transactional
-    public MeetingDocumentResponse updateMeetingDocument(UUID meetingId, UUID meetingDocId, AttachDocumentRequest request) {
+    public MeetingDocumentResponse updateMeetingDocument(UUID meetingId, UUID meetingDocId,
+            AttachDocumentRequest request) {
         Meeting meeting = getMeeting(meetingId);
         validateMeetingOpenForDocumentMutation(meeting);
         requireMeetingEditPermission(meeting);
@@ -470,9 +473,7 @@ public class DocumentService {
                 meetingDoc.getDocument().getId(),
                 Map.of(
                         "meetingId", String.valueOf(meetingId),
-                        "usageType", String.valueOf(request.getUsageType())
-                )
-        );
+                        "usageType", String.valueOf(request.getUsageType())));
 
         return meetingDocumentMapper.toResponse(saved);
     }

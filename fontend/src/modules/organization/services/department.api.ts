@@ -55,8 +55,8 @@ export interface DepartmentUpsertRequest {
 
 export const departmentApi = {
     // Lấy toàn bộ cây đơn vị
-    getTree: (): Promise<ApiResponse<DepartmentTreeResponse[]>> => 
-        api.get('/departments/tree'),
+    getTree: (params?: { full?: boolean }): Promise<ApiResponse<DepartmentTreeResponse[]>> => 
+        api.get('/departments/tree', { params }),
     
     // Thống kê
     getStats: (): Promise<ApiResponse<DepartmentStatsResponse>> => 

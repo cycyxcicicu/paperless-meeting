@@ -85,11 +85,11 @@ const NguoiDungPage = () => {
           const level1 = res.data.map((node: DepartmentTreeResponse) => ({ id: node.id, name: node.deptName }));
           setUnits(level1);
         } else {
-          // DEPT_ADMIN: lấy tất cả đơn vị con (phòng, bộ phận) trong cây của mình
-          // res.data sẽ là [rootNode] → lấy children của rootNode
+          // DEPT_ADMIN: lấy đơn vị mình quản lý (Sở) và tất cả đơn vị con (phòng, bộ phận)
+          // res.data sẽ là [rootNode] → dẹp phẳng từ rootNode thay vì chỉ rootNode.children
           const rootNode = res.data[0];
           if (rootNode) {
-            const children = flattenTree(rootNode.children || []);
+            const children = flattenTree([rootNode]);
             setUnits(children);
           }
         }

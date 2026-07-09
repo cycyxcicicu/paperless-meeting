@@ -17,6 +17,7 @@ import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import vn.acme.paperless_meeting.event.audit.AuditLogPublisher;
 
 
 import vn.acme.paperless_meeting.dto.request.user.UserCreateRequest;
@@ -60,6 +61,8 @@ class AuthServiceTest {
     PositionRepository positionRepository;
     @Mock
     RoleRepository roleRepository;
+    @Mock
+    AuditLogPublisher auditLogPublisher;
 
     @InjectMocks
     AuthService authService;

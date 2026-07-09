@@ -32,6 +32,18 @@ public enum AuditAction {
     CAST_VOTE("CAST_VOTE", "Thực hiện bỏ phiếu"),
     CHANGE_PARTICIPANT_ROLE("CHANGE_PARTICIPANT_ROLE", "Thay đổi vai trò người tham gia"),
     PARTICIPANT_CHECK_IN("PARTICIPANT_CHECK_IN", "Đại biểu điểm danh"),
+    CREATE_USER("CREATE_USER", "Tạo người dùng"),
+    UPDATE_USER("UPDATE_USER", "Cập nhật người dùng"),
+    DELETE_USER("DELETE_USER", "Xóa người dùng"),
+    CHANGE_PASSWORD("CHANGE_PASSWORD", "Thay đổi mật khẩu"),
+    LOGOUT("LOGOUT", "Đăng xuất"),
+    CREATE_DEPARTMENT("CREATE_DEPARTMENT", "Tạo đơn vị"),
+    UPDATE_DEPARTMENT("UPDATE_DEPARTMENT", "Cập nhật đơn vị"),
+    DELETE_DEPARTMENT("DELETE_DEPARTMENT", "Xóa đơn vị"),
+    CREATE_POSITION("CREATE_POSITION", "Tạo chức vụ"),
+    UPDATE_POSITION("UPDATE_POSITION", "Cập nhật chức vụ"),
+    DELETE_POSITION("DELETE_POSITION", "Xóa chức vụ"),
+    CREATE_OPINION("CREATE_OPINION", "Tạo ý kiến đóng góp"),
     OTHER("OTHER", "Khác");
 
     private final String code;

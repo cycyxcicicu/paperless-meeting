@@ -18,7 +18,11 @@ public enum ResourceType {
     NOTIFICATION("NOTIFICATION", "Thông báo"),
     SPEAKER("SPEAKER", "Người phát biểu"),
     PARTICIPANT("PARTICIPANT", "Đại biểu tham dự"),
-    MOTION("MOTION", "Vấn đề biểu quyết");
+    MOTION("MOTION", "Vấn đề biểu quyết"),
+    USER("USER", "Người dùng"),
+    DEPARTMENT("DEPARTMENT", "Đơn vị"),
+    POSITION("POSITION", "Chức vụ"),
+    OPINION("OPINION", "Ý kiến đóng góp");
 
     private final String code;
     private final String description;

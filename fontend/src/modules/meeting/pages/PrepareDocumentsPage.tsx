@@ -36,7 +36,7 @@ export default function PrepareDocumentsPage() {
   // Track files for each agenda item: agendaItemId -> array of uploaded file objects
   const [agendaFiles, setAgendaFiles] = useState<Record<string, any[]>>({});
 
-  const loadData = async (silent = false) => {
+  const loadData = async (silent = false, showSuccessToast = false) => {
     if (!meetingId) return;
     if (!silent) {
       setLoading(true);
@@ -49,7 +49,7 @@ export default function PrepareDocumentsPage() {
 
       if (meetingRes.success && meetingRes.data) {
         setMeeting(meetingRes.data);
-      } else if (!silent) {
+      } else if (!silent || showSuccessToast) {
         toast.error("Lỗi", "Không thể tải thông tin cuộc họp.");
       }
 
@@ -83,12 +83,16 @@ export default function PrepareDocumentsPage() {
           });
           return updatedFiles;
         });
-      } else if (!silent) {
+
+        if (showSuccessToast && meetingRes.success) {
+          toast.success("Làm mới dữ liệu thành công");
+        }
+      } else if (!silent || showSuccessToast) {
         toast.error("Lỗi", "Không thể tải chương trình họp.");
       }
     } catch (error) {
       console.error("Error loading preparation data:", error);
-      if (!silent) {
+      if (!silent || showSuccessToast) {
         toast.error("Lỗi kết nối", "Đã xảy ra lỗi khi tải dữ liệu từ máy chủ.");
       }
     } finally {
@@ -285,7 +289,7 @@ export default function PrepareDocumentsPage() {
         <Button
           variant="outline"
           size="sm"
-          onClick={() => loadData(true)}
+          onClick={() => loadData(true, true)}
           className="flex items-center gap-1.5 border-gray-300 rounded-xl bg-white hover:bg-gray-50 text-gray-700"
         >
           <RefreshCw className="h-4 w-4" />
@@ -402,8 +406,8 @@ export default function PrepareDocumentsPage() {
                           files={files}
                           onChange={(updatedFiles) => handleFileChange(item.id, updatedFiles)}
                           multiple={true}
-                          accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg,.txt,.zip"
-                          allowedExtensionsText="PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX, PNG, JPG, JPEG, TXT, ZIP"
+                          accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt"
+                          allowedExtensionsText="PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX, TXT"
                           label="Tài liệu đính kèm chuẩn bị"
                           placeholder="Kéo thả tài liệu nộp"
                           disabled={!canUpload}

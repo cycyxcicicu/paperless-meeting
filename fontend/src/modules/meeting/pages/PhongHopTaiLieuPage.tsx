@@ -3,15 +3,12 @@ import {
     Download,
     Edit,
     Eye,
-    FileCode2,
-    FileIcon,
-    FileSpreadsheet,
-    FileText,
     Plus,
     Search,
     Trash2,
     X,
 } from "lucide-react";
+import { getFileIconStyle } from "@/common/utils/fileHelpers";
 import { AnimatePresence, motion } from "motion/react";
 import { useMemo, useState } from "react";
 import { useLocation } from "react-router";
@@ -127,16 +124,9 @@ const mockDataMap: Record<string, Document[]> = {
 };
 
 const getFileIcon = (type: string) => {
-    switch (type) {
-        case "pdf":
-            return <FileText className="w-5 h-5 text-red-500" />;
-        case "doc":
-            return <FileCode2 className="w-5 h-5 text-blue-500" />;
-        case "xls":
-            return <FileSpreadsheet className="w-5 h-5 text-green-500" />;
-        default:
-            return <FileIcon className="w-5 h-5 text-gray-500" />;
-    }
+    const style = getFileIconStyle(type);
+    const Icon = style.icon;
+    return <Icon className={`w-5 h-5 ${style.text}`} />;
 };
 
 const PhongHopTaiLieuPage = () => {

@@ -32,6 +32,10 @@ import vn.acme.paperless_meeting.repository.MeetingParticipantRepository;
 import vn.acme.paperless_meeting.repository.MeetingRepository;
 import vn.acme.paperless_meeting.repository.OpinionRepository;
 import vn.acme.paperless_meeting.service.auth.CurrentUserService;
+import vn.acme.paperless_meeting.event.audit.AuditLogPublisher;
+import vn.acme.paperless_meeting.entity.enums.AuditAction;
+import vn.acme.paperless_meeting.entity.enums.ResourceType;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -44,6 +48,7 @@ public class OpinionService {
     MeetingDocumentRepository meetingDocumentRepository;
     MeetingParticipantRepository meetingParticipantRepository;
     CurrentUserService currentUserService;
+    AuditLogPublisher auditLogPublisher;
 
     @Transactional(readOnly = true)
     public List<OpinionResponse> getOpinions(UUID meetingId) {
@@ -82,6 +87,13 @@ public class OpinionService {
         }
 
         Opinion saved = opinionRepository.save(opinion);
+        auditLogPublisher.publish(
+                caller,
+                AuditAction.CREATE_OPINION,
+                ResourceType.OPINION,
+                saved.getId(),
+                Map.of("meetingId", String.valueOf(meetingId), "title", meeting.getTitle() != null ? meeting.getTitle() : "", "detail", saved.getOpinionDetail() != null ? saved.getOpinionDetail() : "")
+        );
         return mapToResponse(saved);
     }
 

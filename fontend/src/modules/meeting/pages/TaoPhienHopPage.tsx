@@ -668,11 +668,18 @@ const TaoPhienHopPage = () => {
                                         (s) => s.id === localItem.id,
                                     );
                                     if (serverItem) {
+                                        const localUserFiles = localItem.taiLieu ? localItem.taiLieu.filter(
+                                            (lDoc: any) => lDoc.createdByUserId === user?.id || !lDoc.createdByUserId
+                                        ) : [];
+                                        const unsavedLocalUserFiles = localUserFiles.filter(
+                                            (lDoc: any) => !serverItem.taiLieu.some((sDoc: any) => sDoc.id === lDoc.id)
+                                        );
+
                                         return {
                                             ...localItem,
                                             status: serverItem.status,
                                             feedbacks: serverItem.feedbacks,
-                                            taiLieu: serverItem.taiLieu,
+                                            taiLieu: [...serverItem.taiLieu, ...unsavedLocalUserFiles],
                                         };
                                     }
                                     return localItem;

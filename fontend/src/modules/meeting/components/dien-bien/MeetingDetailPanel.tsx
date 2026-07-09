@@ -3,9 +3,9 @@ import { useSearchParams } from 'react-router';
 import { Card, CardContent } from '@/common/components/ui/card';
 import { Badge } from '@/common/components/ui/badge';
 import { Button } from '@/common/components/ui/button';
-import { FileText, Download, CheckCircle, PlayCircle, MessageSquarePlus, Eye, FileSpreadsheet, File as FileIcon } from 'lucide-react';
+import { FileText, Download, CheckCircle, PlayCircle, MessageSquarePlus, Eye } from 'lucide-react';
 import { MeetingContent } from '../../meeting.mock';
-import { downloadDocument, viewDocument } from '@/common/utils/fileHelpers';
+import { downloadDocument, viewDocument, getFileIconStyle } from '@/common/utils/fileHelpers';
 
 interface MeetingDetailPanelProps {
     meetingContents: MeetingContent[];
@@ -85,35 +85,7 @@ export function MeetingDetailPanel({
         }
     };
 
-    const getFileIconStyle = (fileName?: string) => {
-        const ext = fileName?.split('.').pop()?.toLowerCase();
-        if (ext === 'pdf') {
-            return {
-                bg: 'bg-red-50',
-                text: 'text-[#C8102E]',
-                icon: FileText
-            };
-        }
-        if (ext === 'doc' || ext === 'docx') {
-            return {
-                bg: 'bg-blue-50',
-                text: 'text-blue-600',
-                icon: FileText
-            };
-        }
-        if (ext === 'xls' || ext === 'xlsx') {
-            return {
-                bg: 'bg-emerald-50',
-                text: 'text-emerald-600',
-                icon: FileSpreadsheet
-            };
-        }
-        return {
-            bg: 'bg-gray-50',
-            text: 'text-gray-600',
-            icon: FileIcon
-        };
-    };
+
 
     const formatSize = (bytes?: number) => {
         if (bytes === undefined || bytes === null) return "-";

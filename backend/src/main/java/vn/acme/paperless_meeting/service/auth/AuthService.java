@@ -21,6 +21,11 @@ import vn.acme.paperless_meeting.repository.UserRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.core.Authentication;
 import vn.acme.paperless_meeting.dto.request.auth.ChangePasswordRequest;
+import vn.acme.paperless_meeting.event.audit.AuditLogPublisher;
+import vn.acme.paperless_meeting.entity.enums.AuditAction;
+import vn.acme.paperless_meeting.entity.enums.ResourceType;
+import java.util.Map;
+
 @Service
 @RequiredArgsConstructor
 public class AuthService {
@@ -32,6 +37,7 @@ public class AuthService {
     private final RefreshTokenService refreshTokenService;
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final AuditLogPublisher auditLogPublisher;
 
     public void login(LoginRequest request, HttpServletRequest httpRequest, HttpServletResponse response) {
         try {
@@ -52,6 +58,18 @@ public class AuthService {
 
             authCookieService.addAccessTokenCookie(response, accessToken);
             authCookieService.addRefreshTokenCookie(response, refreshToken);
+
+            String ip = httpRequest.getHeader("X-Forwarded-For");
+            if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
+                ip = httpRequest.getRemoteAddr();
+            }
+            auditLogPublisher.publish(
+                    user,
+                    AuditAction.LOGIN,
+                    ResourceType.USER,
+                    user.getId(),
+                    Map.of("username", user.getUsername(), "ip", ip)
+            );
         } catch (AppException ae) {
             if (ae.getErrorCode() == ErrorCode.USER_NOT_EXISTED) {
                 throw new BadCredentialsException("Bad credentials");
@@ -101,6 +119,19 @@ public class AuthService {
     public void logout(String refreshToken, HttpServletResponse response) {
         if (refreshToken != null) {
             try {
+                String username = jwtTokenVerifier.extractUsername(refreshToken);
+                userRepository.findByUsername(username).ifPresent(user -> {
+                    auditLogPublisher.publish(
+                            user,
+                            AuditAction.LOGOUT,
+                            ResourceType.USER,
+                            user.getId(),
+                            Map.of("username", user.getUsername())
+                    );
+                });
+            } catch (Exception ignored) {
+            }
+            try {
                 refreshTokenService.revokeByRawToken(refreshToken);
             } catch (Exception ignored) {
                 // Bất cứ lỗi gì khi revoke token cũng không ảnh hưởng đến việc logout, vì mục
@@ -126,6 +157,14 @@ public class AuthService {
         user.setPassword(passwordEncoder.encode(request.getNewPassword()));
         user.setIsFirstLogin(false); // Đã đổi mật khẩu
         userRepository.save(user);
+
+        auditLogPublisher.publish(
+                user,
+                AuditAction.CHANGE_PASSWORD,
+                ResourceType.USER,
+                user.getId(),
+                Map.of("username", user.getUsername())
+        );
     }
 
 

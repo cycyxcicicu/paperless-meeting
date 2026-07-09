@@ -20,6 +20,15 @@ public class OrchestratorDecision {
         OTHER_MEETING
     }
 
+    // Đặt TRƯỚC "intent" một cách có chủ ý: kỹ thuật Chain-of-Thought áp dụng cho
+    // Structured Output - vì OpenAI sinh các trường JSON theo đúng thứ tự khai báo,
+    // buộc model phải "suy nghĩ ra tiếng" (diễn giải ý định thật của câu hỏi, kể cả
+    // khi hỏi bằng khẩu ngữ/thiếu dấu) TRƯỚC KHI chốt intent/agents, thay vì đoán ẩu.
+    @JsonPropertyDescription("Suy nghĩ ngắn gọn (1-2 câu) trước khi quyết định: câu hỏi này thực sự đang hỏi về "
+            + "điều gì, kể cả khi người dùng dùng từ ngữ đời thường/khẩu ngữ/viết tắt/thiếu dấu? Trường dữ liệu "
+            + "nào (nếu có) trong 4 nhóm dữ liệu bên dưới khớp với ý định đó?")
+    public String reasoning;
+
     @JsonPropertyDescription("Loại ý định của câu hỏi: ANSWER nếu có thể trả lời trong phạm vi cuộc họp này, "
             + "CLARIFY nếu câu hỏi mơ hồ hoặc thiếu ngữ cảnh cần hỏi lại người dùng, OFF_TOPIC nếu câu hỏi ngoài "
             + "phạm vi cuộc họp (thời tiết, chính trị, tán gẫu...), OTHER_MEETING nếu câu hỏi đề cập một cuộc họp "

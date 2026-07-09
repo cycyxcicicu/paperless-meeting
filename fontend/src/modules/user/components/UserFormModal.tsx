@@ -78,8 +78,9 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
   const isCreateMode = mode === 'create';
   
   const [avatarPreview, setAvatarPreview] = useState<string>('');
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   
-  const [dynamicRoleOptions, setDynamicRoleOptions] = useState<{value: string; label: string}[]>([]);
+  const [dynamicRoleOptions, setDynamicRoleOptions] = useState<{value: string; label: string; roleCode?: string}[]>([]);
   const [dynamicPositionOptions, setDynamicPositionOptions] = useState<{value: string; label: string}[]>([]);
   const [allPositions, setAllPositions] = useState<any[]>([]);
   const [dynamicDepartmentOptions, setDynamicDepartmentOptions] = useState<{value: string; label: string}[]>([]);
@@ -89,10 +90,10 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
   const currentUserRoleCode = user?.role?.roleCode || 'USER';
   const lockRole = lockRoleProp ?? (currentUserRoleCode === 'DEPARTMENT_ADMIN');
 
-  const hidePosition = currentUserRoleCode === 'SUPER_ADMIN';
-
   const methods = useForm<any>({
-    resolver: zodResolver(getUserFormValidationSchema(hidePosition)),
+    resolver: (values, context, options) => {
+      return zodResolver(getUserFormValidationSchema(roleOptions))(values, context, options);
+    },
     mode: 'onSubmit',
     shouldUnregister: true,
     defaultValues: mapUserInitialData(initialData || null, defaultUnitId)
@@ -111,7 +112,8 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
             roles = res.data;
             setDynamicRoleOptions(roles.map(r => ({
               value: r.id as string,
-              label: r.roleName
+              label: r.roleName,
+              roleCode: r.roleCode
             })));
           }
         } catch (e) {}
@@ -171,8 +173,8 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
           setAvatarPreview('');
         }
 
-        // 5) Lock role to USER for DEPARTMENT_ADMIN
-        if (lockRole) {
+        // 5) Lock role to USER for DEPARTMENT_ADMIN only when creating
+        if (lockRole && mode === 'create') {
           const userRole = roles.find(r => r.roleCode === 'USER');
           if (userRole) {
             methods.setValue('role', String(userRole.id));
@@ -202,7 +204,7 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
     onClose();
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -216,12 +218,21 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
       return;
     }
 
-    methods.setValue('avatar', file);
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setAvatarPreview(reader.result as string);
-    };
-    reader.readAsDataURL(file);
+    setIsUploadingAvatar(true);
+    try {
+      const res = await userApi.uploadAvatar(file);
+      if (res.success && res.data?.fileUrl) {
+        methods.setValue('avatar', res.data.fileUrl);
+        setAvatarPreview(res.data.fileUrl);
+      } else {
+        alert('Tải ảnh lên thất bại. Vui lòng thử lại.');
+      }
+    } catch (err) {
+      console.error('Failed to upload avatar', err);
+      alert('Có lỗi xảy ra khi tải ảnh lên.');
+    } finally {
+      setIsUploadingAvatar(false);
+    }
   };
 
   const onFormSubmit = async (data: any) => {
@@ -278,13 +289,18 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
   // Tương tự chèn động Vai trò
   const rawRole = (initialData as any)?.role;
   const dynRoleOption = (typeof rawRole === 'object' && rawRole !== null)
-    ? { value: String(rawRole.id || rawRole.code || rawRole.value || ''), label: String(rawRole.name || rawRole.roleName || rawRole.label || '') }
+    ? { value: String(rawRole.id || rawRole.code || rawRole.value || ''), label: String(rawRole.name || rawRole.roleName || rawRole.label || ''), roleCode: rawRole.roleCode || '' }
     : null;
 
   let roleOptions = [...dynamicRoleOptions];
   if (dynRoleOption && dynRoleOption.value && !roleOptions.some(o => o.value === dynRoleOption.value)) {
     roleOptions = [dynRoleOption, ...roleOptions];
   }
+
+  const selectedRoleId = methods.watch('role');
+  const selectedRoleOption = roleOptions.find(o => o.value === selectedRoleId);
+  const targetRoleCode = selectedRoleOption?.roleCode || initialData?.role?.roleCode;
+  const hidePosition = targetRoleCode === 'SUPER_ADMIN' || targetRoleCode === 'DEPARTMENT_ADMIN';
 
   if (lockedUnit) {
     departmentOptions = [lockedUnit, ...departmentOptions.filter(o => o.value !== lockedUnit.value)];
@@ -301,7 +317,7 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
     isSelfProfile,
     lockDepartment: !!lockedUnit,
     lockRole,
-    hidePosition: currentUserRoleCode === 'SUPER_ADMIN',
+    hidePosition,
   };
 
   const groups = createUserFormSchema(deps);
@@ -325,14 +341,19 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
             {/* Avatar Upload */}
             <div className="flex justify-center">
               <div className="relative">
-                <div className="w-24 h-24 rounded-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center overflow-hidden border-4 border-white shadow-lg">
+                <div className="w-24 h-24 rounded-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center overflow-hidden border-4 border-white shadow-lg relative">
+                  {isUploadingAvatar ? (
+                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center z-10">
+                      <div className="animate-spin rounded-full h-6 w-6 border-2 border-white border-t-transparent"></div>
+                    </div>
+                  ) : null}
                   {avatarPreview ? (
                     <img src={avatarPreview} alt="Avatar" className="w-full h-full object-cover" />
                   ) : (
                     <UserIcon className="h-12 w-12 text-gray-400" />
                   )}
                 </div>
-                {!isViewMode && (
+                {!isViewMode && !isUploadingAvatar && (
                   <label className="absolute bottom-0 right-0 w-8 h-8 bg-primary rounded-full flex items-center justify-center cursor-pointer hover:bg-primary-dark transition-colors shadow-lg">
                     <Upload className="h-4 w-4 text-white" />
                     <input
@@ -351,12 +372,12 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
 
             {/* Footer Actions */}
             <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
-              <Button type="button" variant="outline" onClick={handleClose}>
+              <Button type="button" variant="outline" onClick={handleClose} disabled={isUploadingAvatar}>
                 {isViewMode ? 'Đóng' : 'Hủy bỏ'}
               </Button>
               {!isViewMode && (
-                <Button type="submit" variant="primary">
-                  {isCreateMode ? 'Thêm mới' : 'Lưu thay đổi'}
+                <Button type="submit" variant="primary" disabled={isUploadingAvatar}>
+                  {isUploadingAvatar ? 'Đang tải ảnh...' : (isCreateMode ? 'Thêm mới' : 'Lưu thay đổi')}
                 </Button>
               )}
             </div>

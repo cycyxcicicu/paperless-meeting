@@ -33,6 +33,9 @@ import vn.acme.paperless_meeting.repository.DepartmentRepository;
 import vn.acme.paperless_meeting.repository.UserRepository;
 import vn.acme.paperless_meeting.service.auth.CurrentUserService;
 import vn.acme.paperless_meeting.specification.department.DepartmentSpecification;
+import vn.acme.paperless_meeting.event.audit.AuditLogPublisher;
+import vn.acme.paperless_meeting.entity.enums.AuditAction;
+import vn.acme.paperless_meeting.entity.enums.ResourceType;
 
 @Service
 @RequiredArgsConstructor
@@ -42,11 +45,16 @@ public class DepartmentService {
     DepartmentMapper departmentMapper;
     CurrentUserService currentUserService;
     UserRepository userRepository;
+    AuditLogPublisher auditLogPublisher;
 
     public List<DepartmentTreeResponse> getTree() {
+        return getTree(null);
+    }
+
+    public List<DepartmentTreeResponse> getTree(Boolean full) {
         User caller = currentUserService.getCurrentActiveUser();
 
-        if (currentUserService.hasRole(RoleName.SUPER_ADMIN) || currentUserService.canCreateMeeting()) {
+        if (Boolean.TRUE.equals(full) || currentUserService.hasRole(RoleName.SUPER_ADMIN)) {
             return buildFullTree();
         }
 
@@ -56,6 +64,10 @@ public class DepartmentService {
                 return List.of();
             }
             return buildSubTree(callerDeptId);
+        }
+
+        if (currentUserService.canCreateMeeting()) {
+            return buildFullTree();
         }
 
         if (caller.getDepartment() != null) {
@@ -240,7 +252,15 @@ public class DepartmentService {
 
         setParentDepartment(department, request.getParentDepartmentId());
 
-        return departmentMapper.toResponse(departmentRepository.save(department));
+        Department saved = departmentRepository.save(department);
+        auditLogPublisher.publish(
+                caller,
+                AuditAction.CREATE_DEPARTMENT,
+                ResourceType.DEPARTMENT,
+                saved.getId(),
+                Map.of("name", saved.getDeptName(), "code", saved.getCode())
+        );
+        return departmentMapper.toResponse(saved);
     }
 
     public DepartmentResponse update(UUID id, DepartmentUpsertRequest request) {
@@ -269,7 +289,15 @@ public class DepartmentService {
         departmentMapper.updateEntity(request, department);
         setParentDepartment(department, request.getParentDepartmentId());
 
-        return departmentMapper.toResponse(departmentRepository.save(department));
+        Department saved = departmentRepository.save(department);
+        auditLogPublisher.publish(
+                caller,
+                AuditAction.UPDATE_DEPARTMENT,
+                ResourceType.DEPARTMENT,
+                saved.getId(),
+                Map.of("name", saved.getDeptName(), "code", saved.getCode())
+        );
+        return departmentMapper.toResponse(saved);
     }
 
     @Transactional
@@ -278,7 +306,7 @@ public class DepartmentService {
             throw new AppException(ErrorCode.UNAUTHOZIZED);
         }
 
-        getDepartment(id); // ensure exists
+        Department department = getDepartment(id); // ensure exists
 
         User caller = currentUserService.getCurrentActiveUser();
         requireAdminAccessToDepartment(caller, id);
@@ -313,6 +341,13 @@ public class DepartmentService {
             departmentRepository.softDeleteByIds(chunk, deletedBy);
         }
 
+        auditLogPublisher.publish(
+                caller,
+                AuditAction.DELETE_DEPARTMENT,
+                ResourceType.DEPARTMENT,
+                id,
+                Map.of("name", department.getDeptName(), "code", department.getCode())
+        );
     }
 
     private void setParentDepartment(Department department, UUID parentDepartmentId) {
