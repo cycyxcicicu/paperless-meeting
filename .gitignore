@@ -53,3 +53,4 @@ application-dev.yml
 
 # AI Agent skills
 /agent-skills/
+.claude/
