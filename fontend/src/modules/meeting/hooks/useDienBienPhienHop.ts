@@ -1,16 +1,22 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
-import { useParams } from "react-router";
-import { toast } from "@/lib/toast";
-import { meetingApi } from "../services/meeting.api";
-import {
-    Speaker, Opinion, VotingIssue, Delegate, Participant, MeetingContent,
-    VotingResult, VotedDelegate, NotVotedDelegate
-} from '../meeting.mock';
-import { OpinionData } from '@/modules/meeting/components/AddOpinionModal';
-import { OpinionForContentData } from '@/modules/meeting/components/AddOpinionForContentModal';
-import { useMeetingState } from './useMeetingState';
-import { mapVotingResults } from '../utils/meetingHelpers';
 import { useAuth } from '@/app/context/AuthContext';
+import { toast } from "@/lib/toast";
+import { OpinionForContentData } from '@/modules/meeting/components/AddOpinionForContentModal';
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useParams } from "react-router";
+import {
+    Delegate,
+    MeetingContent,
+    NotVotedDelegate,
+    Opinion,
+    Participant,
+    Speaker,
+    VotedDelegate,
+    VotingIssue,
+    VotingResult
+} from '../meeting.mock';
+import { meetingApi } from "../services/meeting.api";
+import { mapVotingResults } from '../utils/meetingHelpers';
+import { useMeetingState } from './useMeetingState';
 
 export function useDienBienPhienHop(guestToken?: string | null) {
     const { id } = useParams<{ id: string }>();
@@ -102,7 +108,6 @@ export function useDienBienPhienHop(guestToken?: string | null) {
     const [activeTab, setActiveTab] = useState<"cho" | "bac-bo">("cho");
     const [isAddSpeakerModalOpen, setIsAddSpeakerModalOpen] = useState(false);
     const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false);
-    const [isAddOpinionModalOpen, setIsAddOpinionModalOpen] = useState(false);
     const [isStartContentModalOpen, setIsStartContentModalOpen] = useState(false);
     const [isApproveContentModalOpen, setIsApproveContentModalOpen] = useState(false);
     const [isAddOpinionForContentModalOpen, setIsAddOpinionForContentModalOpen] = useState(false);
@@ -244,7 +249,7 @@ export function useDienBienPhienHop(guestToken?: string | null) {
                     documentId: att.documentId,
                     fileUrl: att.fileUrl
                 }))
-                .filter((att) => att.name !== documentName);
+                .filter((att: any) => att.name !== documentName);
 
             return {
                 id: op.id,
@@ -319,7 +324,8 @@ export function useDienBienPhienHop(guestToken?: string | null) {
                 time: "",
                 status,
                 broadcastEnabled: mot.status === "SUBMITTED" || mot.status === "CLOSED",
-                votingDuration: 5,
+                votingDuration: mot.durationMinutes || 5,
+                timeLeftSeconds: mot.timeLeftSeconds,
                 options: mot.options,
                 agendaItemId: mot.agendaItemId,
                 agendaItemTitle: agendaTitle || mot.agendaItemTitle || "",
@@ -532,32 +538,6 @@ export function useDienBienPhienHop(guestToken?: string | null) {
     };
 
     // --- Opinion handlers ---
-    const handleAddOpinion = async (data: OpinionData) => {
-        if (!checkAttendance()) return;
-        try {
-            const documentName = data.documentId
-                ? availableDocuments.find((doc) => doc.value === data.documentId)?.label
-                : undefined;
-
-            if (guestToken) {
-                await meetingApi.publicCreateOpinion(guestToken, {
-                    opinionDetail: data.opinionDetail,
-                    documentName,
-                });
-            } else {
-                await meetingApi.createOpinion(id || "", {
-                    opinionDetail: data.opinionDetail,
-                    documentName,
-                    documentIds: data.documentId ? [data.documentId] : []
-                });
-            }
-            toast.success("Đã gửi ý kiến đóng góp thành công");
-            setIsAddOpinionModalOpen(false);
-            refreshData();
-        } catch (error) {
-            toast.error("Không thể gửi ý kiến đóng góp");
-        }
-    };
 
     const canUserVote = useCallback((motion: any) => {
         if (!currentUserParticipant) return false;
@@ -621,7 +601,8 @@ export function useDienBienPhienHop(guestToken?: string | null) {
                         time: "",
                         status: "voting",
                         broadcastEnabled: true,
-                        votingDuration: 5,
+                        votingDuration: activeMotion.durationMinutes || 5,
+                        timeLeftSeconds: activeMotion.timeLeftSeconds,
                         options: activeMotion.options,
                         agendaItemId: activeMotion.agendaItemId,
                         agendaItemTitle: activeMotion.agendaItemTitle
@@ -684,7 +665,9 @@ export function useDienBienPhienHop(guestToken?: string | null) {
             await meetingApi.startVote(currentVotingIssue.id.toString(), minutes);
             toast.success("Đã kích hoạt phiên biểu quyết thành công");
             setIsVotingTimeModalOpen(false);
-            setIsVotingModalOpen(true);
+            if (canUserVote(currentVotingIssue)) {
+                setIsVotingModalOpen(true);
+            }
             refreshData();
         } catch (error) {
             toast.error("Không thể bắt đầu biểu quyết");
@@ -903,7 +886,6 @@ export function useDienBienPhienHop(guestToken?: string | null) {
         // Modal states
         isAddSpeakerModalOpen, setIsAddSpeakerModalOpen,
         isAttendanceModalOpen, setIsAttendanceModalOpen,
-        isAddOpinionModalOpen, setIsAddOpinionModalOpen,
         isStartContentModalOpen, setIsStartContentModalOpen,
         isApproveContentModalOpen, setIsApproveContentModalOpen,
         isAddOpinionForContentModalOpen, setIsAddOpinionForContentModalOpen,
@@ -923,7 +905,6 @@ export function useDienBienPhienHop(guestToken?: string | null) {
         handleReorderSpeaker,
         handleConfirmDuration,
         speakingDuration, setSpeakingDuration,
-        handleAddOpinion,
         handleToggleBroadcast, handleConfirmBroadcast,
         handleProceedFromReadiness, handleConfirmVotingTime,
         handleVote, handlePauseVoting, handleConfirmPause,
@@ -937,6 +918,6 @@ export function useDienBienPhienHop(guestToken?: string | null) {
         handleCloseViewOpinion,
         isChairOrSecretary,
         checkAttendance,
-        isAttendee: !!currentUserParticipant,
+        isAttendee: !!currentUserParticipant && currentUserParticipant.inviteStatus !== 'DECLINED',
     };
 }

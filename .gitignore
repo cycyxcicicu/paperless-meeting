@@ -12,6 +12,11 @@ fontend/dist/
 fontend/node_modules/
 fontend/.vite/
 
+# Frontend test run artifacts.
+fontend/e2e-results.json
+fontend/test-results/
+fontend/playwright-report/
+
 ### STS ###
 .apt_generated
 .classpath

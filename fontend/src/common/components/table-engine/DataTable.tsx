@@ -193,26 +193,36 @@ export function DataTable<T>({
                           {config.rowActions.map((action) => {
                             if (action.show && !action.show(row)) return null;
                             
-                            let btnClass = "w-9 h-9 flex items-center justify-center rounded-lg transition-all ";
+                            let btnClass = "w-9 h-9 flex items-center justify-center rounded-lg transition-all flex-shrink-0 ";
                             if (action.variant === 'danger') {
-                              btnClass += "text-gray-600 hover:bg-red-50 hover:text-red-600";
+                              btnClass += "text-red-600 hover:bg-red-50";
                             } else if (action.variant === 'primary') {
-                              btnClass += "text-gray-600 hover:bg-blue-50 hover:text-blue-600";
+                              btnClass += "text-blue-600 hover:bg-blue-50";
                             } else if (action.variant === 'warning') {
-                              btnClass += "text-gray-600 hover:bg-amber-50 hover:text-amber-600";
+                              btnClass += "text-amber-600 hover:bg-amber-50";
                             } else {
-                              btnClass += "text-gray-600 hover:bg-gray-100 hover:text-gray-900";
+                              btnClass += "text-gray-500 hover:bg-gray-100 hover:text-gray-900";
                             }
 
                             return (
-                              <button
-                                key={action.key}
-                                onClick={() => action.onClick(row)}
-                                className={btnClass}
-                                title={action.label}
-                              >
-                                {action.icon}
-                              </button>
+                              <div key={action.key} className="relative group">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    action.onClick(row);
+                                  }}
+                                  className={btnClass}
+                                >
+                                  {action.icon}
+                                </button>
+                                <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 hidden group-hover:block z-20">
+                                  <div className="bg-gray-900 text-white text-xs rounded-lg px-2.5 py-1.5 whitespace-nowrap shadow-md">
+                                    {action.label}
+                                    <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 border-4 border-transparent border-t-gray-900"></div>
+                                  </div>
+                                </div>
+                              </div>
                             );
                           })}
                         </div>

@@ -89,10 +89,14 @@ public class DocumentSlice {
         String thuocNoiDung = agendaItem != null
                 ? "Nội dung " + agendaItem.getOrderNo() + ": " + agendaItem.getTitle()
                 : "Không gắn với nội dung cụ thể (phụ lục/tài liệu chung)";
+        String nguoiChuanBi = agendaItem != null && agendaItem.getPreparedByUser() != null
+                ? agendaItem.getPreparedByUser().getFullName()
+                : "-";
 
         sb.append("  <tai_lieu")
                 .append(" ten=\"").append(safe(fileName)).append("\"")
                 .append(" thuoc_noi_dung=\"").append(safe(thuocNoiDung)).append("\"")
+                .append(" nguoi_chuan_bi=\"").append(safe(nguoiChuanBi)).append("\"")
                 .append(" loai_su_dung=\"").append(md.getUsageType() != null ? md.getUsageType().getDescription() : "-").append("\"")
                 .append(" bao_mat=\"").append(Boolean.TRUE.equals(md.getIsConfidential()) ? "Có" : "Không").append("\"")
                 .append(">\n");

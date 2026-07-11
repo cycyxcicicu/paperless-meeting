@@ -6,6 +6,8 @@ import { Button } from '@/common/components/ui/button';
 import { FileText, Download, CheckCircle, PlayCircle, MessageSquarePlus, Eye } from 'lucide-react';
 import { MeetingContent } from '../../meeting.mock';
 import { downloadDocument, viewDocument, getFileIconStyle } from '@/common/utils/fileHelpers';
+import { TableTooltip } from '@/common/components/table-engine/TableTooltip';
+
 
 interface MeetingDetailPanelProps {
     meetingContents: MeetingContent[];
@@ -150,9 +152,13 @@ export function MeetingDetailPanel({
                                     <div className="w-10 h-10 rounded-lg bg-red-50 flex items-center justify-center text-[#C8102E]">
                                         <FileText className="w-5 h-5" />
                                     </div>
-                                    <div>
-                                        <p className="body text-gray-900 text-sm font-semibold">
-                                            {meeting.agendaFile.name || "Chương trình họp"}
+                                    <div className="min-w-0 flex-1">
+                                        <p className="body text-gray-900 text-sm font-semibold truncate max-w-[280px]">
+                                            <TableTooltip
+                                                text={meeting.agendaFile.name || "Chương trình họp"}
+                                                maxLength={35}
+                                                className="text-sm font-semibold text-gray-900"
+                                            />
                                         </p>
                                         <p className="text-xs text-gray-500">Tài liệu chương trình họp tổng quan</p>
                                     </div>
@@ -206,16 +212,22 @@ export function MeetingDetailPanel({
                                                 <div className={`w-10 h-10 rounded-lg ${iconStyle.bg} flex items-center justify-center ${iconStyle.text}`}>
                                                     <FileIconComp className="w-5 h-5" />
                                                 </div>
-                                                <div>
-                                                    <p className="body text-gray-900 text-sm">
-                                                        {doc.title || doc.fileName}
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="body text-gray-900 text-sm font-medium truncate max-w-[280px]">
+                                                        <TableTooltip
+                                                            text={doc.title || doc.fileName}
+                                                            maxLength={35}
+                                                            className="text-sm font-medium text-gray-900"
+                                                        />
                                                     </p>
                                                     <div className="flex items-center gap-2 text-xs text-gray-500 mt-0.5">
                                                         <span>{formatSize(doc.fileSize)}</span>
                                                         {doc.createdByFullName && (
                                                             <>
                                                                 <span>•</span>
-                                                                <span>Chuẩn bị bởi: {doc.createdByFullName}</span>
+                                                                <span className="truncate max-w-[150px]" title={doc.createdByFullName}>
+                                                                    Chuẩn bị bởi: {doc.createdByFullName}
+                                                                </span>
                                                             </>
                                                         )}
                                                     </div>

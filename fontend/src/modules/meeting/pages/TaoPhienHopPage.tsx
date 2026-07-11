@@ -412,30 +412,50 @@ const TaoPhienHopPage = () => {
             let attendeesRes = null;
             let agendaRes = null;
 
-            if (targetStep === 1 || targetStep === 3) {
+            if (targetStep === 1 || targetStep === 3 || targetStep === undefined) {
                 meetingRes = await meetingApi.getMeetingById(meetingId);
-            } else if (targetStep === 2) {
+                if (!meetingRes || !meetingRes.success || !meetingRes.data) {
+                    throw new Error("Failed to load meeting details");
+                }
+
+                const meetingObj = meetingRes.data;
+
+                // Phân quyền truy cập trang Cập nhật:
+                // Trang này chỉ dành cho:
+                // - Creator, Secretary (ở mọi trạng thái)
+                // - Hoặc người có quyền canEdit (ở trạng thái DRAFT / REJECTED)
+                // - Hoặc người có quyền canApprove (để xem/duyệt ở trạng thái PENDING_APPROVAL)
+                const isCreatorOrSecretary =
+                    meetingObj.createdById === user?.id ||
+                    meetingObj.callerRole === 'CREATOR' ||
+                    meetingObj.callerRole === 'SECRETARY';
+
+                const hasAccess =
+                    isCreatorOrSecretary ||
+                    !!meetingObj.canEdit ||
+                    !!meetingObj.canApprove;
+
+                if (!isCopy && !hasAccess) {
+                    toast.error(
+                        "Không có quyền truy cập",
+                        "Bạn không có quyền cập nhật hoặc quản lý phiên họp này."
+                    );
+                    navigate(`/phien-hop/${meetingId}`);
+                    return;
+                }
+            }
+
+            if (targetStep === 2) {
                 attendeesRes = await meetingApi.getAttendees(meetingId);
             } else if (targetStep === 4) {
                 agendaRes = await meetingApi.getAgendaItems(meetingId);
-            } else {
-                const [mRes, aRes, agRes] = await Promise.all([
-                    meetingApi.getMeetingById(meetingId),
+            } else if (targetStep === undefined) {
+                const [aRes, agRes] = await Promise.all([
                     meetingApi.getAttendees(meetingId),
                     meetingApi.getAgendaItems(meetingId),
                 ]);
-                meetingRes = mRes;
                 attendeesRes = aRes;
                 agendaRes = agRes;
-            }
-
-            if (
-                (targetStep === 1 ||
-                    targetStep === 3 ||
-                    targetStep === undefined) &&
-                (!meetingRes || !meetingRes.success || !meetingRes.data)
-            ) {
-                throw new Error("Failed to load meeting details");
             }
 
             const meeting = meetingRes?.data;
@@ -483,7 +503,9 @@ const TaoPhienHopPage = () => {
                     noiDungChuongTrinhText: noiDungChuongTrinhText,
                     noiDungChuongTrinhFile: parsedFile,
                 };
-                setChiTietData(step1Data);
+                if (!silent || !isDirty) {
+                    setChiTietData(step1Data);
+                }
 
                 // Map approvalStatus and set meetingCreatorId
                 if (!isCopy) {
@@ -528,7 +550,9 @@ const TaoPhienHopPage = () => {
                     tieuDe: meeting.title,
                     noiDung: meeting.invitationContent || "",
                 };
-                setThongBaoData(step3Data);
+                if (!silent || !isDirty) {
+                    setThongBaoData(step3Data);
+                }
             }
 
              if (attendees) {
@@ -539,7 +563,7 @@ const TaoPhienHopPage = () => {
                 step2Data = {
                     donVi: attendees.participants.map((p: any) => ({
                         id: p.userId,
-                        name: p.fullName || p.username,
+                        name: p.fullName || p.username || "Không xác định",
                         position: p.positionName || "",
                         unit: p.deptName || "",
                         unitId: "",
@@ -554,7 +578,7 @@ const TaoPhienHopPage = () => {
                     nhomThanhVien: [],
                     khachMoi: attendees.guests.map((g: any) => ({
                         id: g.id || String(Math.random()),
-                        name: g.fullName,
+                        name: g.fullName || "Khách mời",
                         email: g.email,
                         phone: g.phone || "",
                         donVi: g.company || "",
@@ -566,7 +590,9 @@ const TaoPhienHopPage = () => {
                     })),
                     chuTriId: chairParticipant ? chairParticipant.userId : null,
                 };
-                setThanhPhanData(step2Data);
+                if (!silent || !isDirty) {
+                    setThanhPhanData(step2Data);
+                }
             }
 
             if (agendaItems) {
@@ -759,12 +785,21 @@ const TaoPhienHopPage = () => {
                     }
                 }
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error("❌ Error loading meeting data:", error);
-            toast.error(
-                "Không thể tải dữ liệu",
-                "Đã xảy ra lỗi khi tải dữ liệu phiên họp. Vui lòng thử lại.",
-            );
+            const errorMsg = getErrorMessage(error);
+            if (error?.response?.status === 403 || errorMsg.toLowerCase().includes("quyền") || errorMsg.toLowerCase().includes("unauthorized")) {
+                toast.error(
+                    "Không có quyền truy cập",
+                    "Bạn không có quyền xem thông tin phiên họp này."
+                );
+                navigate("/phien-hop");
+            } else {
+                toast.error(
+                    "Không thể tải dữ liệu",
+                    "Đã xảy ra lỗi khi tải dữ liệu phiên họp. Vui lòng thử lại."
+                );
+            }
         } finally {
             if (!silent) {
                 setIsLoadingData(false);
@@ -1560,6 +1595,24 @@ const TaoPhienHopPage = () => {
 
                         {/* Form Content - Inside Card */}
                         <div className="px-8 py-6 relative">
+                            {isReadOnly && (
+                                <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-xl flex items-start gap-3">
+                                    <AlertCircle className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
+                                    <div>
+                                        <h4 className="text-sm font-semibold text-blue-800">
+                                            {meetingStatus === "PENDING_APPROVAL" 
+                                                ? "Phiên họp chờ phê duyệt - Không thể chỉnh sửa" 
+                                                : meetingStatus === "APPROVED" || meetingStatus === "UPCOMING" || meetingStatus === "IN_PROGRESS"
+                                                ? "Phiên họp đã phê duyệt - Không thể chỉnh sửa"
+                                                : "Phiên họp đã kết thúc - Không thể chỉnh sửa"}
+                                        </h4>
+                                        <p className="text-sm text-blue-700 mt-1">
+                                            Bạn đang xem phiên họp ở chế độ chỉ đọc.
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
+
                             {rejectReason && meetingStatus === "REJECTED" && (
                                 <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3">
                                     <AlertCircle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />

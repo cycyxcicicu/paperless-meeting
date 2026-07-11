@@ -155,9 +155,9 @@ class UserServiceTest {
         when(departmentRepository.findById(departmentId)).thenReturn(Optional.of(department));
         lenient().when(currentUserService.hasRole(RoleName.SUPER_ADMIN)).thenReturn(false);
 
-        AppException exception = assertThrows(AppException.class, () -> userService.update(userId, request));
+        AppValidationException exception = assertThrows(AppValidationException.class, () -> userService.update(userId, request));
 
-        assertEquals(ErrorCode.POSITION_DEPARTMENT_MISMATCH, exception.getErrorCode());
+        assertEquals(ErrorCode.POSITION_DEPARTMENT_MISMATCH.getMessage(), exception.getFieldErrors().get("positionId"));
     }
 
     @Test
@@ -250,6 +250,102 @@ class UserServiceTest {
         AppValidationException exception = assertThrows(AppValidationException.class, () -> userService.create(createRequest));
 
         assertEquals(ErrorCode.POSITION_DEPARTMENT_MISMATCH.getMessage(), exception.getFieldErrors().get("positionId"));
+    }
+
+    @Test
+    void create_whenUsernameOrEmailOrPhoneDuplicated_shouldThrow() {
+        UserCreateRequest createRequest = buildCreateRequest();
+        lenient().when(departmentRepository.findById(departmentId)).thenReturn(Optional.of(department));
+        lenient().when(positionRepository.findById(positionId)).thenReturn(Optional.of(position));
+        lenient().when(roleRepository.findById(roleId)).thenReturn(Optional.of(role));
+        
+        // 1. Username duplicated
+        lenient().when(userRepository.existsByUsername(createRequest.getUsername())).thenReturn(true);
+        lenient().when(userRepository.existsByEmail(createRequest.getEmail())).thenReturn(false);
+        lenient().when(userRepository.existsByPhone(createRequest.getPhone())).thenReturn(false);
+        
+        AppValidationException ex1 = assertThrows(AppValidationException.class, () -> userService.create(createRequest));
+        assertTrue(ex1.getFieldErrors().containsKey("username"));
+        
+        // 2. Email duplicated
+        lenient().when(userRepository.existsByUsername(createRequest.getUsername())).thenReturn(false);
+        lenient().when(userRepository.existsByEmail(createRequest.getEmail())).thenReturn(true);
+        lenient().when(userRepository.existsByPhone(createRequest.getPhone())).thenReturn(false);
+        
+        AppValidationException ex2 = assertThrows(AppValidationException.class, () -> userService.create(createRequest));
+        assertTrue(ex2.getFieldErrors().containsKey("email"));
+
+        // 3. Phone duplicated
+        lenient().when(userRepository.existsByUsername(createRequest.getUsername())).thenReturn(false);
+        lenient().when(userRepository.existsByEmail(createRequest.getEmail())).thenReturn(false);
+        lenient().when(userRepository.existsByPhone(createRequest.getPhone())).thenReturn(true);
+        
+        AppValidationException ex3 = assertThrows(AppValidationException.class, () -> userService.create(createRequest));
+        assertTrue(ex3.getFieldErrors().containsKey("phone"));
+    }
+
+    @Test
+    void create_whenCallerIsRegularUser_shouldThrowUnauthozized() {
+        UserCreateRequest createRequest = buildCreateRequest();
+        lenient().when(currentUserService.hasRole(RoleName.USER)).thenReturn(true);
+        
+        AppException exception = assertThrows(AppException.class, () -> userService.create(createRequest));
+        assertEquals(ErrorCode.UNAUTHOZIZED, exception.getErrorCode());
+    }
+
+    @Test
+    void update_whenSelfUpdatePassword_shouldThrowUnauthozized() {
+        request.setPassword("NewPassword123");
+        lenient().when(currentUserService.hasRole(RoleName.USER)).thenReturn(false);
+        lenient().when(departmentRepository.findById(departmentId)).thenReturn(Optional.of(department));
+        lenient().when(roleRepository.findById(roleId)).thenReturn(Optional.of(role));
+        lenient().when(positionRepository.findById(positionId)).thenReturn(Optional.of(position));
+        
+        AppException exception = assertThrows(AppException.class, () -> userService.update(userId, request));
+        assertEquals(ErrorCode.UNAUTHOZIZED, exception.getErrorCode());
+    }
+
+    @Test
+    void update_whenRegularUserTriesToChangeRestrictedFields_shouldThrowUnauthozized() {
+        lenient().when(currentUserService.hasRole(RoleName.USER)).thenReturn(true);
+        
+        // Change department
+        request.setDepartmentId(otherDepartmentId);
+        AppException exception = assertThrows(AppException.class, () -> userService.update(userId, request));
+        assertEquals(ErrorCode.UNAUTHOZIZED, exception.getErrorCode());
+    }
+
+    @Test
+    void delete_whenCallerIsDeptAdminAndTriesToDeleteSuperAdmin_shouldThrowUnauthozized() {
+        Role superAdminRole = new Role();
+        superAdminRole.setRoleCode(RoleName.SUPER_ADMIN.name());
+        user.setRole(superAdminRole);
+        
+        lenient().when(currentUserService.hasRole(RoleName.DEPARTMENT_ADMIN)).thenReturn(true);
+        
+        AppException exception = assertThrows(AppException.class, () -> userService.delete(userId));
+        assertEquals(ErrorCode.UNAUTHOZIZED, exception.getErrorCode());
+    }
+
+    @Test
+    void update_whenPositionAndDepartmentNotChangedButLimitExceeded_shouldSucceed() {
+        position.setPositionRole(vn.acme.paperless_meeting.entity.enums.PositionRole.DEPUTY_OF_DIVISION);
+        user.setPosition(position);
+        user.setDepartment(department);
+
+        request.setPositionId(positionId);
+        request.setDepartmentId(departmentId);
+
+        when(positionRepository.findById(positionId)).thenReturn(Optional.of(position));
+        when(departmentRepository.findById(departmentId)).thenReturn(Optional.of(department));
+
+        lenient().when(userRepository.countByDepartmentIdIn(any())).thenReturn(5L);
+        lenient().when(userRepository.countByDepartmentIdAndPositionPositionRoleAndIdNot(any(), any(), any())).thenReturn(5L);
+
+        UserResponse result = userService.update(userId, request);
+
+        assertSame(response, result);
+        verify(userRepository, never()).countByDepartmentIdAndPositionPositionRoleAndIdNot(any(), any(), any());
     }
 
     private UserCreateRequest buildCreateRequest() {

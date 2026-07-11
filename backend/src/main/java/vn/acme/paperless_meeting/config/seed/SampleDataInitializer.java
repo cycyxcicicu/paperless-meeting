@@ -1292,7 +1292,9 @@ public class SampleDataInitializer implements CommandLineRunner {
             Map<String, Meeting> meetingByTitle,
             Map<String, User> userByUsername) {
         Map<String, MeetingParticipant> existingByKey = indexBy(
-                meetingParticipantRepository.findAll(),
+                meetingParticipantRepository.findAll().stream()
+                        .filter(p -> p.getUser() != null)
+                        .toList(),
                 participant -> participantKey(participant.getMeeting().getId(), participant.getUser().getId()));
 
         for (MeetingSeed seed : meetingSeeds) {

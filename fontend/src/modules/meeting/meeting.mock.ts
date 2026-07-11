@@ -31,6 +31,7 @@ export interface VotingIssue {
     status: "pending" | "broadcasting" | "voting" | "paused" | "completed";
     broadcastEnabled: boolean;
     votingDuration?: number;
+    timeLeftSeconds?: number;
     options?: { id: string; label: string }[];
     agendaItemId?: string;
     agendaItemTitle?: string;

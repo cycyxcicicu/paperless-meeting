@@ -1,12 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { Card, CardContent } from '@/common/components/ui/card';
-import { Badge } from '@/common/components/ui/badge';
-import { Button } from '@/common/components/ui/button';
-import { EmptyState } from '@/common/components/ui/empty-state';
-import { User } from 'lucide-react';
-import { cn } from '@/common/utils/cn';
-import { Speaker } from '../../meeting.mock';
-import { formatSecondsToHMS } from '@/common/utils/timeHelpers';
+import { Badge } from "@/common/components/ui/badge";
+import { Button } from "@/common/components/ui/button";
+import { Card, CardContent } from "@/common/components/ui/card";
+import { EmptyState } from "@/common/components/ui/empty-state";
+import { cn } from "@/common/utils/cn";
+import { formatSecondsToHMS } from "@/common/utils/timeHelpers";
+import { User } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Speaker } from "../../meeting.mock";
 
 interface SpeakerTimerPanelProps {
     currentSpeaker: Speaker | undefined;
@@ -17,7 +17,11 @@ interface SpeakerTimerPanelProps {
 /**
  * Panel hiển thị người đang phát biểu và thời gian còn lại (cột phải).
  */
-export function SpeakerTimerPanel({ currentSpeaker, onEndSpeaking, isGuest }: SpeakerTimerPanelProps) {
+export function SpeakerTimerPanel({
+    currentSpeaker,
+    onEndSpeaking,
+    isGuest,
+}: SpeakerTimerPanelProps) {
     const [timeLeft, setTimeLeft] = useState<number>(300); // 5 phút mặc định (300 giây)
 
     useEffect(() => {
@@ -26,7 +30,8 @@ export function SpeakerTimerPanel({ currentSpeaker, onEndSpeaking, isGuest }: Sp
         // Tính toán thời gian bắt đầu thực tế nếu có
         const totalDuration = currentSpeaker.durationSeconds || 300;
         let initialSeconds = totalDuration;
-        const startStr = currentSpeaker.speakingStartAt || currentSpeaker.startTime;
+        const startStr =
+            currentSpeaker.speakingStartAt || currentSpeaker.startTime;
         if (startStr) {
             try {
                 const start = new Date(startStr).getTime();
@@ -61,10 +66,14 @@ export function SpeakerTimerPanel({ currentSpeaker, onEndSpeaking, isGuest }: Sp
                         Thời gian phát biểu còn lại
                     </h3>
                     {currentSpeaker && (
-                        <Badge className={cn(
-                            "px-3 py-1.5 text-sm rounded-full border-none font-mono heading hover:opacity-90",
-                            timeLeft > 60 ? "bg-green-100 text-green-700 hover:bg-green-100" : "bg-red-100 text-red-700 hover:bg-red-100"
-                        )}>
+                        <Badge
+                            className={cn(
+                                "px-3 py-1.5 text-sm rounded-full border-none font-mono heading hover:opacity-90",
+                                timeLeft > 60
+                                    ? "bg-green-100 text-green-700 hover:bg-green-100"
+                                    : "bg-red-100 text-red-700 hover:bg-red-100",
+                            )}
+                        >
                             {formatSecondsToHMS(timeLeft)}
                         </Badge>
                     )}
@@ -82,9 +91,15 @@ export function SpeakerTimerPanel({ currentSpeaker, onEndSpeaking, isGuest }: Sp
 
                             {/* Thông tin người phát biểu */}
                             <div className="space-y-2 text-sm text-center mb-4">
-                                <p className="text-gray-900 font-semibold">{currentSpeaker.name}</p>
-                                <p className="text-gray-650">{currentSpeaker.position}</p>
-                                <p className="text-gray-500">{currentSpeaker.unit}</p>
+                                <p className="text-gray-900 font-semibold">
+                                    {currentSpeaker.name}
+                                </p>
+                                <p className="text-gray-650">
+                                    {currentSpeaker.position}
+                                </p>
+                                <p className="text-gray-500">
+                                    {currentSpeaker.unit}
+                                </p>
                             </div>
                         </div>
 

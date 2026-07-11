@@ -58,7 +58,7 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({
   const [data, setData] = useState<AttendanceRecord[]>([]);
   const [agendaItems, setAgendaItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const pageSize = 10;
+  const [pageSize, setPageSize] = useState(10);
 
   useEffect(() => {
     if (!isOpen || (!meetingId && !guestToken)) return;
@@ -435,7 +435,10 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({
                     pageSize={pageSize}
                     totalItems={filteredData.length}
                     onPageChange={setCurrentPage}
-                    onPageSizeChange={() => {}}
+                    onPageSizeChange={(size) => {
+                      setPageSize(size);
+                      setCurrentPage(1);
+                    }}
                   />
                 </div>
               </div>

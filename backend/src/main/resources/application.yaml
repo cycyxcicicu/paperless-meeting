@@ -88,7 +88,7 @@ app:
     seed:
         enabled: false
     init:
-        enabled: true
+        enabled: false
     security:
         frontend-origin: "http://localhost:3000"
         cookie-domain: ""

@@ -8,6 +8,7 @@ interface VotingModalProps {
   onVote: (option: 'agree' | 'disagree' | 'other', otherContent?: string) => void;
   issueTitle: string;
   durationMinutes: number;
+  timeLeftSeconds?: number;
 }
 
 export const VotingModal: React.FC<VotingModalProps> = ({
@@ -16,11 +17,14 @@ export const VotingModal: React.FC<VotingModalProps> = ({
   onVote,
   issueTitle,
   durationMinutes,
+  timeLeftSeconds,
 }) => {
   const [selectedOption, setSelectedOption] = useState<'agree' | 'disagree' | 'other' | null>(null);
   const [otherContent, setOtherContent] = useState('');
   const [error, setError] = useState('');
-  const [timeLeft, setTimeLeft] = useState(durationMinutes * 60); // Convert to seconds
+  const [timeLeft, setTimeLeft] = useState(() => {
+    return timeLeftSeconds !== undefined ? timeLeftSeconds : durationMinutes * 60;
+  });
 
   useEffect(() => {
     if (!isOpen) {
@@ -32,12 +36,13 @@ export const VotingModal: React.FC<VotingModalProps> = ({
     }
 
     // Reset timer when modal opens
-    setTimeLeft(durationMinutes * 60);
+    setTimeLeft(timeLeftSeconds !== undefined ? timeLeftSeconds : durationMinutes * 60);
 
     const interval = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 0) {
           clearInterval(interval);
+          onClose(); // Automatically close when time runs out!
           return 0;
         }
         return prev - 1;
@@ -45,7 +50,7 @@ export const VotingModal: React.FC<VotingModalProps> = ({
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [isOpen, durationMinutes]);
+  }, [isOpen, durationMinutes, timeLeftSeconds, onClose]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);

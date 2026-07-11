@@ -2,6 +2,7 @@ package vn.acme.paperless_meeting.dto.response.speaker;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
+
 import lombok.Builder;
 import lombok.Getter;
 import lombok.Setter;
@@ -14,7 +15,7 @@ public class SpeakerTurnResponse {
     private LocalDateTime startAt;
     private LocalDateTime endAt;
     private Long durationSeconds;
-    
+
     private UUID userId;
     private String userName;
     private String avatarUrl;

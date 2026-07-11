@@ -57,6 +57,7 @@ export interface MeetingResponse {
   myDocSubmittedCount?: number;
   myDocRejectedCount?: number;
   myDocApprovedCount?: number;
+  isSaved?: boolean;
 }
 
 export interface AgendaDocumentResponse {
@@ -77,6 +78,10 @@ export interface MotionResponse {
   status: 'DRAFT' | 'SUBMITTED' | 'WITHDRAWN' | 'CLOSED';
   meetingId: string;
   agendaItemId: string;
+  durationMinutes?: number;
+  timeLeftSeconds?: number;
+  hasVoted?: boolean;
+  options?: any[];
 }
 
 export interface AgendaItemFeedbackResponse {
@@ -200,6 +205,7 @@ export const meetingApi = {
     toDate?: string;
     inviteStatus?: 'PENDING' | 'ACCEPTED' | 'DECLINED';
     onlyMyMeetings?: boolean;
+    approvedByMe?: boolean;
   }): Promise<ApiResponse<PageResponse<MeetingResponse>>> => {
     return api.get('/meetings', {
       params,

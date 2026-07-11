@@ -1,98 +1,96 @@
 package vn.acme.paperless_meeting.service.meetingparticipant;
 
-import java.time.LocalDateTime;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
+import java.util.stream.Collectors;
+
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import vn.acme.paperless_meeting.entity.DocumentVersion;
-import vn.acme.paperless_meeting.entity.enums.UserStatus;
-import vn.acme.paperless_meeting.entity.enums.ChannelType;
-import org.springframework.beans.factory.annotation.Value;
-
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
-
-import vn.acme.paperless_meeting.dto.request.meetingparticipant.AddParticipantRequest;
-import vn.acme.paperless_meeting.dto.request.meetingparticipant.AddGuestRequest;
 import vn.acme.paperless_meeting.dto.request.meetingparticipant.AddAttendeesRequest;
-import vn.acme.paperless_meeting.dto.request.meetingparticipant.UpdateInviteStatusRequest;
+import vn.acme.paperless_meeting.dto.request.meetingparticipant.AddGuestRequest;
+import vn.acme.paperless_meeting.dto.request.meetingparticipant.AddParticipantRequest;
+import vn.acme.paperless_meeting.dto.request.meetingparticipant.SendInvitationsRequest;
 import vn.acme.paperless_meeting.dto.request.meetingparticipant.UpdateAttendanceStatusRequest;
-import vn.acme.paperless_meeting.dto.response.meetingparticipant.ParticipantResponse;
+import vn.acme.paperless_meeting.dto.request.meetingparticipant.UpdateInviteStatusRequest;
+import vn.acme.paperless_meeting.dto.request.opinion.OpinionRequest;
+import vn.acme.paperless_meeting.dto.response.agenda.AgendaItemResponse;
+import vn.acme.paperless_meeting.dto.response.document.MeetingDocumentResponse;
+import vn.acme.paperless_meeting.dto.response.meeting.MeetingResponse;
+import vn.acme.paperless_meeting.dto.response.meeting.PublicMeetingInviteResponse;
 import vn.acme.paperless_meeting.dto.response.meetingparticipant.AttendeeResponse;
+import vn.acme.paperless_meeting.dto.response.meetingparticipant.AttendeeStatisticsResponse;
 import vn.acme.paperless_meeting.dto.response.meetingparticipant.GuestResponse;
 import vn.acme.paperless_meeting.dto.response.meetingparticipant.MeetingAttendeesResponse;
-import vn.acme.paperless_meeting.dto.response.meetingparticipant.AttendeeStatisticsResponse;
-import vn.acme.paperless_meeting.dto.response.meeting.PublicMeetingInviteResponse;
-import vn.acme.paperless_meeting.dto.response.meeting.MeetingResponse;
-import vn.acme.paperless_meeting.entity.Meeting;
-import vn.acme.paperless_meeting.entity.Location;
-import vn.acme.paperless_meeting.entity.MeetingParticipant;
-import vn.acme.paperless_meeting.entity.MeetingGuest;
-import vn.acme.paperless_meeting.entity.AttendanceLog;
-import vn.acme.paperless_meeting.entity.User;
-import vn.acme.paperless_meeting.entity.enums.RoleName;
-import vn.acme.paperless_meeting.entity.enums.MeetingStatus;
-import vn.acme.paperless_meeting.entity.enums.InviteStatus;
-import vn.acme.paperless_meeting.entity.enums.AttendanceStatus;
-import vn.acme.paperless_meeting.entity.enums.ParticipantRole;
-import vn.acme.paperless_meeting.exceptions.AppException;
-import vn.acme.paperless_meeting.exceptions.ErrorCode;
-import vn.acme.paperless_meeting.mapper.meetingparticipant.MeetingParticipantMapper;
-import vn.acme.paperless_meeting.mapper.meetingparticipant.MeetingGuestMapper;
-import vn.acme.paperless_meeting.mapper.meeting.MeetingMapper;
-import vn.acme.paperless_meeting.entity.enums.AuditAction;
-import vn.acme.paperless_meeting.entity.enums.ResourceType;
-import vn.acme.paperless_meeting.event.audit.AuditLogPublisher;
-import vn.acme.paperless_meeting.repository.MeetingParticipantRepository;
-import vn.acme.paperless_meeting.repository.MeetingGuestRepository;
-import vn.acme.paperless_meeting.repository.MeetingRepository;
-import vn.acme.paperless_meeting.repository.UserRepository;
-import vn.acme.paperless_meeting.repository.AttendanceLogRepository;
-import vn.acme.paperless_meeting.repository.VoteEligibilityRepository;
-import vn.acme.paperless_meeting.repository.DepartmentRepository;
-import vn.acme.paperless_meeting.service.auth.CurrentUserService;
-import vn.acme.paperless_meeting.service.document.DocumentService;
-import vn.acme.paperless_meeting.dto.response.document.MeetingDocumentResponse;
-import java.util.stream.Collectors;
-import vn.acme.paperless_meeting.repository.MeetingInvitationRepository;
-import vn.acme.paperless_meeting.repository.NotificationRepository;
-import vn.acme.paperless_meeting.entity.MeetingInvitation;
-import vn.acme.paperless_meeting.entity.Notification;
-import vn.acme.paperless_meeting.entity.enums.NotificationType;
-import vn.acme.paperless_meeting.dto.response.user.UserResponse;
-import vn.acme.paperless_meeting.mapper.user.UserMapper;
-import vn.acme.paperless_meeting.entity.enums.NotificationStatus;
-import vn.acme.paperless_meeting.entity.enums.SendStatus;
-import vn.acme.paperless_meeting.dto.request.meetingparticipant.SendInvitationsRequest;
-import vn.acme.paperless_meeting.service.email.InvitationMailService;
-import vn.acme.paperless_meeting.service.email.MailTemplateService;
-import vn.acme.paperless_meeting.service.agenda.AgendaItemService;
-import vn.acme.paperless_meeting.service.speaker.SpeakerService;
-import vn.acme.paperless_meeting.service.motion.MotionService;
-import vn.acme.paperless_meeting.service.opinion.OpinionService;
-import vn.acme.paperless_meeting.dto.response.agenda.AgendaItemResponse;
-import vn.acme.paperless_meeting.dto.response.speaker.SpeakerQueueResponse;
-import vn.acme.paperless_meeting.service.websocket.WebSocketNotificationService;
-import vn.acme.paperless_meeting.entity.enums.SpeakerQueueStatus;
+import vn.acme.paperless_meeting.dto.response.meetingparticipant.ParticipantResponse;
 import vn.acme.paperless_meeting.dto.response.motion.MotionResponse;
 import vn.acme.paperless_meeting.dto.response.motion.VoteStatisticsResponse;
 import vn.acme.paperless_meeting.dto.response.opinion.OpinionResponse;
-import vn.acme.paperless_meeting.dto.request.opinion.OpinionRequest;
+import vn.acme.paperless_meeting.dto.response.speaker.SpeakerQueueResponse;
+import vn.acme.paperless_meeting.dto.response.user.UserResponse;
+import vn.acme.paperless_meeting.entity.AttendanceLog;
+import vn.acme.paperless_meeting.entity.DocumentVersion;
+import vn.acme.paperless_meeting.entity.Location;
+import vn.acme.paperless_meeting.entity.Meeting;
+import vn.acme.paperless_meeting.entity.MeetingGuest;
+import vn.acme.paperless_meeting.entity.MeetingInvitation;
+import vn.acme.paperless_meeting.entity.MeetingParticipant;
+import vn.acme.paperless_meeting.entity.Notification;
+import vn.acme.paperless_meeting.entity.User;
+import vn.acme.paperless_meeting.entity.enums.AttendanceStatus;
+import vn.acme.paperless_meeting.entity.enums.AuditAction;
+import vn.acme.paperless_meeting.entity.enums.ChannelType;
+import vn.acme.paperless_meeting.entity.enums.InviteStatus;
+import vn.acme.paperless_meeting.entity.enums.MeetingStatus;
+import vn.acme.paperless_meeting.entity.enums.NotificationStatus;
+import vn.acme.paperless_meeting.entity.enums.NotificationType;
+import vn.acme.paperless_meeting.entity.enums.ParticipantRole;
+import vn.acme.paperless_meeting.entity.enums.ResourceType;
+import vn.acme.paperless_meeting.entity.enums.RoleName;
+import vn.acme.paperless_meeting.entity.enums.SendStatus;
+import vn.acme.paperless_meeting.entity.enums.UserStatus;
+import vn.acme.paperless_meeting.event.audit.AuditLogPublisher;
+import vn.acme.paperless_meeting.exceptions.AppException;
+import vn.acme.paperless_meeting.exceptions.ErrorCode;
+import vn.acme.paperless_meeting.mapper.meeting.MeetingMapper;
+import vn.acme.paperless_meeting.mapper.meetingparticipant.MeetingGuestMapper;
+import vn.acme.paperless_meeting.mapper.meetingparticipant.MeetingParticipantMapper;
+import vn.acme.paperless_meeting.mapper.user.UserMapper;
+import vn.acme.paperless_meeting.repository.AttendanceLogRepository;
+import vn.acme.paperless_meeting.repository.DepartmentRepository;
+import vn.acme.paperless_meeting.repository.MeetingGuestRepository;
+import vn.acme.paperless_meeting.repository.MeetingInvitationRepository;
+import vn.acme.paperless_meeting.repository.MeetingParticipantRepository;
+import vn.acme.paperless_meeting.repository.MeetingRepository;
+import vn.acme.paperless_meeting.repository.NotificationRepository;
+import vn.acme.paperless_meeting.repository.UserRepository;
+import vn.acme.paperless_meeting.repository.VoteEligibilityRepository;
+import vn.acme.paperless_meeting.service.agenda.AgendaItemService;
+import vn.acme.paperless_meeting.service.auth.CurrentUserService;
+import vn.acme.paperless_meeting.service.document.DocumentService;
+import vn.acme.paperless_meeting.service.email.InvitationMailService;
+import vn.acme.paperless_meeting.service.email.MailTemplateService;
+import vn.acme.paperless_meeting.service.motion.MotionService;
+import vn.acme.paperless_meeting.service.opinion.OpinionService;
+import vn.acme.paperless_meeting.service.speaker.SpeakerService;
+import vn.acme.paperless_meeting.service.websocket.WebSocketNotificationService;
 
 @Service
 @RequiredArgsConstructor
@@ -131,7 +129,8 @@ public class MeetingParticipantService {
     @lombok.experimental.NonFinal
     String backendUrl;
 
-    static final List<MeetingStatus> ACTIVE_MEETING_STATUSES = List.of(MeetingStatus.APPROVED, MeetingStatus.UPCOMING, MeetingStatus.IN_PROGRESS);
+    static final List<MeetingStatus> ACTIVE_MEETING_STATUSES = List.of(MeetingStatus.APPROVED, MeetingStatus.UPCOMING,
+            MeetingStatus.IN_PROGRESS);
 
     private Meeting getMeeting(UUID meetingId) {
         return meetingRepository.findById(meetingId)
@@ -140,8 +139,7 @@ public class MeetingParticipantService {
 
     private Integer calculateLateMinutes(Meeting meeting, LocalDateTime checkinTime) {
         LocalDateTime lateLimit = meeting.getStartTime().plusMinutes(
-                meeting.getLateAfterMinutes() != null ? meeting.getLateAfterMinutes() : 0
-        );
+                meeting.getLateAfterMinutes() != null ? meeting.getLateAfterMinutes() : 0);
         if (checkinTime.isAfter(lateLimit)) {
             return (int) Duration.between(meeting.getStartTime(), checkinTime).toMinutes();
         }
@@ -150,27 +148,36 @@ public class MeetingParticipantService {
 
     private void requireEditPermission(Meeting meeting) {
         User caller = currentUserService.getCurrentActiveUser();
-        if (currentUserService.hasRole(RoleName.SUPER_ADMIN)) return;
+        if (currentUserService.hasRole(RoleName.SUPER_ADMIN))
+            return;
         if (currentUserService.hasRole(RoleName.DEPARTMENT_ADMIN)
                 && caller.getDepartment() != null
-                && caller.getDepartment().getId().equals(meeting.getDepartment().getId())) return;
-        if (meeting.getCreatedBy().getId().equals(caller.getId())) return;
+                && caller.getDepartment().getId().equals(meeting.getDepartment().getId()))
+            return;
+        if (meeting.getCreatedBy().getId().equals(caller.getId()))
+            return;
         throw new AppException(ErrorCode.MEETING_PARTICIPANT_MANAGEMENT_FORBIDDEN);
     }
 
     private void requireAttendancePermission(Meeting meeting) {
         User caller = currentUserService.getCurrentActiveUser();
-        if (currentUserService.hasRole(RoleName.SUPER_ADMIN)) return;
+        if (currentUserService.hasRole(RoleName.SUPER_ADMIN))
+            return;
         if (currentUserService.hasRole(RoleName.DEPARTMENT_ADMIN)
                 && caller.getDepartment() != null
-                && caller.getDepartment().getId().equals(meeting.getDepartment().getId())) return;
-        if (meeting.getCreatedBy().getId().equals(caller.getId())) return;
-        
-        boolean isSecretaryOrChair = meetingParticipantRepository.findByMeetingIdAndUserId(meeting.getId(), caller.getId())
-                .map(p -> p.getParticipantRole() == ParticipantRole.SECRETARY || p.getParticipantRole() == ParticipantRole.CHAIR)
+                && caller.getDepartment().getId().equals(meeting.getDepartment().getId()))
+            return;
+        if (meeting.getCreatedBy().getId().equals(caller.getId()))
+            return;
+
+        boolean isSecretaryOrChair = meetingParticipantRepository
+                .findByMeetingIdAndUserId(meeting.getId(), caller.getId())
+                .map(p -> p.getParticipantRole() == ParticipantRole.SECRETARY
+                        || p.getParticipantRole() == ParticipantRole.CHAIR)
                 .orElse(false);
-        if (isSecretaryOrChair) return;
-        
+        if (isSecretaryOrChair)
+            return;
+
         throw new AppException(ErrorCode.MEETING_PARTICIPANT_MANAGEMENT_FORBIDDEN);
     }
 
@@ -187,12 +194,14 @@ public class MeetingParticipantService {
         if (meeting.getStatus() == MeetingStatus.CLOSED || meeting.getStatus() == MeetingStatus.CANCELLED) {
             throw new AppException(ErrorCode.MEETING_ALREADY_CLOSED_OR_CANCELLED);
         }
-        if (meeting.getStatus() == MeetingStatus.DRAFT 
-                || meeting.getStatus() == MeetingStatus.REJECTED 
+        if (meeting.getStatus() == MeetingStatus.DRAFT
+                || meeting.getStatus() == MeetingStatus.REJECTED
                 || meeting.getStatus() == MeetingStatus.PENDING_APPROVAL) {
             throw new AppException(ErrorCode.MEETING_STATUS_TRANSITION_INVALID);
         }
-        if (meeting.getRsvpDeadline() != null && LocalDateTime.now().isAfter(meeting.getRsvpDeadline())) {
+        if (meeting.getRsvpDeadline() != null
+                && LocalDateTime.now().isAfter(meeting.getRsvpDeadline())
+                && meeting.getStatus() == MeetingStatus.APPROVED) {
             throw new AppException(ErrorCode.MEETING_RSVP_DEADLINE_EXPIRED);
         }
     }
@@ -200,7 +209,7 @@ public class MeetingParticipantService {
     @Transactional
     public MeetingAttendeesResponse addAttendees(UUID meetingId, AddAttendeesRequest request) {
         Meeting meeting = getMeeting(meetingId);
-        
+
         // Validate location capacity
         Location location = meeting.getLocation();
         if (location != null && location.getCapacity() != null && location.getCapacity() > 0) {
@@ -231,7 +240,8 @@ public class MeetingParticipantService {
         requireEditPermission(meeting);
         validateMeetingStateForParticipantMod(meeting);
 
-        // RÀNG BUỘC PARTICIPANT-01: Kiểm tra trùng lặp userId trong danh sách đại biểu gửi lên (tránh gửi trùng trong cùng một request)
+        // RÀNG BUỘC PARTICIPANT-01: Kiểm tra trùng lặp userId trong danh sách đại biểu
+        // gửi lên (tránh gửi trùng trong cùng một request)
         java.util.Set<UUID> payloadUserIds = new java.util.HashSet<>();
         for (AddParticipantRequest req : requests) {
             if (!payloadUserIds.add(req.getUserId())) {
@@ -261,25 +271,27 @@ public class MeetingParticipantService {
                 participant.setAttendanceStatus(AttendanceStatus.NOT_CHECKED_IN);
             }
 
-            // RÀNG BUỘC PARTICIPANT-02: Kiểm tra trạng thái tài khoản của đại biểu, bắt buộc phải là ACTIVE mới được thêm vào cuộc họp
+            // RÀNG BUỘC PARTICIPANT-02: Kiểm tra trạng thái tài khoản của đại biểu, bắt
+            // buộc phải là ACTIVE mới được thêm vào cuộc họp
             if (user.getStatus() != UserStatus.ACTIVE) {
                 throw new AppException(ErrorCode.USER_NOT_ACTIVE);
             }
 
             meetingParticipantRepository.save(participant);
             responses.add(meetingParticipantMapper.toResponse(participant));
-            
+
             auditLogPublisher.publish(
                     currentUserService.getCurrentActiveUser(),
                     AuditAction.ADD_PARTICIPANT,
                     ResourceType.PARTICIPANT,
                     participant.getId(),
-                    Map.of("meetingId", String.valueOf(meetingId), "type", "INTERNAL", "userId", String.valueOf(request.getUserId()))
-            );
+                    Map.of("meetingId", String.valueOf(meetingId), "type", "INTERNAL", "userId",
+                            String.valueOf(request.getUserId())));
         }
 
         // Validate chair count limit
-        long chairCount = meetingParticipantRepository.countByMeetingIdAndParticipantRole(meetingId, ParticipantRole.CHAIR);
+        long chairCount = meetingParticipantRepository.countByMeetingIdAndParticipantRole(meetingId,
+                ParticipantRole.CHAIR);
         if (chairCount > 3) {
             throw new AppException(ErrorCode.BAD_REQUEST);
         }
@@ -318,8 +330,8 @@ public class MeetingParticipantService {
                     AuditAction.ADD_PARTICIPANT,
                     ResourceType.PARTICIPANT,
                     guest.getId(),
-                    Map.of("meetingId", String.valueOf(meetingId), "type", "GUEST", "email", String.valueOf(request.getEmail()))
-            );
+                    Map.of("meetingId", String.valueOf(meetingId), "type", "GUEST", "email",
+                            String.valueOf(request.getEmail())));
         }
 
         return responses;
@@ -336,10 +348,11 @@ public class MeetingParticipantService {
         Map<UUID, MeetingParticipant> participantMap = participants.stream()
                 .collect(Collectors.toMap(MeetingParticipant::getId, p -> p, (e1, e2) -> e1));
 
-        Map<UUID, String> agendaTitles = meeting.getAgendaItemList() == null ? java.util.Map.of() :
-                meeting.getAgendaItemList().stream()
+        Map<UUID, String> agendaTitles = meeting.getAgendaItemList() == null ? java.util.Map.of()
+                : meeting.getAgendaItemList().stream()
                         .filter(item -> item.getId() != null && item.getTitle() != null)
-                        .collect(Collectors.toMap(vn.acme.paperless_meeting.entity.AgendaItem::getId, vn.acme.paperless_meeting.entity.AgendaItem::getTitle, (e1, e2) -> e1));
+                        .collect(Collectors.toMap(vn.acme.paperless_meeting.entity.AgendaItem::getId,
+                                vn.acme.paperless_meeting.entity.AgendaItem::getTitle, (e1, e2) -> e1));
 
         // Key: substituteUserId -> participant gốc
         Map<UUID, MeetingParticipant> substituteUserIdToOriginal = participants.stream()
@@ -355,8 +368,7 @@ public class MeetingParticipantService {
                 .collect(java.util.stream.Collectors.toMap(
                         p -> p.getSubstituteEmail().toLowerCase(),
                         p -> p,
-                        (existing, duplicate) -> existing
-                ));
+                        (existing, duplicate) -> existing));
 
         List<ParticipantResponse> participantResponses = new ArrayList<>();
         List<GuestResponse> guestResponses = new ArrayList<>();
@@ -364,11 +376,13 @@ public class MeetingParticipantService {
         // 1. Map thành viên nội bộ với O(1) lookup
         for (MeetingParticipant p : participants) {
             ParticipantResponse resp = meetingParticipantMapper.toResponse(p);
-            MeetingParticipant original = substituteUserIdToOriginal.get(p.getUser().getId());
+            MeetingParticipant original = p.getUser() != null ? substituteUserIdToOriginal.get(p.getUser().getId())
+                    : null;
             if (original != null) {
                 resp.setSubstitutedForUserName(original.getUser().getFullName());
                 resp.setSubstitutedForUserPosition(original.getUser().getPosition() != null
-                        ? original.getUser().getPosition().getPositionName() : "");
+                        ? original.getUser().getPosition().getPositionName()
+                        : "");
                 resp.setIsSubstitute(true);
                 resp.setSubstituteForParticipantId(original.getId());
             }
@@ -378,7 +392,8 @@ public class MeetingParticipantService {
                 if (orig != null && orig.getUser() != null) {
                     resp.setSubstitutedForUserName(orig.getUser().getFullName());
                     resp.setSubstitutedForUserPosition(orig.getUser().getPosition() != null
-                            ? orig.getUser().getPosition().getPositionName() : "");
+                            ? orig.getUser().getPosition().getPositionName()
+                            : "");
                 }
             }
             if (p.getAbsentAgendaItemIds() != null) {
@@ -399,7 +414,8 @@ public class MeetingParticipantService {
                 if (original != null) {
                     resp.setSubstitutedForUserName(original.getUser().getFullName());
                     resp.setSubstitutedForUserPosition(original.getUser().getPosition() != null
-                            ? original.getUser().getPosition().getPositionName() : "");
+                            ? original.getUser().getPosition().getPositionName()
+                            : "");
                     resp.setIsSubstitute(true);
                     resp.setSubstituteForParticipantId(original.getId());
                 }
@@ -410,7 +426,8 @@ public class MeetingParticipantService {
                 if (orig != null && orig.getUser() != null) {
                     resp.setSubstitutedForUserName(orig.getUser().getFullName());
                     resp.setSubstitutedForUserPosition(orig.getUser().getPosition() != null
-                            ? orig.getUser().getPosition().getPositionName() : "");
+                            ? orig.getUser().getPosition().getPositionName()
+                            : "");
                 }
             }
             guestResponses.add(resp);
@@ -490,10 +507,11 @@ public class MeetingParticipantService {
         }
 
         if (request.getInviteStatus() == InviteStatus.ACCEPTED) {
-            // Check trùng lịch bận (ACCEPTED ở cuộc họp APPROVED, UPCOMING, IN_PROGRESS khác)
+            // Check trùng lịch bận (ACCEPTED ở cuộc họp APPROVED, UPCOMING, IN_PROGRESS
+            // khác)
             boolean overlap = meetingParticipantRepository.hasOverlapConflict(
-                    userId, InviteStatus.ACCEPTED, meetingId, ACTIVE_MEETING_STATUSES, meeting.getStartTime(), meeting.getEndTime()
-            );
+                    userId, InviteStatus.ACCEPTED, meetingId, ACTIVE_MEETING_STATUSES, meeting.getStartTime(),
+                    meeting.getEndTime());
             if (overlap) {
                 throw new AppException(ErrorCode.MEETING_LOCATION_TIME_CONFLICT);
             }
@@ -505,12 +523,13 @@ public class MeetingParticipantService {
         if (oldStatus == InviteStatus.ACCEPTED && request.getInviteStatus() == InviteStatus.DECLINED) {
             // RÀNG BUỘC INVITE-06: Cảnh báo khi đại biểu "quay xe" từ ĐỒNG Ý sang TỪ CHỐI
             List<MeetingParticipant> chairs = meetingParticipantRepository.findByMeetingId(meetingId)
-                .stream()
-                .filter(p -> p.getParticipantRole() == ParticipantRole.CHAIR)
-                .collect(Collectors.toList());
+                    .stream()
+                    .filter(p -> p.getParticipantRole() == ParticipantRole.CHAIR)
+                    .collect(Collectors.toList());
 
-            String msg = String.format("Cảnh báo: Đại biểu %s đã đổi ý từ ĐỒNG Ý thành TỪ CHỐI tham dự cuộc họp \"%s\".", 
-                participant.getUser().getFullName(), meeting.getTitle());
+            String msg = String.format(
+                    "Cảnh báo: Đại biểu %s đã đổi ý từ ĐỒNG Ý thành TỪ CHỐI tham dự cuộc họp \"%s\".",
+                    participant.getUser().getFullName(), meeting.getTitle());
 
             for (MeetingParticipant chairObj : chairs) {
                 Notification notification = new Notification();
@@ -534,7 +553,7 @@ public class MeetingParticipantService {
             participant.getAbsentAgendaItemIds().clear();
             if (request.getAbsentAgendaItemIds() != null) {
                 participant.getAbsentAgendaItemIds().addAll(request.getAbsentAgendaItemIds());
-                
+
                 int totalItems = meeting.getAgendaItemList() != null ? meeting.getAgendaItemList().size() : 0;
                 if (totalItems > 0 && participant.getAbsentAgendaItemIds().size() >= totalItems) {
                     participant.setIsFullSession(true);
@@ -558,9 +577,10 @@ public class MeetingParticipantService {
                     participant.setSubstituteDepartment(null);
                     participant.setSubstituteCompany(null);
                 }
-                
+
                 // Auto register internal substitute as participant
-                MeetingParticipant substitutePart = meetingParticipantRepository.findByMeetingIdAndUserId(meetingId, request.getSubstituteUserId())
+                MeetingParticipant substitutePart = meetingParticipantRepository
+                        .findByMeetingIdAndUserId(meetingId, request.getSubstituteUserId())
                         .orElse(null);
                 if (substitutePart == null) {
                     substitutePart = new MeetingParticipant();
@@ -578,8 +598,10 @@ public class MeetingParticipantService {
                 if (substitutePart.getSendStatus() == null) {
                     if (substitute.getEmail() != null && !substitute.getEmail().isBlank()) {
                         try {
-                            String confirmUrl = backendUrl + "/meetings/public/rsvp/confirm?participantId=" + substitutePart.getId();
-                            invitationMailService.sendMeetingInvitation(meeting, substitute, meeting.getInvitationContent(), confirmUrl);
+                            String confirmUrl = backendUrl + "/meetings/public/rsvp/confirm?participantId="
+                                    + substitutePart.getId();
+                            invitationMailService.sendMeetingInvitation(meeting, substitute,
+                                    meeting.getInvitationContent(), confirmUrl);
                             substitutePart.setSendStatus(SendStatus.SENT);
                         } catch (Exception e) {
                             substitutePart.setSendStatus(SendStatus.FAILED);
@@ -598,7 +620,8 @@ public class MeetingParticipantService {
 
                 // Auto register external substitute as MeetingGuest if email is provided
                 if (request.getSubstituteEmail() != null && !request.getSubstituteEmail().isEmpty()) {
-                    MeetingGuest guest = meetingGuestRepository.findByMeetingIdAndEmail(meetingId, request.getSubstituteEmail())
+                    MeetingGuest guest = meetingGuestRepository
+                            .findByMeetingIdAndEmail(meetingId, request.getSubstituteEmail())
                             .orElse(null);
                     if (guest == null) {
                         guest = MeetingGuest.builder()
@@ -608,7 +631,8 @@ public class MeetingParticipantService {
                                 .phone(request.getSubstitutePhone())
                                 .company(request.getSubstituteCompany())
                                 .position(request.getSubstitutePosition())
-                                .description("Thay thế cho đại biểu " + (participant.getUser() != null ? participant.getUser().getFullName() : ""))
+                                .description("Thay thế cho đại biểu "
+                                        + (participant.getUser() != null ? participant.getUser().getFullName() : ""))
                                 .rsvpToken(UUID.randomUUID())
                                 .guestToken(null)
                                 .inviteStatus(InviteStatus.PENDING)
@@ -621,8 +645,10 @@ public class MeetingParticipantService {
                     if (guest.getId() == null) {
                         guest = meetingGuestRepository.save(guest);
                         try {
-                            String confirmUrl = backendUrl + "/meetings/public/rsvp/confirm?rsvpToken=" + guest.getRsvpToken();
-                            invitationMailService.sendGuestMeetingInvitation(meeting, guest, meeting.getInvitationContent(), confirmUrl);
+                            String confirmUrl = backendUrl + "/meetings/public/rsvp/confirm?rsvpToken="
+                                    + guest.getRsvpToken();
+                            invitationMailService.sendGuestMeetingInvitation(meeting, guest,
+                                    meeting.getInvitationContent(), confirmUrl);
                             guest.setSendStatus(SendStatus.SENT);
                         } catch (Exception e) {
                             guest.setSendStatus(SendStatus.FAILED);
@@ -634,7 +660,8 @@ public class MeetingParticipantService {
         } else {
             // Clean if ACCEPTED or PENDING
             // Revoke substitute role from linked participants/guests
-            List<MeetingParticipant> subsP = meetingParticipantRepository.findBySubstituteForParticipantId(participant.getId());
+            List<MeetingParticipant> subsP = meetingParticipantRepository
+                    .findBySubstituteForParticipantId(participant.getId());
             for (MeetingParticipant sub : subsP) {
                 sub.setIsSubstitute(false);
                 sub.setSubstituteForParticipantId(null);
@@ -689,8 +716,8 @@ public class MeetingParticipantService {
         if (request.getInviteStatus() == InviteStatus.ACCEPTED) {
             // Check trùng lịch bận cho khách theo Email
             boolean overlap = meetingGuestRepository.hasGuestOverlapConflict(
-                    guest.getEmail(), InviteStatus.ACCEPTED, meeting.getId(), ACTIVE_MEETING_STATUSES, meeting.getStartTime(), meeting.getEndTime()
-            );
+                    guest.getEmail(), InviteStatus.ACCEPTED, meeting.getId(), ACTIVE_MEETING_STATUSES,
+                    meeting.getStartTime(), meeting.getEndTime());
             if (overlap) {
                 throw new AppException(ErrorCode.MEETING_LOCATION_TIME_CONFLICT);
             }
@@ -721,9 +748,9 @@ public class MeetingParticipantService {
             throw new AppException(ErrorCode.MEETING_NOT_STARTED);
         }
 
-        if (meeting.getStatus() == MeetingStatus.CLOSED || 
-            meeting.getStatus() == MeetingStatus.CANCELLED ||
-            (meeting.getEndTime() != null && now.isAfter(meeting.getEndTime()))) {
+        if (meeting.getStatus() == MeetingStatus.CLOSED ||
+                meeting.getStatus() == MeetingStatus.CANCELLED ||
+                (meeting.getEndTime() != null && now.isAfter(meeting.getEndTime()))) {
             throw new AppException(ErrorCode.MEETING_ALREADY_CLOSED);
         }
     }
@@ -747,7 +774,8 @@ public class MeetingParticipantService {
 
         // Lấy toàn bộ tài liệu của cuộc họp này ra
         List<MeetingDocumentResponse> documents = documentService.getMeetingDocuments(guest.getMeeting().getId());
-        // Lọc bỏ các tài liệu mật (isConfidential = true) để khách mời không thể xem hoặc tải về
+        // Lọc bỏ các tài liệu mật (isConfidential = true) để khách mời không thể xem
+        // hoặc tải về
         return documents.stream()
                 .filter(doc -> doc.getIsConfidential() == null || !doc.getIsConfidential())
                 .collect(Collectors.toList());
@@ -761,8 +789,7 @@ public class MeetingParticipantService {
 
         validateGuestMeetingTimeAccess(guest);
 
-        DocumentVersion version =
-                documentService.getDocumentVersionForPublic(documentId, guest.getMeeting().getId());
+        DocumentVersion version = documentService.getDocumentVersionForPublic(documentId, guest.getMeeting().getId());
 
         InputStream stream = documentService.getFileStream(version.getStorageKey());
         Resource resource = new InputStreamResource(stream);
@@ -795,7 +822,8 @@ public class MeetingParticipantService {
     }
 
     @Transactional
-    public AttendeeResponse updateAttendanceStatus(UUID meetingId, UUID attendeeId, String type, UpdateAttendanceStatusRequest request) {
+    public AttendeeResponse updateAttendanceStatus(UUID meetingId, UUID attendeeId, String type,
+            UpdateAttendanceStatusRequest request) {
         Meeting meeting = getMeeting(meetingId);
 
         if (meeting.getStatus() == MeetingStatus.CLOSED || meeting.getStatus() == MeetingStatus.CANCELLED) {
@@ -821,7 +849,8 @@ public class MeetingParticipantService {
                 throw new AppException(ErrorCode.BAD_REQUEST);
             }
 
-            if (caller != null && participant.getUser() != null && caller.getId().equals(participant.getUser().getId())) {
+            if (caller != null && participant.getUser() != null
+                    && caller.getId().equals(participant.getUser().getId())) {
                 isSelfCheckin = true;
             }
         } else {
@@ -851,13 +880,15 @@ public class MeetingParticipantService {
                     participant.setInviteStatus(InviteStatus.ACCEPTED);
 
                     // Revoke substitute role from linked participants/guests
-                    List<MeetingParticipant> subsP = meetingParticipantRepository.findBySubstituteForParticipantId(participant.getId());
+                    List<MeetingParticipant> subsP = meetingParticipantRepository
+                            .findBySubstituteForParticipantId(participant.getId());
                     for (MeetingParticipant sub : subsP) {
                         sub.setIsSubstitute(false);
                         sub.setSubstituteForParticipantId(null);
                         meetingParticipantRepository.save(sub);
                     }
-                    List<MeetingGuest> subsG = meetingGuestRepository.findBySubstituteForParticipantId(participant.getId());
+                    List<MeetingGuest> subsG = meetingGuestRepository
+                            .findBySubstituteForParticipantId(participant.getId());
                     for (MeetingGuest sub : subsG) {
                         sub.setIsSubstitute(false);
                         sub.setSubstituteForParticipantId(null);
@@ -884,7 +915,8 @@ public class MeetingParticipantService {
 
             if (request.getAttendanceStatus() == AttendanceStatus.PRESENT) {
                 // Ghi nhận log điểm danh
-                AttendanceLog log = attendanceLogRepository.findByMeetingIdAndUserId(meetingId, participant.getUser().getId())
+                AttendanceLog log = attendanceLogRepository
+                        .findByMeetingIdAndUserId(meetingId, participant.getUser().getId())
                         .orElse(new AttendanceLog());
                 log.setMeeting(meeting);
                 log.setUser(participant.getUser());
@@ -903,9 +935,9 @@ public class MeetingParticipantService {
                                 "meetingId", String.valueOf(meetingId),
                                 "title", meeting.getTitle() != null ? meeting.getTitle() : "",
                                 "attendeeType", "INTERNAL",
-                                "attendeeName", participant.getUser().getFullName() != null ? participant.getUser().getFullName() : ""
-                        )
-                );
+                                "attendeeName",
+                                participant.getUser().getFullName() != null ? participant.getUser().getFullName()
+                                        : ""));
                 attendanceLogRepository.save(log);
             } else {
                 // Nếu đánh dấu vắng mặt/lý do khác, cập nhật log (nếu có)
@@ -916,8 +948,10 @@ public class MeetingParticipantService {
                         });
             }
 
-            // Gửi tin nhắn WebSocket để đồng bộ realtime danh sách điểm danh cho các client khác
-            webSocketNotificationService.sendToTopic("/topic/meeting/" + meetingId, Map.of("action", "REFRESH_ATTENDEES"));
+            // Gửi tin nhắn WebSocket để đồng bộ realtime danh sách điểm danh cho các client
+            // khác
+            webSocketNotificationService.sendToTopic("/topic/meeting/" + meetingId,
+                    Map.of("action", "REFRESH_ATTENDEES"));
 
             return enrichAttendeeResponse(meetingParticipantMapper.toAttendeeResponse(participant), participant);
 
@@ -954,21 +988,21 @@ public class MeetingParticipantService {
                                     "meetingId", String.valueOf(meetingId),
                                     "title", meeting.getTitle() != null ? meeting.getTitle() : "",
                                     "attendeeType", "EXTERNAL",
-                                    "attendeeName", guest.getFullName() != null ? guest.getFullName() : ""
-                            )
-                    );
+                                    "attendeeName", guest.getFullName() != null ? guest.getFullName() : ""));
                 }
                 attendanceLogRepository.save(log);
             } else {
-                 attendanceLogRepository.findByMeetingIdAndGuestId(meetingId, guest.getId())
+                attendanceLogRepository.findByMeetingIdAndGuestId(meetingId, guest.getId())
                         .ifPresent(log -> {
                             log.setStatus(request.getAttendanceStatus());
                             attendanceLogRepository.save(log);
                         });
             }
 
-            // Gửi tin nhắn WebSocket để đồng bộ realtime danh sách điểm danh cho các client khác
-            webSocketNotificationService.sendToTopic("/topic/meeting/" + meetingId, Map.of("action", "REFRESH_ATTENDEES"));
+            // Gửi tin nhắn WebSocket để đồng bộ realtime danh sách điểm danh cho các client
+            // khác
+            webSocketNotificationService.sendToTopic("/topic/meeting/" + meetingId,
+                    Map.of("action", "REFRESH_ATTENDEES"));
 
             return enrichAttendeeResponse(meetingGuestMapper.toAttendeeResponse(guest), guest);
         }
@@ -1013,15 +1047,17 @@ public class MeetingParticipantService {
             log.setRecordedBy(null); // Tự điểm danh
             attendanceLogRepository.save(log);
         } else {
-             attendanceLogRepository.findByMeetingIdAndGuestId(meeting.getId(), guest.getId())
+            attendanceLogRepository.findByMeetingIdAndGuestId(meeting.getId(), guest.getId())
                     .ifPresent(log -> {
                         log.setStatus(request.getAttendanceStatus());
                         attendanceLogRepository.save(log);
                     });
         }
 
-        // Gửi tin nhắn WebSocket để đồng bộ realtime danh sách điểm danh cho các client khác
-        webSocketNotificationService.sendToTopic("/topic/meeting/" + meeting.getId(), Map.of("action", "REFRESH_ATTENDEES"));
+        // Gửi tin nhắn WebSocket để đồng bộ realtime danh sách điểm danh cho các client
+        // khác
+        webSocketNotificationService.sendToTopic("/topic/meeting/" + meeting.getId(),
+                Map.of("action", "REFRESH_ATTENDEES"));
 
         return enrichAttendeeResponse(meetingGuestMapper.toAttendeeResponse(guest), guest);
     }
@@ -1040,14 +1076,17 @@ public class MeetingParticipantService {
                 throw new AppException(ErrorCode.BAD_REQUEST);
             }
 
-            // RÀNG BUỘC PARTICIPANT-06 & 07: Không cho phép xoá Chủ tọa (CHAIR) hoặc Thư ký (SECRETARY) cuối cùng của cuộc họp để tránh lỗi mồ côi
+            // RÀNG BUỘC PARTICIPANT-06 & 07: Không cho phép xoá Chủ tọa (CHAIR) hoặc Thư ký
+            // (SECRETARY) cuối cùng của cuộc họp để tránh lỗi mồ côi
             if (participant.getParticipantRole() == ParticipantRole.CHAIR) {
-                long chairCount = meetingParticipantRepository.countByMeetingIdAndParticipantRole(meetingId, ParticipantRole.CHAIR);
+                long chairCount = meetingParticipantRepository.countByMeetingIdAndParticipantRole(meetingId,
+                        ParticipantRole.CHAIR);
                 if (chairCount <= 1) {
                     throw new AppException(ErrorCode.MEETING_CHAIR_REQUIRED);
                 }
             } else if (participant.getParticipantRole() == ParticipantRole.SECRETARY) {
-                long secretaryCount = meetingParticipantRepository.countByMeetingIdAndParticipantRole(meetingId, ParticipantRole.SECRETARY);
+                long secretaryCount = meetingParticipantRepository.countByMeetingIdAndParticipantRole(meetingId,
+                        ParticipantRole.SECRETARY);
                 if (secretaryCount <= 1) {
                     throw new AppException(ErrorCode.MEETING_SECRETARY_REQUIRED);
                 }
@@ -1055,9 +1094,11 @@ public class MeetingParticipantService {
 
             meetingParticipantRepository.delete(participant);
 
-            // RÀNG BUỘC PARTICIPANT-12: Khi xoá đại biểu, thu hồi quyền biểu quyết (VoteEligibility) của họ đối với các biểu quyết chưa kết thúc
+            // RÀNG BUỘC PARTICIPANT-12: Khi xoá đại biểu, thu hồi quyền biểu quyết
+            // (VoteEligibility) của họ đối với các biểu quyết chưa kết thúc
             if (voteEligibilityRepository != null && participant.getUser() != null) {
-                voteEligibilityRepository.revokeVoteEligibility(meetingId, participant.getUser().getId(), "Đã bị loại khỏi cuộc họp");
+                voteEligibilityRepository.revokeVoteEligibility(meetingId, participant.getUser().getId(),
+                        "Đã bị loại khỏi cuộc họp");
             }
 
             auditLogPublisher.publish(
@@ -1065,8 +1106,7 @@ public class MeetingParticipantService {
                     AuditAction.REMOVE_PARTICIPANT,
                     ResourceType.PARTICIPANT,
                     attendeeId,
-                    Map.of("meetingId", String.valueOf(meetingId), "type", "INTERNAL")
-            );
+                    Map.of("meetingId", String.valueOf(meetingId), "type", "INTERNAL"));
         } else {
             MeetingGuest guest = meetingGuestRepository.findById(attendeeId)
                     .orElseThrow(() -> new AppException(ErrorCode.MEETING_PARTICIPANT_NOT_FOUND));
@@ -1082,8 +1122,7 @@ public class MeetingParticipantService {
                     AuditAction.REMOVE_PARTICIPANT,
                     ResourceType.PARTICIPANT,
                     attendeeId,
-                    Map.of("meetingId", String.valueOf(meetingId), "type", "GUEST")
-            );
+                    Map.of("meetingId", String.valueOf(meetingId), "type", "GUEST"));
         }
     }
 
@@ -1099,7 +1138,8 @@ public class MeetingParticipantService {
 
         boolean forceResend = Boolean.TRUE.equals(request.getForceResend());
 
-        // RÀNG BUỘC INVITE-03: Tính năng chống lưu nháp (dùng list user/guest mới nhất trong DB)
+        // RÀNG BUỘC INVITE-03: Tính năng chống lưu nháp (dùng list user/guest mới nhất
+        // trong DB)
         List<MeetingParticipant> participants = meetingParticipantRepository.findByMeetingId(meetingId);
         List<MeetingGuest> guests = meetingGuestRepository.findByMeetingId(meetingId);
 
@@ -1119,11 +1159,13 @@ public class MeetingParticipantService {
         User caller = currentUserService.getCurrentActiveUser();
 
         for (MeetingParticipant p : participants) {
-            // RÀNG BUỘC INVITE-02: Chống gửi lặp thư mời (ngoại trừ admin ép gửi lại - forceResend = true)
+            // RÀNG BUỘC INVITE-02: Chống gửi lặp thư mời (ngoại trừ admin ép gửi lại -
+            // forceResend = true)
             if (!forceResend) {
                 boolean alreadySent = meetingInvitationRepository.existsByMeetingIdAndInviteeUserIdAndSendStatus(
                         meetingId, p.getUser().getId(), SendStatus.SENT);
-                if (alreadySent) continue;
+                if (alreadySent)
+                    continue;
             }
 
             MeetingInvitation invitation = new MeetingInvitation();
@@ -1142,7 +1184,8 @@ public class MeetingParticipantService {
             if (!forceResend) {
                 boolean alreadySent = meetingInvitationRepository.existsByMeetingIdAndInviteeGuestIdAndSendStatus(
                         meetingId, g.getId(), SendStatus.SENT);
-                if (alreadySent) continue;
+                if (alreadySent)
+                    continue;
             }
 
             MeetingInvitation invitation = new MeetingInvitation();
@@ -1194,8 +1237,8 @@ public class MeetingParticipantService {
 
         // Check trùng lịch bận cho khách theo Email
         boolean overlap = meetingGuestRepository.hasGuestOverlapConflict(
-                guest.getEmail(), InviteStatus.ACCEPTED, meeting.getId(), ACTIVE_MEETING_STATUSES, meeting.getStartTime(), meeting.getEndTime()
-        );
+                guest.getEmail(), InviteStatus.ACCEPTED, meeting.getId(), ACTIVE_MEETING_STATUSES,
+                meeting.getStartTime(), meeting.getEndTime());
         if (overlap) {
             throw new AppException(ErrorCode.MEETING_LOCATION_TIME_CONFLICT);
         }
@@ -1312,10 +1355,13 @@ public class MeetingParticipantService {
                 throw new AppException(ErrorCode.BAD_REQUEST);
             }
 
-            if (participant.getUser() != null && participant.getUser().getEmail() != null && !participant.getUser().getEmail().isBlank()) {
+            if (participant.getUser() != null && participant.getUser().getEmail() != null
+                    && !participant.getUser().getEmail().isBlank()) {
                 try {
-                    String confirmUrl = backendUrl + "/meetings/public/rsvp/confirm?participantId=" + participant.getId();
-                    invitationMailService.sendMeetingInvitation(meeting, participant.getUser(), meeting.getInvitationContent(), confirmUrl);
+                    String confirmUrl = backendUrl + "/meetings/public/rsvp/confirm?participantId="
+                            + participant.getId();
+                    invitationMailService.sendMeetingInvitation(meeting, participant.getUser(),
+                            meeting.getInvitationContent(), confirmUrl);
                     participant.setSendStatus(SendStatus.SENT);
                 } catch (Exception e) {
                     participant.setSendStatus(SendStatus.FAILED);
@@ -1335,7 +1381,8 @@ public class MeetingParticipantService {
             if (guest.getEmail() != null && !guest.getEmail().isBlank()) {
                 try {
                     String confirmUrl = backendUrl + "/meetings/public/rsvp/confirm?rsvpToken=" + guest.getRsvpToken();
-                    invitationMailService.sendGuestMeetingInvitation(meeting, guest, meeting.getInvitationContent(), confirmUrl);
+                    invitationMailService.sendGuestMeetingInvitation(meeting, guest, meeting.getInvitationContent(),
+                            confirmUrl);
                     guest.setSendStatus(SendStatus.SENT);
                 } catch (Exception e) {
                     guest.setSendStatus(SendStatus.FAILED);
@@ -1374,9 +1421,11 @@ public class MeetingParticipantService {
 
         UUID departmentId = currentUser.getDepartment().getId();
         Integer currentUserRank = currentUser.getPosition() != null && currentUser.getPosition().getRankOrder() != null
-                ? currentUser.getPosition().getRankOrder() : Integer.MAX_VALUE;
+                ? currentUser.getPosition().getRankOrder()
+                : Integer.MAX_VALUE;
 
-        // Fetch all active users in the same department and its sub-departments recursively
+        // Fetch all active users in the same department and its sub-departments
+        // recursively
         List<UUID> deptIds = getAllSubDepartmentIds(departmentId);
         List<User> departmentUsers = userRepository.findByDepartmentIdInAndStatus(deptIds, UserStatus.ACTIVE);
 
@@ -1392,7 +1441,8 @@ public class MeetingParticipantService {
                 .filter(u -> !existingParticipantUserIds.contains(u.getId())) // exclude already invited
                 .filter(u -> {
                     Integer rank = u.getPosition() != null && u.getPosition().getRankOrder() != null
-                            ? u.getPosition().getRankOrder() : Integer.MAX_VALUE;
+                            ? u.getPosition().getRankOrder()
+                            : Integer.MAX_VALUE;
                     return rank >= currentUserRank; // equal or lower rank (larger rankOrder means lower rank)
                 })
                 .map(userMapper::toResponse)
@@ -1400,7 +1450,8 @@ public class MeetingParticipantService {
     }
 
     private AttendeeResponse enrichAttendeeResponse(AttendeeResponse resp, MeetingParticipant p) {
-        if (resp == null) return null;
+        if (resp == null)
+            return null;
         if (p.getSubstituteForParticipantId() != null) {
             meetingParticipantRepository.findById(p.getSubstituteForParticipantId()).ifPresent(orig -> {
                 if (orig.getUser() != null) {
@@ -1410,7 +1461,8 @@ public class MeetingParticipantService {
         }
         if (p.getAbsentAgendaItemIds() != null && !p.getAbsentAgendaItemIds().isEmpty() && p.getMeeting() != null) {
             Map<UUID, String> agendaTitles = p.getMeeting().getAgendaItemList().stream()
-                    .collect(Collectors.toMap(vn.acme.paperless_meeting.entity.AgendaItem::getId, vn.acme.paperless_meeting.entity.AgendaItem::getTitle, (e1, e2) -> e1));
+                    .collect(Collectors.toMap(vn.acme.paperless_meeting.entity.AgendaItem::getId,
+                            vn.acme.paperless_meeting.entity.AgendaItem::getTitle, (e1, e2) -> e1));
             java.util.Set<String> titles = p.getAbsentAgendaItemIds().stream()
                     .map(agendaTitles::get)
                     .filter(java.util.Objects::nonNull)
@@ -1421,7 +1473,8 @@ public class MeetingParticipantService {
     }
 
     private AttendeeResponse enrichAttendeeResponse(AttendeeResponse resp, MeetingGuest g) {
-        if (resp == null) return null;
+        if (resp == null)
+            return null;
         if (g.getSubstituteForParticipantId() != null) {
             meetingParticipantRepository.findById(g.getSubstituteForParticipantId()).ifPresent(orig -> {
                 if (orig.getUser() != null) {

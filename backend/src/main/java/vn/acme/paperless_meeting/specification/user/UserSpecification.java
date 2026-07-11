@@ -30,6 +30,8 @@ public class UserSpecification {
             // Tránh fetch join trong count query
             if (!Long.class.equals(query.getResultType())) {
                 root.fetch("position", JoinType.LEFT);
+                root.fetch("department", JoinType.LEFT);
+                root.fetch("role", JoinType.LEFT);
             }
             query.distinct(true);
 

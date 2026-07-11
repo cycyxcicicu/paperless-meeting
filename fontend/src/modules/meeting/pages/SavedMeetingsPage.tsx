@@ -21,6 +21,8 @@ interface SavedMeeting {
   locationName?: string;
   onlineLink?: string;
   status: string;
+  callerRole?: string;
+  callerInviteStatus?: string;
 }
 
 const STATUS_MAP: Record<string, { label: string; variant: "success" | "warning" | "info" | "default" | "destructive" | "secondary" }> = {
@@ -65,6 +67,8 @@ export default function SavedMeetingsPage() {
           locationName: m.locationName,
           onlineLink: m.onlineLink,
           status: m.status,
+          callerRole: m.callerRole,
+          callerInviteStatus: m.callerInviteStatus,
         }));
         setMeetings(list);
       }
@@ -245,7 +249,12 @@ export default function SavedMeetingsPage() {
                             <Eye className="w-3.5 h-3.5" />
                             <span>Xem</span>
                           </button>
-                          {m.status === 'IN_PROGRESS' && (
+                          {m.status === 'IN_PROGRESS' &&
+                            (m.callerRole === 'CREATOR' ||
+                              m.callerRole === 'SECRETARY' ||
+                              m.callerRole === 'CHAIR' ||
+                              m.callerRole === 'CHAIRPERSON' ||
+                              (!!m.callerInviteStatus && m.callerInviteStatus !== 'DECLINED')) && (
                             <button
                               onClick={() => navigate(`/phien-hop/${m.id}/dien-bien`)}
                               className="px-2 py-1 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 border border-emerald-100 rounded-lg transition-all flex items-center gap-1 text-xs font-semibold"

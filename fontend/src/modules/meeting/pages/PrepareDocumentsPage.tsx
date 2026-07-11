@@ -72,7 +72,7 @@ export default function PrepareDocumentsPage() {
               docs = docs.filter(doc => doc.createdByUserId === user?.id);
             }
 
-            updatedFiles[item.id] = docs.map(doc => ({
+            const serverFiles = docs.map(doc => ({
               id: doc.documentId,
               name: doc.fileName || doc.title || "Tài liệu",
               url: doc.fileUrl,
@@ -80,6 +80,14 @@ export default function PrepareDocumentsPage() {
               createdByUserId: doc.createdByUserId,
               createdByFullName: doc.createdByFullName
             }));
+
+            // Keep locally uploaded/unsaved files that are not yet on the server
+            const localFiles = prev[item.id] || [];
+            const unsavedLocalFiles = localFiles.filter(lDoc => 
+              lDoc && (lDoc instanceof File || !serverFiles.some(sDoc => sDoc.id === lDoc.id))
+            );
+
+            updatedFiles[item.id] = [...serverFiles, ...unsavedLocalFiles];
           });
           return updatedFiles;
         });
@@ -391,7 +399,14 @@ export default function PrepareDocumentsPage() {
                       feedbacks={item.feedbacks}
                       feedbackType="RESPONSE"
                       placeholder="Nhập ý kiến phản hồi hoặc câu hỏi của bạn..."
-                      onSuccess={() => loadData(true)}
+                      onSuccess={(updatedFeedbacks) => {
+                        setAgendaItems(prevItems => prevItems.map(prev => {
+                          if (prev.id === item.id) {
+                            return { ...prev, feedbacks: updatedFeedbacks };
+                          }
+                          return prev;
+                        }));
+                      }}
                     />
 
                     {/* File Uploader */}

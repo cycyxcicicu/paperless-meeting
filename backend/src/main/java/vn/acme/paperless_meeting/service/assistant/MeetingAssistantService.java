@@ -52,6 +52,9 @@ public class MeetingAssistantService {
             "Câu hỏi này nằm ngoài phạm vi hỗ trợ của trợ lý cuộc họp. Tôi chỉ có thể trả lời về thông tin của cuộc họp này.";
     private static final String OTHER_MEETING_ANSWER =
             "Tôi chỉ hỗ trợ thông tin của cuộc họp này, không thể trả lời về cuộc họp khác.";
+    private static final String GREETING_ANSWER =
+            "Xin chào! Tôi là trợ lý AI hỗ trợ thông tin cho cuộc họp này. Bạn có thể hỏi tôi về thành phần tham "
+                    + "dự, chương trình họp, tài liệu đính kèm, biểu quyết, ý kiến đóng góp... Bạn cần biết gì?";
     private static final String MODERATION_BLOCKED_ANSWER =
             "Vui lòng sử dụng ngôn từ lịch sự. Trợ lý không thể hỗ trợ nội dung này.";
     private static final String DEFAULT_CLARIFY_QUESTION = "Bạn có thể nói rõ hơn câu hỏi được không?";
@@ -124,6 +127,7 @@ public class MeetingAssistantService {
                         List.of(), false, start);
                 case OFF_TOPIC -> buildResponse(OFF_TOPIC_ANSWER, List.of(), true, start);
                 case OTHER_MEETING -> buildResponse(OTHER_MEETING_ANSWER, List.of(), true, start);
+                case GREETING -> buildResponse(GREETING_ANSWER, List.of(), false, start);
                 case ANSWER -> answerWithAgents(meetingId, caller.getId(), question, history, decision.agents, start);
             };
         }
@@ -189,6 +193,9 @@ public class MeetingAssistantService {
                 } else if (decision.intent == OrchestratorDecision.Intent.OTHER_MEETING) {
                     finalAnswer = OTHER_MEETING_ANSWER;
                     offTopic = true;
+                    emitDelta(emitter, finalAnswer);
+                } else if (decision.intent == OrchestratorDecision.Intent.GREETING) {
+                    finalAnswer = GREETING_ANSWER;
                     emitDelta(emitter, finalAnswer);
                 } else {
                     List<AgentType> types = resolveAgentTypes(decision.agents);

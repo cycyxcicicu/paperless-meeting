@@ -17,7 +17,8 @@ public class OrchestratorDecision {
         ANSWER,
         CLARIFY,
         OFF_TOPIC,
-        OTHER_MEETING
+        OTHER_MEETING,
+        GREETING
     }
 
     // Đặt TRƯỚC "intent" một cách có chủ ý: kỹ thuật Chain-of-Thought áp dụng cho
@@ -30,9 +31,11 @@ public class OrchestratorDecision {
     public String reasoning;
 
     @JsonPropertyDescription("Loại ý định của câu hỏi: ANSWER nếu có thể trả lời trong phạm vi cuộc họp này, "
-            + "CLARIFY nếu câu hỏi mơ hồ hoặc thiếu ngữ cảnh cần hỏi lại người dùng, OFF_TOPIC nếu câu hỏi ngoài "
-            + "phạm vi cuộc họp (thời tiết, chính trị, tán gẫu...), OTHER_MEETING nếu câu hỏi đề cập một cuộc họp "
-            + "khác không phải cuộc họp đang mở.")
+            + "CLARIFY nếu câu hỏi mơ hồ hoặc thiếu ngữ cảnh cần hỏi lại người dùng, GREETING nếu chỉ là lời "
+            + "chào/xã giao/cảm ơn/tạm biệt không hỏi thông tin gì cụ thể (vd: \"chào\", \"hi\", \"cảm ơn nhé\", "
+            + "\"bạn khỏe không\"), OFF_TOPIC nếu câu hỏi có nội dung cụ thể nhưng ngoài phạm vi cuộc họp (thời "
+            + "tiết, chính trị, tán gẫu...), OTHER_MEETING nếu câu hỏi đề cập một cuộc họp khác không phải cuộc "
+            + "họp đang mở.")
     public Intent intent;
 
     @JsonPropertyDescription("Danh sách agent chuyên trách cần gọi khi intent=ANSWER. Có thể chọn nhiều agent nếu "

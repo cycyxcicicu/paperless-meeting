@@ -59,9 +59,10 @@ public class MeetingController {
             @RequestParam(required = false) Boolean onlyMyMeetings,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime fromDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime toDate,
+            @RequestParam(required = false) Boolean approvedByMe,
             @PageableDefault(sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
 
-        PageResponse<MeetingResponse> response = meetingService.findAll(keyword, statuses, inviteStatus, onlyMyMeetings, fromDate, toDate, pageable);
+        PageResponse<MeetingResponse> response = meetingService.findAll(keyword, statuses, inviteStatus, onlyMyMeetings, fromDate, toDate, approvedByMe, pageable);
         return ResponseEntity.ok(ApiResponse.<PageResponse<MeetingResponse>>builder()
                 .success(true)
                 .data(response)

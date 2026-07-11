@@ -272,11 +272,7 @@ public class UserService {
 
         Page<User> page = userRepository.findAll(spec, pageable);
 
-        List<UUID> ids = page.getContent().stream().map(User::getId).toList();
-        List<User> usersWithDeps = ids.isEmpty() ? List.of() : userRepository.findByIdIn(ids);
-        var userById = usersWithDeps.stream().collect(Collectors.toMap(User::getId, u -> u));
-        List<UserResponse> content = ids.stream()
-                .map(userById::get)
+        List<UserResponse> content = page.getContent().stream()
                 .map(userMapper::toResponse)
                 .toList();
 
@@ -359,6 +355,13 @@ public class UserService {
         boolean isRegularUser = currentUserService.hasRole(RoleName.USER);
         boolean isSelfUpdate = caller.getId().equals(id);
 
+        if (request.getPassword() != null && !request.getPassword().isBlank()) {
+            if (isSelfUpdate) {
+                // Bảo mật: Ngăn chặn TẤT CẢ tự đổi mật khẩu qua luồng chung để lách mật khẩu cũ.
+                throw new AppException(ErrorCode.UNAUTHOZIZED);
+            }
+        }
+
         if (isRegularUser && !isSelfUpdate) {
             throw new AppException(ErrorCode.UNAUTHOZIZED);
         }
@@ -412,7 +415,12 @@ public class UserService {
         Position position = null;
         if (request.getPositionId() != null) {
             position = validatePosition(request.getPositionId(), department.getId());
-            validatePositionLimits(id, department, position);
+            
+            boolean isPositionChanged = user.getPosition() == null || !position.getId().equals(user.getPosition().getId());
+            boolean isDepartmentChanged = user.getDepartment() == null || !department.getId().equals(user.getDepartment().getId());
+            if (isPositionChanged || isDepartmentChanged) {
+                validatePositionLimits(id, department, position);
+            }
         } else if (!isDepartmentAdmin) {
             throw new AppException(ErrorCode.POSITION_ID_REQUIRED);
         }
@@ -447,11 +455,6 @@ public class UserService {
         user.setRole(role);
 
         if (request.getPassword() != null && !request.getPassword().isBlank()) {
-            if (isSelfUpdate) {
-                // Bảo mật: Ngăn chặn TẤT CẢ tự đổi mật khẩu qua luồng chung để lách mật khẩu
-                // cũ.
-                throw new AppException(ErrorCode.UNAUTHOZIZED);
-            }
             user.setPassword(passwordEncoder.encode(request.getPassword()));
             user.setIsFirstLogin(true); // Đánh dấu để ép user đổi lại mật khẩu
         }
@@ -528,7 +531,7 @@ public class UserService {
                     }
                 }
                 if (!isAllowed) {
-                    throw new AppException(ErrorCode.POSITION_DEPARTMENT_MISMATCH);
+                    throw new AppValidationException(Map.of("positionId", ErrorCode.POSITION_DEPARTMENT_MISMATCH.getMessage()));
                 }
             }
         }
@@ -585,14 +588,29 @@ public class UserService {
         List<UUID> allIds = new ArrayList<>();
         allIds.add(rootDeptId);
 
+        java.util.Set<UUID> visited = new java.util.HashSet<>();
+        visited.add(rootDeptId);
+
         List<UUID> current = List.of(rootDeptId);
         while (!current.isEmpty()) {
             List<UUID> childIds = departmentRepository.findIdsByParentDepartmentIdIn(current);
             if (childIds == null || childIds.isEmpty()) {
                 break;
             }
-            allIds.addAll(childIds);
-            current = childIds;
+            
+            List<UUID> newChildIds = new ArrayList<>();
+            for (UUID id : childIds) {
+                if (id != null && visited.add(id)) {
+                    newChildIds.add(id);
+                }
+            }
+            
+            if (newChildIds.isEmpty()) {
+                break;
+            }
+            
+            allIds.addAll(newChildIds);
+            current = newChildIds;
         }
         return allIds;
     }
@@ -637,8 +655,21 @@ public class UserService {
                     errors.put("positionId", "Đơn vị đã có Trưởng phòng/Đầu mối phụ trách (tối đa 1)");
                 }
                 break;
-            case DEPUTY_OF_DIVISION:
+            case DEPUTY_OF_DIVISION: {
                 int staffCount = (int) userRepository.countByDepartmentIdIn(List.of(department.getId()));
+                
+                // Nếu user chưa thuộc đơn vị mục tiêu này, sau khi chuyển/tạo quy mô đơn vị sẽ tăng thêm 1
+                if (userId != null) {
+                    boolean isCurrentlyInDept = userRepository.findById(userId)
+                            .map(u -> u.getDepartment() != null && department.getId().equals(u.getDepartment().getId()))
+                            .orElse(false);
+                    if (!isCurrentlyInDept) {
+                        staffCount += 1;
+                    }
+                } else {
+                    staffCount += 1;
+                }
+
                 int maxDeputies;
                 if (staffCount < 10) {
                     maxDeputies = 1;
@@ -653,8 +684,7 @@ public class UserService {
                             staffCount, maxDeputies));
                 }
                 break;
-            default:
-                break;
+            }
         }
 
         if (!errors.isEmpty()) {

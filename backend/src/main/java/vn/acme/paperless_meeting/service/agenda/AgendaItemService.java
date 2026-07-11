@@ -36,6 +36,7 @@ import vn.acme.paperless_meeting.entity.enums.AgendaItemStatus;
 import vn.acme.paperless_meeting.entity.enums.MeetingStatus;
 import vn.acme.paperless_meeting.entity.enums.MotionStatus;
 import vn.acme.paperless_meeting.entity.enums.MeetingDocumentUsageType;
+import vn.acme.paperless_meeting.entity.enums.ParticipantRole;
 import vn.acme.paperless_meeting.entity.AgendaItemFeedback;
 import vn.acme.paperless_meeting.dto.response.agenda.AgendaItemFeedbackResponse;
 import vn.acme.paperless_meeting.exceptions.AppException;
@@ -1049,8 +1050,12 @@ public class AgendaItemService {
     private AgendaItem getAgendaAndRequireCreator(UUID meetingId, UUID id) {
         Meeting meeting = getMeeting(meetingId);
         User caller = currentUserService.getCurrentActiveUser();
-        
-        if (meeting.getCreatedBy() == null || !meeting.getCreatedBy().getId().equals(caller.getId())) {
+
+        boolean isCreator = meeting.getCreatedBy() != null && meeting.getCreatedBy().getId().equals(caller.getId());
+        boolean isChair = meetingParticipantRepository.existsByMeetingIdAndUserIdAndParticipantRole(
+                meetingId, caller.getId(), ParticipantRole.CHAIR);
+        boolean isSuperAdmin = currentUserService.hasRole(RoleName.SUPER_ADMIN);
+        if (!isCreator && !isChair && !isSuperAdmin) {
             throw new AppException(ErrorCode.AGENDA_MODIFICATION_FORBIDDEN);
         }
         if (meeting.getStatus() != MeetingStatus.IN_PROGRESS) {

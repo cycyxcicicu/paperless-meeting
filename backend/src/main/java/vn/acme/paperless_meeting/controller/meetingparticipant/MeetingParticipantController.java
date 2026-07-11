@@ -163,7 +163,8 @@ public class MeetingParticipantController {
     }
 
     @Operation(summary = "Điểm danh người tham dự",
-               description = "Cập nhật PRESENT / ABSENT / LATE. Dùng ?type=attendee hoặc ?type=guest.")
+               description = "Cập nhật PRESENT / ABSENT / LATE. Dùng ?type=INTERNAL cho thành viên chính thức "
+                       + "hoặc ?type=guest cho khách mời.")
     @PutMapping("/{meetingId}/attendees/{attendeeId}/attendance")
     public ApiResponse<AttendeeResponse> updateAttendanceStatus(
             @PathVariable UUID meetingId, @PathVariable UUID attendeeId,

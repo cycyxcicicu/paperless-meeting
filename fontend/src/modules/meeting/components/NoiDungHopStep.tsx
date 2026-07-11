@@ -585,7 +585,8 @@ const NoiDungHopStep: React.FC<NoiDungHopStepProps> = ({
                 {/* Content Form */}
                 {activeContent && (
                     <div className="p-6 space-y-6 bg-white">
-                        {/* Header Form: Trạng thái */}
+                        {/* Header Form: Trạng thái - chỉ hiện khi đã gán người chuẩn bị */}
+                        {activeContent.nguoiChuanBi && (
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-gray-100 gap-3">
                             <div className="flex items-center gap-2">
                                 <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
@@ -624,6 +625,7 @@ const NoiDungHopStep: React.FC<NoiDungHopStepProps> = ({
                                 </span>
                             </div>
                         </div>
+                        )}
 
                         {/* Tiêu đề nội dung */}
                         <div className="space-y-2">

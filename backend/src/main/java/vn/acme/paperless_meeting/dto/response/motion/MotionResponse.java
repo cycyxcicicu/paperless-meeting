@@ -22,4 +22,7 @@ public class MotionResponse {
     private UUID createdByUserId;
     private String createdByFullName;
     private List<VoteOptionResponse> options;
+    private Integer durationMinutes;
+    private Long timeLeftSeconds;
 }
+

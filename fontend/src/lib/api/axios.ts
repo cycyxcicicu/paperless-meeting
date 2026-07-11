@@ -62,7 +62,10 @@ api.interceptors.response.use(
       }
 
       // Handle 401 Unauthorized for Silent Refresh
-      if (status === 401 && originalRequest && !originalRequest.headers.get('x-no-retry')) {
+      const requestUrl = originalRequest?.url ?? '';
+      const isAuthEndpoint = requestUrl.includes('/auth/login') || requestUrl.includes('/auth/refresh');
+
+      if (status === 401 && originalRequest && !isAuthEndpoint && !originalRequest.headers.get('x-no-retry')) {
         if (isRefreshing) {
           return new Promise((resolve, reject) => {
             failedQueue.push({ resolve, reject });

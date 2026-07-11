@@ -359,6 +359,9 @@ public class ApprovalService {
                 Meeting meeting = getMeeting(resourceId);
                 meeting.setStatus(MeetingStatus.PENDING_APPROVAL);
                 meeting.setRejectReason(null);
+                // Xóa thông tin người phê duyệt cũ khi gửi lại phê duyệt
+                meeting.setApprovedBy(null);
+                meeting.setApprovedAt(null);
                 meetingRepository.save(meeting);
             }
             case DOCUMENT -> {

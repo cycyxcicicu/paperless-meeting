@@ -37,8 +37,8 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const filteredOptions = options.filter(opt => 
-    opt.label.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredOptions = options.filter(opt =>
+    (opt.label ?? '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const selectedOption = options.find((opt) => opt.value === value);

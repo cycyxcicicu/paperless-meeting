@@ -124,8 +124,7 @@ public class MeetingService {
             MeetingStatus.APPROVED, MeetingStatus.UPCOMING, MeetingStatus.PENDING_APPROVAL);
 
     static final Set<MeetingStatus> CAN_EDIT_STATUSES = Set.of(
-            MeetingStatus.DRAFT, MeetingStatus.REJECTED, MeetingStatus.PENDING_APPROVAL, MeetingStatus.APPROVED,
-            MeetingStatus.UPCOMING);
+            MeetingStatus.DRAFT, MeetingStatus.REJECTED);
 
     private boolean isLeader(User user) {
         if (user == null || user.getPosition() == null)
@@ -168,7 +167,7 @@ public class MeetingService {
     @Transactional(readOnly = true)
     public PageResponse<MeetingResponse> findAll(String keyword, List<MeetingStatus> statuses,
             InviteStatus inviteStatus, Boolean onlyMyMeetings, LocalDateTime fromDate, LocalDateTime toDate,
-            Pageable pageable) {
+            Boolean approvedByMe, Pageable pageable) {
         User caller = currentUserService.getCurrentActiveUser();
         boolean isSuperAdmin = currentUserService.hasRole(RoleName.SUPER_ADMIN);
         boolean isDeptAdmin = currentUserService.hasRole(RoleName.DEPARTMENT_ADMIN);
@@ -179,7 +178,7 @@ public class MeetingService {
         }
 
         Specification<Meeting> spec = MeetingSpecification.build(keyword, null, statuses, fromDate, toDate,
-                allowedDeptIds, caller.getId(), isSuperAdmin, isDeptAdmin, onlyMyMeetings, inviteStatus);
+                allowedDeptIds, caller.getId(), isSuperAdmin, isDeptAdmin, onlyMyMeetings, inviteStatus, approvedByMe);
         Page<Meeting> page = meetingRepository.findAll(spec, pageable);
 
         return toPageResponse(page);
@@ -236,7 +235,7 @@ public class MeetingService {
         }
 
         Specification<Meeting> spec = MeetingSpecification.build(null, null, statuses, fromDate, toDate, allowedDeptIds,
-                caller.getId(), isSuperAdmin, isDeptAdmin, onlyMyMeetings, null);
+                caller.getId(), isSuperAdmin, isDeptAdmin, onlyMyMeetings, null, null);
         List<Meeting> meetings = meetingRepository.findAll(spec);
 
         List<UUID> meetingIds = meetings.stream().map(Meeting::getId).toList();
@@ -395,6 +394,19 @@ public class MeetingService {
 
         User caller = currentUserService.getCurrentActiveUser();
 
+        // Kiểm tra trùng lịch của Thư ký (người tạo cuộc họp)
+        boolean creatorOverlap = meetingParticipantRepository.hasOverlapConflict(
+                caller.getId(),
+                InviteStatus.ACCEPTED,
+                UUID.randomUUID(),
+                List.of(MeetingStatus.APPROVED, MeetingStatus.UPCOMING, MeetingStatus.IN_PROGRESS),
+                request.getStartTime(),
+                request.getEndTime()
+        );
+        if (creatorOverlap) {
+            throw new AppException(ErrorCode.MEETING_LOCATION_TIME_CONFLICT);
+        }
+
         Department department = getDepartment(request.getDepartmentId());
         Location location = getLocation(request.getLocationId());
 
@@ -438,6 +450,21 @@ public class MeetingService {
 
         validateMeetingTime(request);
         validateLocationConflict(id, request.getLocationId(), request.getStartTime(), request.getEndTime());
+
+        // Kiểm tra trùng lịch của Thư ký (người tạo cuộc họp)
+        if (meeting.getCreatedBy() != null) {
+            boolean creatorOverlap = meetingParticipantRepository.hasOverlapConflict(
+                    meeting.getCreatedBy().getId(),
+                    InviteStatus.ACCEPTED,
+                    id,
+                    List.of(MeetingStatus.APPROVED, MeetingStatus.UPCOMING, MeetingStatus.IN_PROGRESS),
+                    request.getStartTime(),
+                    request.getEndTime()
+            );
+            if (creatorOverlap) {
+                throw new AppException(ErrorCode.MEETING_LOCATION_TIME_CONFLICT);
+            }
+        }
 
         Department department = getDepartment(request.getDepartmentId());
         Location location = getLocation(request.getLocationId());
@@ -879,7 +906,7 @@ public class MeetingService {
 
         List<MeetingParticipant> participants = meetingParticipantRepository.findByMeetingId(meeting.getId());
         String chairs = participants.stream()
-                .filter(p -> p.getParticipantRole() == ParticipantRole.CHAIR)
+                .filter(p -> p.getParticipantRole() == ParticipantRole.CHAIR && p.getUser() != null)
                 .map(p -> p.getUser().getFullName())
                 .collect(Collectors.joining(", "));
         resp.setChairName(chairs.isEmpty() ? null : chairs);
@@ -1035,7 +1062,7 @@ public class MeetingService {
         participantOpt.ifPresent(p -> resp.setCallerInviteStatus(p.getInviteStatus()));
 
         String chairs = participants.stream()
-                .filter(p -> p.getParticipantRole() == ParticipantRole.CHAIR)
+                .filter(p -> p.getParticipantRole() == ParticipantRole.CHAIR && p.getUser() != null)
                 .map(p -> p.getUser().getFullName())
                 .collect(Collectors.joining(", "));
         resp.setChairName(chairs.isEmpty() ? null : chairs);

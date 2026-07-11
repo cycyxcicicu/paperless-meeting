@@ -3,9 +3,12 @@ package vn.acme.paperless_meeting.service.speaker;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,33 +23,30 @@ import vn.acme.paperless_meeting.dto.response.speaker.SpeakerQueueResponse;
 import vn.acme.paperless_meeting.dto.response.speaker.SpeakerTurnResponse;
 import vn.acme.paperless_meeting.entity.AgendaItem;
 import vn.acme.paperless_meeting.entity.Meeting;
+import vn.acme.paperless_meeting.entity.MeetingGuest;
+import vn.acme.paperless_meeting.entity.MeetingParticipant;
 import vn.acme.paperless_meeting.entity.SpeakerQueue;
 import vn.acme.paperless_meeting.entity.SpeakerTurn;
 import vn.acme.paperless_meeting.entity.User;
+import vn.acme.paperless_meeting.entity.enums.AgendaItemStatus;
+import vn.acme.paperless_meeting.entity.enums.AttendanceStatus;
+import vn.acme.paperless_meeting.entity.enums.AuditAction;
+import vn.acme.paperless_meeting.entity.enums.InviteStatus;
 import vn.acme.paperless_meeting.entity.enums.MeetingStatus;
 import vn.acme.paperless_meeting.entity.enums.ParticipantRole;
-import vn.acme.paperless_meeting.entity.enums.AgendaItemStatus;
+import vn.acme.paperless_meeting.entity.enums.ResourceType;
 import vn.acme.paperless_meeting.entity.enums.SpeakerQueuePriority;
 import vn.acme.paperless_meeting.entity.enums.SpeakerQueueStatus;
-import vn.acme.paperless_meeting.entity.enums.AuditAction;
-import vn.acme.paperless_meeting.entity.enums.ResourceType;
 import vn.acme.paperless_meeting.event.audit.AuditLogPublisher;
-import java.util.Map;
 import vn.acme.paperless_meeting.exceptions.AppException;
 import vn.acme.paperless_meeting.exceptions.ErrorCode;
 import vn.acme.paperless_meeting.repository.AgendaItemRepository;
+import vn.acme.paperless_meeting.repository.MeetingGuestRepository;
 import vn.acme.paperless_meeting.repository.MeetingParticipantRepository;
 import vn.acme.paperless_meeting.repository.MeetingRepository;
-import vn.acme.paperless_meeting.repository.MeetingGuestRepository;
 import vn.acme.paperless_meeting.repository.SpeakerQueueRepository;
 import vn.acme.paperless_meeting.repository.SpeakerTurnRepository;
 import vn.acme.paperless_meeting.repository.UserRepository;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.Lazy;
-import vn.acme.paperless_meeting.entity.MeetingGuest;
-import vn.acme.paperless_meeting.entity.MeetingParticipant;
-import vn.acme.paperless_meeting.entity.enums.InviteStatus;
-import vn.acme.paperless_meeting.entity.enums.AttendanceStatus;
 import vn.acme.paperless_meeting.service.auth.CurrentUserService;
 import vn.acme.paperless_meeting.service.meeting.MeetingService;
 import vn.acme.paperless_meeting.service.websocket.WebSocketNotificationService;
@@ -80,10 +80,12 @@ public class SpeakerService {
     private void checkIsChairOrSecretary(UUID meetingId, UUID userId) {
         boolean isChair = meetingParticipantRepository.existsByMeetingIdAndUserIdAndParticipantRole(
                 meetingId, userId, ParticipantRole.CHAIR);
-        if (isChair) return;
+        if (isChair)
+            return;
         boolean isSecretary = meetingParticipantRepository.existsByMeetingIdAndUserIdAndParticipantRole(
                 meetingId, userId, ParticipantRole.SECRETARY);
-        if (isSecretary) return;
+        if (isSecretary)
+            return;
         throw new AppException(ErrorCode.UNAUTHOZIZED);
     }
 
@@ -105,11 +107,12 @@ public class SpeakerService {
     public SpeakerQueueResponse requestToSpeak(UUID meetingId, UUID agendaItemId) {
         Meeting meeting = meetingRepository.findById(meetingId)
                 .orElseThrow(() -> new AppException(ErrorCode.MEETING_NOT_EXIST));
-        
+
         checkMeetingInProgress(meeting);
 
         User caller = currentUserService.getCurrentActiveUser();
-        MeetingParticipant participant = meetingParticipantRepository.findByMeetingIdAndUserId(meetingId, caller.getId())
+        MeetingParticipant participant = meetingParticipantRepository
+                .findByMeetingIdAndUserId(meetingId, caller.getId())
                 .orElseThrow(() -> new AppException(ErrorCode.UNAUTHOZIZED));
         if (participant.getAttendanceStatus() != AttendanceStatus.PRESENT) {
             throw new AppException(ErrorCode.PARTICIPANT_NOT_PRESENT);
@@ -136,7 +139,7 @@ public class SpeakerService {
         if (participant.getInviteStatus() == InviteStatus.DECLINED) {
             if (participant.getIsFullSession() == null || participant.getIsFullSession()) {
                 isAbsent = true;
-            } else if (agendaItem != null && participant.getAbsentAgendaItemIds() != null 
+            } else if (agendaItem != null && participant.getAbsentAgendaItemIds() != null
                     && participant.getAbsentAgendaItemIds().contains(agendaItem.getId())) {
                 isAbsent = true;
             }
@@ -147,14 +150,15 @@ public class SpeakerService {
 
         // If substitute, verify original delegate is absent for this agenda item
         if (Boolean.TRUE.equals(participant.getIsSubstitute()) && participant.getSubstituteForParticipantId() != null) {
-            MeetingParticipant originalParticipant = meetingParticipantRepository.findById(participant.getSubstituteForParticipantId())
+            MeetingParticipant originalParticipant = meetingParticipantRepository
+                    .findById(participant.getSubstituteForParticipantId())
                     .orElseThrow(() -> new AppException(ErrorCode.MEETING_PARTICIPANT_NOT_FOUND));
 
             boolean originalAbsent = false;
             if (originalParticipant.getInviteStatus() == InviteStatus.DECLINED) {
                 if (originalParticipant.getIsFullSession() == null || originalParticipant.getIsFullSession()) {
                     originalAbsent = true;
-                } else if (agendaItem != null && originalParticipant.getAbsentAgendaItemIds() != null 
+                } else if (agendaItem != null && originalParticipant.getAbsentAgendaItemIds() != null
                         && originalParticipant.getAbsentAgendaItemIds().contains(agendaItem.getId())) {
                     originalAbsent = true;
                 }
@@ -173,7 +177,9 @@ public class SpeakerService {
             throw new AppException(ErrorCode.BAD_REQUEST);
         }
 
-        long count = speakerQueueRepository.findByMeetingIdAndQueueStatusOrderBySortOrderAscRequestedAtAsc(meetingId, SpeakerQueueStatus.QUEUED).size();
+        long count = speakerQueueRepository
+                .findByMeetingIdAndQueueStatusOrderBySortOrderAscRequestedAtAsc(meetingId, SpeakerQueueStatus.QUEUED)
+                .size();
 
         SpeakerQueue queue = new SpeakerQueue();
         queue.setMeeting(meeting);
@@ -183,7 +189,7 @@ public class SpeakerService {
         queue.setPriority(SpeakerQueuePriority.NORMAL);
         queue.setSortOrder((int) count + 1);
         queue.setQueueStatus(SpeakerQueueStatus.QUEUED);
-        
+
         queue = speakerQueueRepository.save(queue);
 
         auditLogPublisher.publish(
@@ -192,11 +198,10 @@ public class SpeakerService {
                 ResourceType.SPEAKER,
                 queue.getId(),
                 Map.of(
-                        "meetingId", String.valueOf(meetingId)
-                )
-        );
+                        "meetingId", String.valueOf(meetingId)));
 
-        webSocketNotificationService.sendToTopic("/topic/meeting/" + meetingId + "/speakers", Map.of("action", "REFRESH"));
+        webSocketNotificationService.sendToTopic("/topic/meeting/" + meetingId + "/speakers",
+                Map.of("action", "REFRESH"));
 
         return mapToQueueResponse(queue);
     }
@@ -206,16 +211,16 @@ public class SpeakerService {
     public void rejectOrCancelRequest(UUID meetingId, UUID queueId) {
         SpeakerQueue queue = speakerQueueRepository.findById(queueId)
                 .orElseThrow(() -> new AppException(ErrorCode.BAD_REQUEST));
-        
+
         User caller = currentUserService.getCurrentActiveUser();
-        
+
         if (queue.getUser() == null || !queue.getUser().getId().equals(caller.getId())) {
             checkIsChairOrSecretary(meetingId, caller.getId());
             queue.setQueueStatus(SpeakerQueueStatus.REJECTED);
         } else {
             queue.setQueueStatus(SpeakerQueueStatus.CANCELLED);
         }
-        
+
         speakerQueueRepository.save(queue);
 
         auditLogPublisher.publish(
@@ -225,11 +230,10 @@ public class SpeakerService {
                 queue.getId(),
                 Map.of(
                         "meetingId", String.valueOf(meetingId),
-                        "status", String.valueOf(queue.getQueueStatus())
-                )
-        );
+                        "status", String.valueOf(queue.getQueueStatus())));
 
-        webSocketNotificationService.sendToTopic("/topic/meeting/" + meetingId + "/speakers", Map.of("action", "REFRESH"));
+        webSocketNotificationService.sendToTopic("/topic/meeting/" + meetingId + "/speakers",
+                Map.of("action", "REFRESH"));
     }
 
     // 3. Lấy danh sách hàng chờ (tất cả mọi người trong cuộc họp có thể xem)
@@ -241,22 +245,27 @@ public class SpeakerService {
                     .orElseThrow(() -> new AppException(ErrorCode.MEETING_NOT_EXIST));
             meetingService.requireViewPermission(meeting);
         }
-        
+
         List<SpeakerQueue> list;
         if (status != null) {
-            list = speakerQueueRepository.findByMeetingIdAndQueueStatusOrderBySortOrderAscRequestedAtAsc(meetingId, status);
+            list = speakerQueueRepository.findByMeetingIdAndQueueStatusOrderBySortOrderAscRequestedAtAsc(meetingId,
+                    status);
         } else {
             list = speakerQueueRepository.findByMeetingId(meetingId);
             list.sort((a, b) -> {
-                boolean activeA = a.getQueueStatus() == SpeakerQueueStatus.QUEUED || a.getQueueStatus() == SpeakerQueueStatus.SPEAKING;
-                boolean activeB = b.getQueueStatus() == SpeakerQueueStatus.QUEUED || b.getQueueStatus() == SpeakerQueueStatus.SPEAKING;
+                boolean activeA = a.getQueueStatus() == SpeakerQueueStatus.QUEUED
+                        || a.getQueueStatus() == SpeakerQueueStatus.SPEAKING;
+                boolean activeB = b.getQueueStatus() == SpeakerQueueStatus.QUEUED
+                        || b.getQueueStatus() == SpeakerQueueStatus.SPEAKING;
                 if (activeA && activeB) {
                     if (a.getSortOrder() != null && b.getSortOrder() != null) {
                         return a.getSortOrder().compareTo(b.getSortOrder());
                     }
                 }
-                if (activeA) return -1;
-                if (activeB) return 1;
+                if (activeA)
+                    return -1;
+                if (activeB)
+                    return 1;
                 if (a.getRequestedAt() != null && b.getRequestedAt() != null) {
                     return b.getRequestedAt().compareTo(a.getRequestedAt());
                 }
@@ -272,8 +281,9 @@ public class SpeakerService {
         User caller = currentUserService.getCurrentActiveUser();
         checkIsChairOrSecretary(meetingId, caller.getId());
 
-        List<SpeakerQueue> currentQueue = speakerQueueRepository.findByMeetingIdAndQueueStatusOrderBySortOrderAscRequestedAtAsc(meetingId, SpeakerQueueStatus.QUEUED);
-        
+        List<SpeakerQueue> currentQueue = speakerQueueRepository
+                .findByMeetingIdAndQueueStatusOrderBySortOrderAscRequestedAtAsc(meetingId, SpeakerQueueStatus.QUEUED);
+
         int order = 1;
         for (UUID id : request.getQueueIds()) {
             for (SpeakerQueue q : currentQueue) {
@@ -291,11 +301,10 @@ public class SpeakerService {
                 ResourceType.SPEAKER,
                 meetingId,
                 Map.of(
-                        "meetingId", String.valueOf(meetingId)
-                )
-        );
+                        "meetingId", String.valueOf(meetingId)));
 
-        webSocketNotificationService.sendToTopic("/topic/meeting/" + meetingId + "/speakers", Map.of("action", "REFRESH"));
+        webSocketNotificationService.sendToTopic("/topic/meeting/" + meetingId + "/speakers",
+                Map.of("action", "REFRESH"));
     }
 
     // 4.5. Chủ trì yêu cầu chuẩn bị phát biểu
@@ -322,9 +331,8 @@ public class SpeakerService {
                         "queueId", queue.getId().toString(),
                         "userId", queue.getUser() != null ? queue.getUser().getId().toString() : "",
                         "guestId", queue.getGuest() != null ? queue.getGuest().getId().toString() : "",
-                        "userName", queue.getUser() != null ? queue.getUser().getFullName() : queue.getGuest().getFullName()
-                )
-        );
+                        "userName",
+                        queue.getUser() != null ? queue.getUser().getFullName() : queue.getGuest().getFullName()));
     }
 
     // 5. Đồng ý cho người trong queue phát biểu
@@ -346,11 +354,12 @@ public class SpeakerService {
         }
 
         // Check if someone is already speaking
-        boolean isSomeoneSpeaking = speakerQueueRepository.existsByMeetingIdAndQueueStatus(meetingId, SpeakerQueueStatus.SPEAKING);
+        boolean isSomeoneSpeaking = speakerQueueRepository.existsByMeetingIdAndQueueStatus(meetingId,
+                SpeakerQueueStatus.SPEAKING);
         if (isSomeoneSpeaking) {
             throw new AppException(ErrorCode.SPEAKER_ALREADY_SPEAKING);
         }
-        
+
         queue.setQueueStatus(SpeakerQueueStatus.SPEAKING);
         speakerQueueRepository.save(queue);
 
@@ -371,11 +380,10 @@ public class SpeakerService {
                 Map.of(
                         "meetingId", String.valueOf(meetingId),
                         "userId", String.valueOf(queue.getUser().getId()),
-                        "durationSeconds", String.valueOf(turn.getDurationSeconds())
-                )
-        );
+                        "durationSeconds", String.valueOf(turn.getDurationSeconds())));
 
-        webSocketNotificationService.sendToTopic("/topic/meeting/" + meetingId + "/speakers", Map.of("action", "REFRESH"));
+        webSocketNotificationService.sendToTopic("/topic/meeting/" + meetingId + "/speakers",
+                Map.of("action", "REFRESH"));
 
         return mapToTurnResponse(turn);
     }
@@ -388,7 +396,7 @@ public class SpeakerService {
 
         Meeting meeting = meetingRepository.findById(meetingId)
                 .orElseThrow(() -> new AppException(ErrorCode.MEETING_NOT_EXIST));
-        
+
         UUID targetId = request.getUserId();
         User targetUser = userRepository.findById(targetId).orElse(null);
         MeetingGuest targetGuest = null;
@@ -408,7 +416,8 @@ public class SpeakerService {
         }
 
         // Check if there is already an active speaker in the meeting
-        boolean isSomeoneSpeaking = speakerQueueRepository.existsByMeetingIdAndQueueStatus(meetingId, SpeakerQueueStatus.SPEAKING);
+        boolean isSomeoneSpeaking = speakerQueueRepository.existsByMeetingIdAndQueueStatus(meetingId,
+                SpeakerQueueStatus.SPEAKING);
 
         SpeakerQueue queue = new SpeakerQueue();
         queue.setMeeting(meeting);
@@ -416,8 +425,11 @@ public class SpeakerService {
         queue.setPriority(SpeakerQueuePriority.NORMAL);
 
         if (isSomeoneSpeaking) {
-            List<SpeakerQueue> currentQueue = speakerQueueRepository.findByMeetingIdAndQueueStatusOrderBySortOrderAscRequestedAtAsc(meetingId, SpeakerQueueStatus.QUEUED);
-            int nextSortOrder = currentQueue.isEmpty() ? 1 : currentQueue.get(currentQueue.size() - 1).getSortOrder() + 1;
+            List<SpeakerQueue> currentQueue = speakerQueueRepository
+                    .findByMeetingIdAndQueueStatusOrderBySortOrderAscRequestedAtAsc(meetingId,
+                            SpeakerQueueStatus.QUEUED);
+            int nextSortOrder = currentQueue.isEmpty() ? 1
+                    : currentQueue.get(currentQueue.size() - 1).getSortOrder() + 1;
             queue.setSortOrder(nextSortOrder);
             queue.setQueueStatus(SpeakerQueueStatus.QUEUED);
         } else {
@@ -438,13 +450,13 @@ public class SpeakerService {
 
         if (targetUser != null) {
             responseBuilder.userId(targetUser.getId())
-                           .userName(targetUser.getFullName())
-                           .avatarUrl(targetUser.getAvatar())
-                           .isGuestSubstitute(false);
+                    .userName(targetUser.getFullName())
+                    .avatarUrl(targetUser.getAvatar())
+                    .isGuestSubstitute(false);
         } else {
             responseBuilder.guestId(targetGuest.getId())
-                           .userName(targetGuest.getFullName())
-                           .isGuestSubstitute(true);
+                    .userName(targetGuest.getFullName())
+                    .isGuestSubstitute(true);
         }
 
         if (!isSomeoneSpeaking) {
@@ -461,8 +473,8 @@ public class SpeakerService {
             turn = speakerTurnRepository.save(turn);
 
             responseBuilder.id(turn.getId())
-                           .startAt(turn.getStartAt())
-                           .durationSeconds(turn.getDurationSeconds());
+                    .startAt(turn.getStartAt())
+                    .durationSeconds(turn.getDurationSeconds());
 
             auditLogPublisher.publish(
                     caller,
@@ -472,9 +484,7 @@ public class SpeakerService {
                     Map.of(
                             "meetingId", String.valueOf(meetingId),
                             "userId", String.valueOf(targetUser != null ? targetUser.getId() : targetGuest.getId()),
-                            "durationSeconds", String.valueOf(turn.getDurationSeconds())
-                    )
-            );
+                            "durationSeconds", String.valueOf(turn.getDurationSeconds())));
         } else {
             auditLogPublisher.publish(
                     caller,
@@ -483,12 +493,11 @@ public class SpeakerService {
                     queue.getId(),
                     Map.of(
                             "meetingId", String.valueOf(meetingId),
-                            "userId", String.valueOf(targetUser != null ? targetUser.getId() : targetGuest.getId())
-                    )
-            );
+                            "userId", String.valueOf(targetUser != null ? targetUser.getId() : targetGuest.getId())));
         }
 
-        webSocketNotificationService.sendToTopic("/topic/meeting/" + meetingId + "/speakers", Map.of("action", "REFRESH"));
+        webSocketNotificationService.sendToTopic("/topic/meeting/" + meetingId + "/speakers",
+                Map.of("action", "REFRESH"));
 
         return responseBuilder.build();
     }
@@ -506,7 +515,7 @@ public class SpeakerService {
         if (!turn.getMeeting().getId().equals(meetingId)) {
             throw new AppException(ErrorCode.BAD_REQUEST);
         }
-        
+
         if (turn.getEndAt() == null) {
             turn.setEndAt(LocalDateTime.now());
             // Cập nhật lại durationSeconds thành thời lượng thực tế
@@ -515,7 +524,9 @@ public class SpeakerService {
             speakerTurnRepository.save(turn);
 
             // Tìm SpeakerQueue tương ứng để update DONE
-            List<SpeakerQueue> speakingQueueList = speakerQueueRepository.findByMeetingIdAndQueueStatusOrderBySortOrderAscRequestedAtAsc(meetingId, SpeakerQueueStatus.SPEAKING);
+            List<SpeakerQueue> speakingQueueList = speakerQueueRepository
+                    .findByMeetingIdAndQueueStatusOrderBySortOrderAscRequestedAtAsc(meetingId,
+                            SpeakerQueueStatus.SPEAKING);
             for (SpeakerQueue q : speakingQueueList) {
                 boolean match = false;
                 if (q.getUser() != null && turn.getUser() != null) {
@@ -529,7 +540,7 @@ public class SpeakerService {
                 }
             }
         }
-        
+
         auditLogPublisher.publish(
                 caller,
                 AuditAction.STOP_SPEAKER_TURN,
@@ -537,12 +548,12 @@ public class SpeakerService {
                 turn.getId(),
                 Map.of(
                         "meetingId", String.valueOf(meetingId),
-                        "userId", String.valueOf(turn.getUser() != null ? turn.getUser().getId() : turn.getGuest().getId()),
-                        "actualSeconds", String.valueOf(turn.getDurationSeconds())
-                )
-        );
+                        "userId",
+                        String.valueOf(turn.getUser() != null ? turn.getUser().getId() : turn.getGuest().getId()),
+                        "actualSeconds", String.valueOf(turn.getDurationSeconds())));
 
-        webSocketNotificationService.sendToTopic("/topic/meeting/" + meetingId + "/speakers", Map.of("action", "REFRESH"));
+        webSocketNotificationService.sendToTopic("/topic/meeting/" + meetingId + "/speakers",
+                Map.of("action", "REFRESH"));
 
         return mapToTurnResponse(turn);
     }
@@ -586,40 +597,40 @@ public class SpeakerService {
                 .meetingId(q.getMeeting().getId());
         if (q.getUser() != null) {
             builder.userId(q.getUser().getId())
-                   .userName(q.getUser().getFullName())
-                   .avatarUrl(q.getUser().getAvatar())
-                   .isGuestSubstitute(false);
+                    .userName(q.getUser().getFullName())
+                    .avatarUrl(q.getUser().getAvatar())
+                    .isGuestSubstitute(false);
             if (q.getUser().getPosition() != null) {
                 builder.position(q.getUser().getPosition().getPositionName());
             }
             if (q.getQueueStatus() == SpeakerQueueStatus.SPEAKING) {
                 speakerTurnRepository.findByEndAtIsNull().stream()
-                    .filter(t -> t.getMeeting().getId().equals(q.getMeeting().getId())
-                            && t.getUser() != null && t.getUser().getId().equals(q.getUser().getId()))
-                    .findFirst()
-                    .ifPresent(t -> {
-                        builder.activeTurnId(t.getId());
-                        builder.speakingStartAt(t.getStartAt());
-                        builder.speakingDurationSeconds(t.getDurationSeconds());
-                    });
+                        .filter(t -> t.getMeeting().getId().equals(q.getMeeting().getId())
+                                && t.getUser() != null && t.getUser().getId().equals(q.getUser().getId()))
+                        .findFirst()
+                        .ifPresent(t -> {
+                            builder.activeTurnId(t.getId());
+                            builder.speakingStartAt(t.getStartAt());
+                            builder.speakingDurationSeconds(t.getDurationSeconds());
+                        });
             }
         } else if (q.getGuest() != null) {
             builder.guestId(q.getGuest().getId())
-                   .userName(q.getGuest().getFullName())
-                   .isGuestSubstitute(true);
+                    .userName(q.getGuest().getFullName())
+                    .isGuestSubstitute(true);
             if (q.getGuest().getPosition() != null) {
                 builder.position(q.getGuest().getPosition());
             }
             if (q.getQueueStatus() == SpeakerQueueStatus.SPEAKING) {
                 speakerTurnRepository.findByEndAtIsNull().stream()
-                    .filter(t -> t.getMeeting().getId().equals(q.getMeeting().getId())
-                            && t.getGuest() != null && t.getGuest().getId().equals(q.getGuest().getId()))
-                    .findFirst()
-                    .ifPresent(t -> {
-                        builder.activeTurnId(t.getId());
-                        builder.speakingStartAt(t.getStartAt());
-                        builder.speakingDurationSeconds(t.getDurationSeconds());
-                    });
+                        .filter(t -> t.getMeeting().getId().equals(q.getMeeting().getId())
+                                && t.getGuest() != null && t.getGuest().getId().equals(q.getGuest().getId()))
+                        .findFirst()
+                        .ifPresent(t -> {
+                            builder.activeTurnId(t.getId());
+                            builder.speakingStartAt(t.getStartAt());
+                            builder.speakingDurationSeconds(t.getDurationSeconds());
+                        });
             }
         }
         return builder.build();
@@ -634,13 +645,13 @@ public class SpeakerService {
                 .meetingId(t.getMeeting().getId());
         if (t.getUser() != null) {
             builder.userId(t.getUser().getId())
-                   .userName(t.getUser().getFullName())
-                   .avatarUrl(t.getUser().getAvatar())
-                   .isGuestSubstitute(false);
+                    .userName(t.getUser().getFullName())
+                    .avatarUrl(t.getUser().getAvatar())
+                    .isGuestSubstitute(false);
         } else if (t.getGuest() != null) {
             builder.guestId(t.getGuest().getId())
-                   .userName(t.getGuest().getFullName())
-                   .isGuestSubstitute(true);
+                    .userName(t.getGuest().getFullName())
+                    .isGuestSubstitute(true);
         }
         return builder.build();
     }
@@ -648,19 +659,24 @@ public class SpeakerService {
     public List<SpeakerQueueResponse> publicGetQueue(UUID meetingId, SpeakerQueueStatus status) {
         List<SpeakerQueue> list;
         if (status != null) {
-            list = speakerQueueRepository.findByMeetingIdAndQueueStatusOrderBySortOrderAscRequestedAtAsc(meetingId, status);
+            list = speakerQueueRepository.findByMeetingIdAndQueueStatusOrderBySortOrderAscRequestedAtAsc(meetingId,
+                    status);
         } else {
             list = speakerQueueRepository.findByMeetingId(meetingId);
             list.sort((a, b) -> {
-                boolean activeA = a.getQueueStatus() == SpeakerQueueStatus.QUEUED || a.getQueueStatus() == SpeakerQueueStatus.SPEAKING;
-                boolean activeB = b.getQueueStatus() == SpeakerQueueStatus.QUEUED || b.getQueueStatus() == SpeakerQueueStatus.SPEAKING;
+                boolean activeA = a.getQueueStatus() == SpeakerQueueStatus.QUEUED
+                        || a.getQueueStatus() == SpeakerQueueStatus.SPEAKING;
+                boolean activeB = b.getQueueStatus() == SpeakerQueueStatus.QUEUED
+                        || b.getQueueStatus() == SpeakerQueueStatus.SPEAKING;
                 if (activeA && activeB) {
                     if (a.getSortOrder() != null && b.getSortOrder() != null) {
                         return a.getSortOrder().compareTo(b.getSortOrder());
                     }
                 }
-                if (activeA) return -1;
-                if (activeB) return 1;
+                if (activeA)
+                    return -1;
+                if (activeB)
+                    return 1;
                 if (a.getRequestedAt() != null && b.getRequestedAt() != null) {
                     return b.getRequestedAt().compareTo(a.getRequestedAt());
                 }
@@ -674,7 +690,7 @@ public class SpeakerService {
     public SpeakerQueueResponse publicRequestToSpeak(UUID meetingId, UUID agendaItemId, UUID guestToken) {
         Meeting meeting = meetingRepository.findById(meetingId)
                 .orElseThrow(() -> new AppException(ErrorCode.MEETING_NOT_EXIST));
-        
+
         checkMeetingInProgress(meeting);
 
         MeetingGuest guest = meetingGuestRepository.findByGuestToken(guestToken)
@@ -707,14 +723,15 @@ public class SpeakerService {
             }
         }
 
-        MeetingParticipant originalParticipant = meetingParticipantRepository.findById(guest.getSubstituteForParticipantId())
+        MeetingParticipant originalParticipant = meetingParticipantRepository
+                .findById(guest.getSubstituteForParticipantId())
                 .orElseThrow(() -> new AppException(ErrorCode.MEETING_PARTICIPANT_NOT_FOUND));
 
         boolean originalAbsent = false;
         if (originalParticipant.getInviteStatus() == InviteStatus.DECLINED) {
             if (originalParticipant.getIsFullSession() == null || originalParticipant.getIsFullSession()) {
                 originalAbsent = true;
-            } else if (agendaItem != null && originalParticipant.getAbsentAgendaItemIds() != null 
+            } else if (agendaItem != null && originalParticipant.getAbsentAgendaItemIds() != null
                     && originalParticipant.getAbsentAgendaItemIds().contains(agendaItem.getId())) {
                 originalAbsent = true;
             }
@@ -732,7 +749,9 @@ public class SpeakerService {
             throw new AppException(ErrorCode.BAD_REQUEST);
         }
 
-        long count = speakerQueueRepository.findByMeetingIdAndQueueStatusOrderBySortOrderAscRequestedAtAsc(meetingId, SpeakerQueueStatus.QUEUED).size();
+        long count = speakerQueueRepository
+                .findByMeetingIdAndQueueStatusOrderBySortOrderAscRequestedAtAsc(meetingId, SpeakerQueueStatus.QUEUED)
+                .size();
 
         SpeakerQueue queue = new SpeakerQueue();
         queue.setMeeting(meeting);
@@ -742,7 +761,7 @@ public class SpeakerService {
         queue.setPriority(SpeakerQueuePriority.NORMAL);
         queue.setSortOrder((int) count + 1);
         queue.setQueueStatus(SpeakerQueueStatus.QUEUED);
-        
+
         queue = speakerQueueRepository.save(queue);
 
         auditLogPublisher.publish(
@@ -750,10 +769,10 @@ public class SpeakerService {
                 AuditAction.REGISTER_SPEAKER,
                 ResourceType.SPEAKER,
                 queue.getId(),
-                Map.of("meetingId", String.valueOf(meetingId))
-        );
+                Map.of("meetingId", String.valueOf(meetingId)));
 
-        webSocketNotificationService.sendToTopic("/topic/meeting/" + meetingId + "/speakers", Map.of("action", "REFRESH"));
+        webSocketNotificationService.sendToTopic("/topic/meeting/" + meetingId + "/speakers",
+                Map.of("action", "REFRESH"));
 
         return mapToQueueResponse(queue);
     }

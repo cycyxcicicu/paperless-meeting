@@ -299,7 +299,7 @@ export const UserFormModal: React.FC<UserFormModalProps> = ({
 
   const selectedRoleId = methods.watch('role');
   const selectedRoleOption = roleOptions.find(o => o.value === selectedRoleId);
-  const targetRoleCode = selectedRoleOption?.roleCode || initialData?.role?.roleCode;
+  const targetRoleCode = selectedRoleOption?.roleCode || (initialData as any)?.role?.roleCode;
   const hidePosition = targetRoleCode === 'SUPER_ADMIN' || targetRoleCode === 'DEPARTMENT_ADMIN';
 
   if (lockedUnit) {

@@ -77,7 +77,7 @@ const HomePage = () => {
   useEffect(() => { unconfirmedRef.current = unconfirmedState; }, [unconfirmedState]);
 
   // Hàm tải dữ liệu cuộc họp phân trang của từng Tab từ backend
-  const fetchTabMeetings = async (tab: 'ongoing' | 'upcoming' | 'unconfirmed', isRefresh: boolean = false) => {
+  const fetchTabMeetings = async (tab: 'ongoing' | 'upcoming' | 'unconfirmed', isRefresh: boolean = false, silent: boolean = false) => {
     const currentState = tab === 'ongoing' 
       ? ongoingRef.current 
       : tab === 'upcoming' 
@@ -96,7 +96,9 @@ const HomePage = () => {
 
     const nextPage = isRefresh ? 0 : currentState.page;
 
-    setTargetState(prev => ({ ...prev, loading: true }));
+    if (!silent) {
+      setTargetState(prev => ({ ...prev, loading: true }));
+    }
 
     try {
       let res;
@@ -200,13 +202,13 @@ const HomePage = () => {
   };
 
   // Làm mới toàn bộ dữ liệu trang chủ
-  const handleRefreshAll = () => {
+  const handleRefreshAll = (silent = false) => {
     fetchSidebarApproval();
     fetchSidebarDocTasks();
     fetchAdminStats();
-    fetchTabMeetings('ongoing', true);
-    fetchTabMeetings('upcoming', true);
-    fetchTabMeetings('unconfirmed', true);
+    fetchTabMeetings('ongoing', true, silent);
+    fetchTabMeetings('upcoming', true, silent);
+    fetchTabMeetings('unconfirmed', true, silent);
   };
 
   useEffect(() => {
@@ -219,7 +221,7 @@ const HomePage = () => {
     const unsubscribeWs = subscribe('/topic/meeting-updates', (message) => {
       if (debounceTimeout) clearTimeout(debounceTimeout);
       debounceTimeout = setTimeout(() => {
-        handleRefreshAll();
+        handleRefreshAll(true);
       }, 300);
     });
     return () => {

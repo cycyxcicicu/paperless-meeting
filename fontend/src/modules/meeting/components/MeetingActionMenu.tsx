@@ -124,16 +124,6 @@ export const MeetingActionMenu: React.FC<MeetingActionMenuProps> = ({
       });
     }
 
-    // 8. Quyền lưu tài liệu phiên họp
-    if (status === 'IN_PROGRESS') {
-      actions.push({
-        icon: Bookmark,
-        label: isSaved ? 'Hủy lưu tài liệu' : 'Lưu tài liệu phiên họp',
-        onClick: () => onToggleSave?.(meetingId),
-        variant: isSaved ? 'danger' : 'primary'
-      });
-    }
-
     return actions;
   };
 

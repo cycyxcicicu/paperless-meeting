@@ -19,6 +19,7 @@ public interface MeetingDocumentRepository extends JpaRepository<MeetingDocument
             "LEFT JOIN FETCH md.document d " +
             "LEFT JOIN FETCH d.currentVersion cv " +
             "LEFT JOIN FETCH md.agendaItem a " +
+            "LEFT JOIN FETCH a.preparedByUser " +
             "WHERE md.meeting.id = :meetingId")
     List<MeetingDocument> findByMeetingIdWithDocsAndVersions(@Param("meetingId") UUID meetingId);
 

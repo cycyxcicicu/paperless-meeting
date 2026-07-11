@@ -38,6 +38,7 @@ import { ViewOpinionModal } from "../components/ViewOpinionModal";
 import { mapMeetingStatusVi } from "../utils/meetingHelpers";
 import { getRemainingTimeVi } from "@/common/utils/timeHelpers";
 import { LoadingOverlay } from "@/common/components/ui/LoadingOverlay";
+import { getErrorMessage } from "@/lib/api/error";
 
 export default function PhienHopChiTietPage() {
     const navigate = useNavigate();
@@ -136,6 +137,7 @@ export default function PhienHopChiTietPage() {
         });
     }, [opinions]);
     const [isManageParticipantsOpen, setIsManageParticipantsOpen] = useState(false);
+    const [isParticipantsLoading, setIsParticipantsLoading] = useState(false);
     const [isAttendanceModalOpen, setIsAttendanceModalOpen] = useState(false);
     const [isDurationModalOpen, setIsDurationModalOpen] = useState(false);
     const [speakingDuration, setSpeakingDuration] = useState("5");
@@ -173,6 +175,17 @@ export default function PhienHopChiTietPage() {
     const currentUserQueueItem = useMemo(() => {
         return waitingSpeakers.find((s: any) => s.userId === user?.id);
     }, [waitingSpeakers, user]);
+
+    const isAttendee = useMemo(() => {
+        if (!meetingDetail) return false;
+        return (
+            meetingDetail.callerRole === 'CREATOR' ||
+            meetingDetail.callerRole === 'SECRETARY' ||
+            meetingDetail.callerRole === 'CHAIR' ||
+            meetingDetail.callerRole === 'CHAIRPERSON' ||
+            (!!meetingDetail.callerInviteStatus && meetingDetail.callerInviteStatus !== 'DECLINED')
+        );
+    }, [meetingDetail]);
 
     // Auto calculate time remaining for active meetings
     useEffect(() => {
@@ -367,7 +380,7 @@ export default function PhienHopChiTietPage() {
             }
         } catch (error) {
             console.error("Error confirming attendance:", error);
-            toast.error("Đã xảy ra lỗi khi gửi phản hồi tham dự");
+            toast.error(getErrorMessage(error, "Đã xảy ra lỗi khi gửi phản hồi tham dự"));
         }
         setIsAttendanceModalOpen(false);
     };
@@ -627,7 +640,7 @@ export default function PhienHopChiTietPage() {
 
     const handleOpenParticipants = async () => {
         if (!id) return;
-        const toastId = toast.loading("Đang tải danh sách thành phần tham gia...");
+        setIsParticipantsLoading(true);
         try {
             const res = await meetingApi.getAttendees(id);
             if (res.success && res.data) {
@@ -636,7 +649,7 @@ export default function PhienHopChiTietPage() {
 
                 const donViMapped = parts.map((p: any) => ({
                     id: p.userId,
-                    name: p.fullName || p.username,
+                    name: p.fullName || p.username || "Không xác định",
                     position: p.positionName || "-",
                     unit: p.deptName || "-",
                     email: p.email || "-",
@@ -649,7 +662,7 @@ export default function PhienHopChiTietPage() {
 
                 const khachMoiMapped = guests.map((g: any) => ({
                     id: g.guestId || g.id,
-                    name: g.fullName,
+                    name: g.fullName || "Khách mời",
                     position: g.position || "-",
                     unit: g.company || "-",
                     email: g.email || "-",
@@ -670,22 +683,22 @@ export default function PhienHopChiTietPage() {
                     khachMoi: khachMoiMapped,
                     chuTriId: chair ? chair.userId : null,
                 });
-                toast.dismiss(toastId);
                 setIsManageParticipantsOpen(true);
             } else {
                 toast.error(res.message || "Không thể tải danh sách thành phần tham gia");
-                toast.dismiss(toastId);
             }
         } catch (error) {
             console.error("Error fetching attendees:", error);
             toast.error("Đã xảy ra lỗi khi tải danh sách thành phần tham gia");
-            toast.dismiss(toastId);
+        } finally {
+            setIsParticipantsLoading(false);
         }
     };
 
     return (
         <>
             {loading && <LoadingOverlay message="Đang tải chi tiết phiên họp..." />}
+            {isParticipantsLoading && <LoadingOverlay message="Đang tải danh sách thành phần tham gia..." />}
             <ManageParticipantsModal
                 isOpen={isManageParticipantsOpen}
                 onClose={() => setIsManageParticipantsOpen(false)}
@@ -743,8 +756,10 @@ export default function PhienHopChiTietPage() {
                                             Xác nhận tham gia
                                         </Button>
                                     )}
-                                {meetingDetail?.canEdit && 
-                                 (meetingDetail?.callerRole === "CREATOR" || meetingDetail?.callerRole === "SECRETARY") && (
+                                {(meetingDetail?.canEdit || 
+                                  (["APPROVED", "PENDING_APPROVAL", "UPCOMING", "IN_PROGRESS", "CLOSED"].includes(meetingDetail?.status) && 
+                                   (meetingDetail?.callerRole === "CREATOR" || 
+                                    meetingDetail?.callerRole === "SECRETARY"))) && (
                                     <Button
                                         variant="outline"
                                         className="border-[#C8102E] text-[#C8102E] hover:bg-red-50"
@@ -757,7 +772,9 @@ export default function PhienHopChiTietPage() {
                                     meetingDetail?.status !== "CLOSED" &&
                                     meetingDetail?.status !== "CANCELLED" &&
                                     meetingDetail?.status !== "REJECTED" &&
-                                    meetingDetail?.status !== "PENDING_APPROVAL" && (
+                                    meetingDetail?.status !== "PENDING_APPROVAL" &&
+                                    meetingDetail?.callerInviteStatus !== "PENDING" &&
+                                    isAttendee && (
                                         <Button
                                             variant="primary"
                                             className="bg-[#C8102E] hover:bg-[#a80d26]"
@@ -986,7 +1003,7 @@ export default function PhienHopChiTietPage() {
             <AddOpinionForContentModal
                 isOpen={isOpinionModalOpen}
                 onClose={() => setIsOpinionModalOpen(false)}
-                onSubmit={handleAddOpinionForContent}
+                onAdd={handleAddOpinionForContent}
                 contents={availableContents}
                 documents={availableDocuments}
             />
