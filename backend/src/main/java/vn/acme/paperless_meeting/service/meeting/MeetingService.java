@@ -27,6 +27,7 @@ import vn.acme.paperless_meeting.dto.request.meeting.MeetingInvitationUpdateRequ
 import vn.acme.paperless_meeting.dto.request.meeting.MeetingUpsertRequest;
 import vn.acme.paperless_meeting.dto.response.meeting.MeetingInvitationPreviewResponse;
 import vn.acme.paperless_meeting.dto.response.meeting.MeetingResponse;
+import vn.acme.paperless_meeting.entity.AgendaItem;
 import vn.acme.paperless_meeting.entity.Department;
 import vn.acme.paperless_meeting.entity.DocTemplate;
 import vn.acme.paperless_meeting.entity.Location;
@@ -35,7 +36,6 @@ import vn.acme.paperless_meeting.entity.MeetingGuest;
 import vn.acme.paperless_meeting.entity.MeetingParticipant;
 import vn.acme.paperless_meeting.entity.Role;
 import vn.acme.paperless_meeting.entity.User;
-import vn.acme.paperless_meeting.entity.AgendaItem;
 import vn.acme.paperless_meeting.entity.enums.AgendaItemStatus;
 import vn.acme.paperless_meeting.entity.enums.AttendanceStatus;
 import vn.acme.paperless_meeting.entity.enums.AuditAction;
@@ -275,7 +275,8 @@ public class MeetingService {
     }
 
     /**
-     * Sidebar: Lấy danh sách cuộc họp đang chờ phê duyệt mà user hiện tại có quyền phê duyệt.
+     * Sidebar: Lấy danh sách cuộc họp đang chờ phê duyệt mà user hiện tại có quyền
+     * phê duyệt.
      */
     @Transactional(readOnly = true)
     public List<MeetingResponse> findSidebarApprovalMeetings() {
@@ -297,9 +298,12 @@ public class MeetingService {
     }
 
     /**
-     * Sidebar: Lấy danh sách cuộc họp mà user hiện tại cần tải lên hoặc phê duyệt tài liệu.
-     * - canUploadDocs = true: User là người chuẩn bị (preparer) và cuộc họp ở DRAFT/REJECTED
-     * - canApproveDocs = true: User là người tạo cuộc họp và có đầu mục ở PENDING_APPROVAL
+     * Sidebar: Lấy danh sách cuộc họp mà user hiện tại cần tải lên hoặc phê duyệt
+     * tài liệu.
+     * - canUploadDocs = true: User là người chuẩn bị (preparer) và cuộc họp ở
+     * DRAFT/REJECTED
+     * - canApproveDocs = true: User là người tạo cuộc họp và có đầu mục ở
+     * PENDING_APPROVAL
      */
     @Transactional(readOnly = true)
     public List<MeetingResponse> findSidebarDocTaskMeetings() {
@@ -314,11 +318,10 @@ public class MeetingService {
         for (Map.Entry<UUID, List<AgendaItem>> entry : itemsByMeeting.entrySet()) {
             UUID mId = entry.getKey();
             List<AgendaItem> myItems = entry.getValue();
-            boolean allApproved = !myItems.isEmpty() && myItems.stream().allMatch(a -> 
-                    a.getStatus() == AgendaItemStatus.APPROVED 
-                    || a.getStatus() == AgendaItemStatus.DONE 
-                    || a.getStatus() == AgendaItemStatus.SKIPPED
-            );
+            boolean allApproved = !myItems.isEmpty() && myItems.stream()
+                    .allMatch(a -> a.getStatus() == AgendaItemStatus.APPROVED
+                            || a.getStatus() == AgendaItemStatus.DONE
+                            || a.getStatus() == AgendaItemStatus.SKIPPED);
             if (!allApproved) {
                 uploadMeetingIds.add(mId);
             }
@@ -333,7 +336,8 @@ public class MeetingService {
         // 2. Cuộc họp user tạo có đầu mục chờ phê duyệt (canApproveDocs)
         List<Meeting> createdMeetings = meetingRepository.findByCreatedById(caller.getId());
         List<Meeting> approvalDocMeetings = createdMeetings.stream()
-                .filter(m -> agendaItemRepository.existsByMeetingIdAndStatus(m.getId(), AgendaItemStatus.PENDING_APPROVAL))
+                .filter(m -> agendaItemRepository.existsByMeetingIdAndStatus(m.getId(),
+                        AgendaItemStatus.PENDING_APPROVAL))
                 .toList();
 
         // Gộp 2 danh sách, loại trùng
@@ -394,19 +398,6 @@ public class MeetingService {
 
         User caller = currentUserService.getCurrentActiveUser();
 
-        // Kiểm tra trùng lịch của Thư ký (người tạo cuộc họp)
-        boolean creatorOverlap = meetingParticipantRepository.hasOverlapConflict(
-                caller.getId(),
-                InviteStatus.ACCEPTED,
-                UUID.randomUUID(),
-                List.of(MeetingStatus.APPROVED, MeetingStatus.UPCOMING, MeetingStatus.IN_PROGRESS),
-                request.getStartTime(),
-                request.getEndTime()
-        );
-        if (creatorOverlap) {
-            throw new AppException(ErrorCode.MEETING_LOCATION_TIME_CONFLICT);
-        }
-
         Department department = getDepartment(request.getDepartmentId());
         Location location = getLocation(request.getLocationId());
 
@@ -451,20 +442,7 @@ public class MeetingService {
         validateMeetingTime(request);
         validateLocationConflict(id, request.getLocationId(), request.getStartTime(), request.getEndTime());
 
-        // Kiểm tra trùng lịch của Thư ký (người tạo cuộc họp)
-        if (meeting.getCreatedBy() != null) {
-            boolean creatorOverlap = meetingParticipantRepository.hasOverlapConflict(
-                    meeting.getCreatedBy().getId(),
-                    InviteStatus.ACCEPTED,
-                    id,
-                    List.of(MeetingStatus.APPROVED, MeetingStatus.UPCOMING, MeetingStatus.IN_PROGRESS),
-                    request.getStartTime(),
-                    request.getEndTime()
-            );
-            if (creatorOverlap) {
-                throw new AppException(ErrorCode.MEETING_LOCATION_TIME_CONFLICT);
-            }
-        }
+
 
         Department department = getDepartment(request.getDepartmentId());
         Location location = getLocation(request.getLocationId());
@@ -914,7 +892,7 @@ public class MeetingService {
         // Phân quyền
         boolean isCreatorOrAdminOrChair = hasEditPermission(meeting, caller);
         boolean isCreatorOnly = meeting.getCreatedBy() != null && meeting.getCreatedBy().getId().equals(caller.getId());
-        
+
         List<AgendaItem> myItems = agendaItemRepository.findByPreparedByUserId(caller.getId()).stream()
                 .filter(a -> a.getMeeting().getId().equals(meeting.getId()))
                 .toList();
@@ -931,7 +909,8 @@ public class MeetingService {
             for (AgendaItem a : myItems) {
                 if (a.getStatus() == AgendaItemStatus.REJECTED) {
                     rejected++;
-                } else if (a.getStatus() == AgendaItemStatus.PENDING_PREPARATION || a.getStatus() == AgendaItemStatus.DRAFT) {
+                } else if (a.getStatus() == AgendaItemStatus.PENDING_PREPARATION
+                        || a.getStatus() == AgendaItemStatus.DRAFT) {
                     pending++;
                 } else if (a.getStatus() == AgendaItemStatus.PENDING_APPROVAL) {
                     submitted++;
@@ -943,7 +922,8 @@ public class MeetingService {
             if (rejected > 0) {
                 docPrepStatus = "REJECTED";
                 docPrepRejectReason = myItems.stream()
-                        .filter(a -> a.getStatus() == AgendaItemStatus.REJECTED && a.getRejectReason() != null && !a.getRejectReason().trim().isEmpty())
+                        .filter(a -> a.getStatus() == AgendaItemStatus.REJECTED && a.getRejectReason() != null
+                                && !a.getRejectReason().trim().isEmpty())
                         .map(AgendaItem::getRejectReason)
                         .collect(Collectors.joining("; "));
             } else if (pending > 0) {
@@ -993,13 +973,14 @@ public class MeetingService {
         boolean isCreator = meeting.getCreatedBy() != null && meeting.getCreatedBy().getId().equals(caller.getId());
         boolean isChairOrSecretary = participants.stream()
                 .anyMatch(p -> p.getUser() != null && p.getUser().getId().equals(caller.getId()) &&
-                        (p.getParticipantRole() == ParticipantRole.CHAIR || p.getParticipantRole() == ParticipantRole.SECRETARY));
+                        (p.getParticipantRole() == ParticipantRole.CHAIR
+                                || p.getParticipantRole() == ParticipantRole.SECRETARY));
         boolean isDeptAdmin = currentUserService.hasRole(RoleName.DEPARTMENT_ADMIN);
         boolean isSuperAdmin = currentUserService.hasRole(RoleName.SUPER_ADMIN);
 
         if (isCreator || isChairOrSecretary || isDeptAdmin || isSuperAdmin) {
             List<String> uncheckedInNames = participants.stream()
-                    .filter(p -> p.getAttendanceStatus() == AttendanceStatus.NOT_CHECKED_IN 
+                    .filter(p -> p.getAttendanceStatus() == AttendanceStatus.NOT_CHECKED_IN
                             && p.getInviteStatus() == InviteStatus.ACCEPTED
                             && p.getUser() != null)
                     .map(p -> p.getUser().getFullName())
@@ -1106,13 +1087,14 @@ public class MeetingService {
         boolean isCreator = meeting.getCreatedBy() != null && meeting.getCreatedBy().getId().equals(caller.getId());
         boolean isChairOrSecretary = participants.stream()
                 .anyMatch(p -> p.getUser() != null && p.getUser().getId().equals(caller.getId()) &&
-                        (p.getParticipantRole() == ParticipantRole.CHAIR || p.getParticipantRole() == ParticipantRole.SECRETARY));
+                        (p.getParticipantRole() == ParticipantRole.CHAIR
+                                || p.getParticipantRole() == ParticipantRole.SECRETARY));
         boolean isDeptAdmin = currentUserService.hasRole(RoleName.DEPARTMENT_ADMIN);
         boolean isSuperAdmin = currentUserService.hasRole(RoleName.SUPER_ADMIN);
 
         if (isCreator || isChairOrSecretary || isDeptAdmin || isSuperAdmin) {
             List<String> uncheckedInNames = participants.stream()
-                    .filter(p -> p.getAttendanceStatus() == AttendanceStatus.NOT_CHECKED_IN 
+                    .filter(p -> p.getAttendanceStatus() == AttendanceStatus.NOT_CHECKED_IN
                             && p.getInviteStatus() == InviteStatus.ACCEPTED
                             && p.getUser() != null)
                     .map(p -> p.getUser().getFullName())

@@ -52,9 +52,16 @@ const UnitTreeNode: React.FC<{
   level: number;
   selectedUnitId: string | null;
   onSelect: (id: string, name: string) => void;
-}> = ({ node, level, selectedUnitId, onSelect }) => {
+  searchTermActive?: boolean;
+}> = ({ node, level, selectedUnitId, onSelect, searchTermActive }) => {
   const [isExpanded, setIsExpanded] = useState(level === 0);
   const hasChildren = node.children && node.children.length > 0;
+
+  useEffect(() => {
+    if (searchTermActive) {
+      setIsExpanded(true);
+    }
+  }, [searchTermActive]);
 
   return (
     <div>
@@ -99,6 +106,7 @@ const UnitTreeNode: React.FC<{
               level={level + 1}
               selectedUnitId={selectedUnitId}
               onSelect={onSelect}
+              searchTermActive={searchTermActive}
             />
           ))}
         </div>
@@ -286,6 +294,31 @@ const SelectUnitModal: React.FC<SelectUnitModalProps> = ({
     return searchFilteredMembers.slice(startIndex, startIndex + pageSize);
   }, [searchFilteredMembers, currentPage, pageSize]);
 
+  // Filter department tree by search query
+  const filteredUnitTree = useMemo(() => {
+    if (!searchQuery.trim()) {
+      return unitTree;
+    }
+    const query = searchQuery.toLowerCase();
+
+    const filterNodes = (nodes: UnitNode[]): UnitNode[] => {
+      return nodes.reduce<UnitNode[]>((acc, node) => {
+        const isMatch = node.name.toLowerCase().includes(query);
+        const filteredChildren = node.children ? filterNodes(node.children) : [];
+        
+        if (isMatch || filteredChildren.length > 0) {
+          acc.push({
+            ...node,
+            children: filteredChildren.length > 0 ? filteredChildren : undefined
+          });
+        }
+        return acc;
+      }, []);
+    };
+
+    return filterNodes(unitTree);
+  }, [unitTree, searchQuery]);
+
   if (!isOpen) return null;
 
   const handleUnitSelect = (unitId: string, unitName: string) => {
@@ -417,16 +450,17 @@ const SelectUnitModal: React.FC<SelectUnitModalProps> = ({
                 <div className="flex items-center justify-center py-8">
                   <Loader2 className="h-6 w-6 text-[#C8102E] animate-spin" />
                 </div>
-              ) : unitTree.length === 0 ? (
-                <p className="text-sm text-gray-500 p-4">Không có dữ liệu đơn vị</p>
+              ) : filteredUnitTree.length === 0 ? (
+                <p className="text-sm text-gray-500 p-4">Không tìm thấy đơn vị phù hợp</p>
               ) : (
-                unitTree.map((unit) => (
+                filteredUnitTree.map((unit) => (
                   <UnitTreeNode
                     key={unit.id}
                     node={unit}
                     level={0}
                     selectedUnitId={selectedUnitId}
                     onSelect={handleUnitSelect}
+                    searchTermActive={!!searchQuery.trim()}
                   />
                 ))
               )}

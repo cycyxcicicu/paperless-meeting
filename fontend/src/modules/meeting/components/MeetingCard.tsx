@@ -126,27 +126,6 @@ export const MeetingCard: React.FC<MeetingCardProps> = ({
                             </Badge>
                         </div>
 
-                        {/* Quick Action Button */}
-                        <div className="w-[110px] flex justify-center flex-shrink-0">
-                            {meeting.rawStatus === 'DRAFT' && meeting.canPublish ? (
-                                <button
-                                    type="button"
-                                    onClick={() => onSend(meeting.id)}
-                                    className="h-[32px] px-3.5 rounded-xl text-xs font-semibold bg-[#C8102E] hover:bg-[#C8102E]/90 text-white shadow-sm transition-all hover:scale-105 active:scale-95"
-                                >
-                                    Công bố
-                                </button>
-                            ) : meeting.rawStatus === 'DRAFT' && meeting.canSubmitApproval ? (
-                                <button
-                                    type="button"
-                                    onClick={() => onSend(meeting.id)}
-                                    className="h-[32px] px-3.5 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition-all hover:scale-105 active:scale-95"
-                                >
-                                    Gửi duyệt
-                                </button>
-                            ) : null}
-                        </div>
-
                         {/* Bookmark Save Icon */}
                         <div className="w-10 flex justify-center flex-shrink-0">
                             {onToggleSave && (meeting.rawStatus === 'IN_PROGRESS' || meeting.rawStatus === 'CLOSED') && (
