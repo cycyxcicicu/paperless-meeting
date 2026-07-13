@@ -37,6 +37,7 @@ import {
     Clock,
     Sparkles,
     Users,
+    Vote,
 } from "lucide-react";
 import React from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
@@ -136,6 +137,9 @@ export default function DienBienPhienHopPage() {
         checkAttendance,
         isAttendee,
     } = useDienBienPhienHop(guestToken);
+
+    const activeVoting = votingIssues.find(issue => issue.status === "voting");
+    const showVoteFloatingButton = activeVoting && !activeVoting.hasVoted && !isVotingModalOpen;
 
     const [isNotesModalOpen, setIsNotesModalOpen] = React.useState(false);
     const [isAssistantOpen, setIsAssistantOpen] = React.useState(false);
@@ -794,6 +798,30 @@ export default function DienBienPhienHopPage() {
                     handleToggleVotingList(currentVotingIssue.id, show)
                 }
             />
+
+            {/* Floating Vote Button */}
+            {showVoteFloatingButton && (
+                <div className="fixed right-6 bottom-64 z-40 group">
+                    <button
+                        type="button"
+                        onClick={() => setIsVotingModalOpen(true)}
+                        className="w-14 h-14 bg-gradient-to-tr from-emerald-600 to-teal-500 text-white rounded-full flex items-center justify-center shadow-xl hover:scale-110 active:scale-95 transition-all duration-300 relative border border-emerald-400/25 animate-pulse"
+                    >
+                        <Vote className="h-6 w-6" />
+                        <span className="absolute -top-1 -right-1 flex h-4 w-4">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-4 w-4 bg-red-500 text-[9px] font-bold items-center justify-center text-white">1</span>
+                        </span>
+                    </button>
+                    {/* Tooltip */}
+                    <div className="absolute right-16 top-1/2 -translate-y-1/2 hidden group-hover:block z-50 animate-in fade-in-0 slide-in-from-right-3 duration-200">
+                        <div className="bg-gray-900 text-white text-xs rounded-xl px-3.5 py-2.5 whitespace-nowrap shadow-xl border border-gray-800 font-medium">
+                            Đang biểu quyết - Bấm để bỏ phiếu
+                            <div className="absolute top-1/2 left-full -translate-y-1/2 border-4 border-transparent border-l-gray-900"></div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {!isGuest && isAttendee && (
                 <>

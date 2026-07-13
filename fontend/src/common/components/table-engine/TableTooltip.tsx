@@ -43,8 +43,8 @@ export const TableTooltip: React.FC<TableTooltipProps> = ({
       <TooltipContent 
         showArrow={true} 
         sideOffset={6}
-        arrowClassName="fill-white bg-white"
-        className="bg-white text-gray-900 border border-gray-200 px-3 py-2 rounded-lg shadow-md text-xs max-w-xs z-[9999] break-words"
+        arrowClassName="fill-gray-950 bg-gray-950"
+        className="bg-gray-950 text-white border border-gray-800 px-3 py-2 rounded-xl shadow-xl text-xs max-w-md z-[9999] break-words font-medium"
       >
         {text}
       </TooltipContent>

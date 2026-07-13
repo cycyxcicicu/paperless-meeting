@@ -4,6 +4,7 @@ import { Button } from '@/common/components/ui/button';
 import { Plus, Eye } from 'lucide-react';
 import { CollapsibleSection } from '@/modules/meeting/components/CollapsibleSection';
 import { DataTable } from '@/common/components/table-engine/DataTable';
+import { TableTooltip } from '@/common/components/table-engine/TableTooltip';
 import { Opinion } from '../../meeting.mock';
 
 interface OpinionSectionProps {
@@ -23,7 +24,7 @@ export function OpinionSection({ opinions, onAddOpinion, onViewOpinion, isGuest,
             { key: 'opinionDetail', header: 'Chi tiết góp ý', render: (row: Opinion) => (
                 <div className="space-y-1">
                     {row.documentName && <p className="text-xs text-gray-500">Tài liệu: {row.documentName}</p>}
-                    <p className="text-gray-900">{row.opinionDetail}</p>
+                    <TableTooltip text={row.opinionDetail} maxLength={60} className="text-gray-900 truncate max-w-md block" />
                     {row.attachments.length > 0 && <p className="text-xs text-blue-600">{row.attachments.length} tài liệu đính kèm</p>}
                 </div>
             )},

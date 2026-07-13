@@ -329,7 +329,8 @@ export function useDienBienPhienHop(guestToken?: string | null) {
                 options: mot.options,
                 agendaItemId: mot.agendaItemId,
                 agendaItemTitle: agendaTitle || mot.agendaItemTitle || "",
-                agendaItemStatus: agendaStatus
+                agendaItemStatus: agendaStatus,
+                hasVoted: mot.hasVoted
             };
         });
     }, [rawMotions, rawAgendaItems]);

@@ -36,6 +36,7 @@ export interface VotingIssue {
     agendaItemId?: string;
     agendaItemTitle?: string;
     agendaItemStatus?: string;
+    hasVoted?: boolean;
 }
 
 export interface Delegate {
