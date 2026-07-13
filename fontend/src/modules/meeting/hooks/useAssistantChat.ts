@@ -12,9 +12,20 @@ export interface ChatMessage {
 
 const MAX_HISTORY = 6;
 
+function generateUUID(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
+
 function toChatMessage(m: AssistantMessageResponse): ChatMessage {
   return {
-    id: crypto.randomUUID(),
+    id: generateUUID(),
     role: m.role,
     content: m.content,
     agentsUsed: m.agentsUsed,
@@ -87,8 +98,8 @@ export function useAssistantChat(meetingId: string | undefined) {
         .filter((m) => m.content.trim() !== '')
         .map((m) => ({ role: m.role, content: m.content }));
 
-      const userMessage: ChatMessage = { id: crypto.randomUUID(), role: 'user', content: trimmed };
-      const assistantMessageId = crypto.randomUUID();
+      const userMessage: ChatMessage = { id: generateUUID(), role: 'user', content: trimmed };
+      const assistantMessageId = generateUUID();
       // Bong bóng trả lời rỗng, hiện trước rồi lớn dần theo từng đoạn chữ nhận được -
       // tạo hiệu ứng trả lời từ từ (streaming thật, không phải giả lập).
       const assistantPlaceholder: ChatMessage = { id: assistantMessageId, role: 'assistant', content: '' };
